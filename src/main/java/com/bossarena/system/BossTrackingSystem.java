@@ -11,10 +11,12 @@ public class BossTrackingSystem {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
 
     private static class TrackedBoss {
+        final String bossName;
         final BossModifiers modifiers;
         final long expireAt;
 
-        TrackedBoss(BossModifiers modifiers, long expireAt) {
+        TrackedBoss(String bossName, BossModifiers modifiers, long expireAt) {
+            this.bossName = bossName;
             this.modifiers = modifiers;
             this.expireAt = expireAt;
         }
@@ -22,9 +24,9 @@ public class BossTrackingSystem {
 
     private final Map<UUID, TrackedBoss> tracked = new ConcurrentHashMap<>();
 
-    public void track(UUID uuid, BossModifiers mods, long ttlMs) {
+    public void track(UUID uuid, String bossName, BossModifiers mods, long ttlMs) {
         long expireAt = System.currentTimeMillis() + ttlMs;
-        tracked.put(uuid, new TrackedBoss(mods, expireAt));
+        tracked.put(uuid, new TrackedBoss(bossName, mods, expireAt));
     }
 
     public void untrack(UUID uuid) {
@@ -40,6 +42,11 @@ public class BossTrackingSystem {
     public BossModifiers getModifiers(UUID uuid) {
         TrackedBoss boss = tracked.get(uuid);
         return boss != null ? boss.modifiers : null;
+    }
+
+    public String getBossName(UUID uuid) {
+        TrackedBoss boss = tracked.get(uuid);
+        return boss != null ? boss.bossName : null;
     }
 
     public void cleanupExpired() {

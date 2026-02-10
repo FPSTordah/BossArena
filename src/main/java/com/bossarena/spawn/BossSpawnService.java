@@ -81,7 +81,7 @@ public final class BossSpawnService {
                         primaryBossUuid = uuid;
                     }
 
-                    tracking.track(uuid, mods, trackingTtlMs);
+                    tracking.track(uuid, def.bossName, mods, trackingTtlMs);
                     attachBossComponent(world, npcRef, mods);
                     applyModifiers(store, npcRef, mods);
 
