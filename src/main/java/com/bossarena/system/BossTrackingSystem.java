@@ -1,49 +1,51 @@
 package com.bossarena.system;
 
 import com.bossarena.boss.BossModifiers;
+import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.server.core.universe.world.World;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.Logger;
 
 public class BossTrackingSystem {
-    private static final Logger LOGGER = Logger.getLogger("BossArena");
 
-    private static class TrackedBoss {
-        final BossModifiers modifiers;
-        final long expireAt;
+    public static class BossData {
+        public String bossName;
+        public BossModifiers modifiers;
+        public String arenaId;
+        public World world;
+        public Vector3d spawnLocation;
 
-        TrackedBoss(BossModifiers modifiers, long expireAt) {
+        public BossData(String bossName, BossModifiers modifiers, String arenaId, World world, Vector3d spawnLocation) {
+            this.bossName = bossName;
             this.modifiers = modifiers;
-            this.expireAt = expireAt;
+            this.arenaId = arenaId;
+            this.world = world;
+            this.spawnLocation = spawnLocation;
         }
     }
 
-    private final Map<UUID, TrackedBoss> tracked = new ConcurrentHashMap<>();
+    private final Map<UUID, BossData> trackedBosses = new ConcurrentHashMap<>();
 
-    public void track(UUID uuid, BossModifiers mods, long ttlMs) {
-        long expireAt = System.currentTimeMillis() + ttlMs;
-        tracked.put(uuid, new TrackedBoss(mods, expireAt));
-    }
-
-    public void untrack(UUID uuid) {
-        if (tracked.remove(uuid) != null) {
-            LOGGER.info("Boss untracked: " + uuid);
-        }
+    public void track(UUID uuid, String bossName, BossModifiers mods, String arenaId, World world, Vector3d spawnPos) {
+        Vector3d spawnCopy = new Vector3d(spawnPos.x, spawnPos.y, spawnPos.z);
+        trackedBosses.put(uuid, new BossData(bossName, mods, arenaId, world, spawnCopy));
     }
 
     public boolean isTracked(UUID uuid) {
-        return tracked.containsKey(uuid);
+        return trackedBosses.containsKey(uuid);
     }
 
-    public BossModifiers getModifiers(UUID uuid) {
-        TrackedBoss boss = tracked.get(uuid);
-        return boss != null ? boss.modifiers : null;
+    public String getBossName(UUID uuid) {
+        BossData data = trackedBosses.get(uuid);
+        return data != null ? data.bossName : null;
     }
 
-    public void cleanupExpired() {
-        long now = System.currentTimeMillis();
-        tracked.values().removeIf(boss -> boss.expireAt < now);
+    public void untrack(UUID uuid) {
+        trackedBosses.remove(uuid);
+    }
+
+    public BossData getBossData(UUID uuid) {
+        return trackedBosses.get(uuid);
     }
 }

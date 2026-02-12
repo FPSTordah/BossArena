@@ -30,6 +30,10 @@ public final class BossRegistry {
     return BOSSES.get(bossName.toLowerCase());
   }
 
+  public static boolean exists(String bossId) {
+    return BOSSES.containsKey(bossId.toLowerCase());
+  }
+
   public static Map<String, BossDefinition> getAll() {
     return new HashMap<>(BOSSES);
   }

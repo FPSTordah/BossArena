@@ -1,0 +1,17 @@
+{
+  "id": "Boss_Arena_Chest_Legendary",
+  "displayName": "Boss Loot Chest",
+  "model": "Boss_Arena_Chest_Legendary",
+  "isSolid": true,
+  "isOpaque": false,
+  "canBeReplaced": false,
+  "state": {
+    "type": "BossLootChestState",
+    "capacity": 27,
+    "allowViewing": true,
+    "custom": true
+  },
+  "interactions": {
+    "Primary": "BossArena_OpenChest"
+  }
+}

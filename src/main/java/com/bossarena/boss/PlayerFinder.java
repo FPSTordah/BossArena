@@ -2,6 +2,7 @@ package com.bossarena.boss;
 
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 
 import java.lang.reflect.Method;
@@ -30,10 +31,28 @@ public final class PlayerFinder {
                 .collect(Collectors.toList());
     }
 
+    public static int countPlayersInRadius(World world, Vector3d center, int radius) {
+        if (world == null || center == null) {
+            return 0;
+        }
+
+        double radiusSq = (double) radius * radius;
+        int count = 0;
+
+        for (PlayerRef ref : world.getPlayerRefs()) {
+            Vector3d pos = ref.getTransform().getPosition();
+            if (pos != null && getDistanceSq(pos, center) <= radiusSq) {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static double getDistanceSq(Vector3d a, Vector3d b) {
-        double dx = a.getX() - b.getX();
-        double dy = a.getY() - b.getY();
-        double dz = a.getZ() - b.getZ();
+        double dx = a.x - b.x;
+        double dy = a.y - b.y;
+        double dz = a.z - b.z;
         return (dx * dx) + (dy * dy) + (dz * dz);
     }
 

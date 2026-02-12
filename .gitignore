@@ -1,0 +1,7 @@
+/.idea/
+*.iml
+/target/
+/libs/
+/dev-notes/
+*.log
+/BossShopGUI.java

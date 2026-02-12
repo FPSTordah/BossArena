@@ -4,7 +4,6 @@ import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
 import com.bossarena.util.BossScaler;
 import com.bossarena.boss.BossModifiers;
-import com.bossarena.boss.BossFightComponent;
 import com.bossarena.boss.PlayerFinder;
 import com.bossarena.system.BossTrackingSystem;
 import com.hypixel.hytale.math.vector.Vector3d;
@@ -30,14 +29,16 @@ public final class BossSpawnService {
     private static final String HEALTH_MODIFIER_KEY = "BossArena.HealthMultiplier";
 
     private final BossTrackingSystem tracking;
-    private final long trackingTtlMs;
 
-    public BossSpawnService(BossTrackingSystem tracking, long trackingTtlMs) {
+    public BossSpawnService(BossTrackingSystem tracking) {
         this.tracking = tracking;
-        this.trackingTtlMs = trackingTtlMs;
     }
 
-    public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender, String bossId, World world, Vector3d spawnPos) {
+    public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
+                                  String bossId,
+                                  World world,
+                                  Vector3d spawnPos,
+                                  String arenaId) {  // ADD THIS PARAMETER
         BossDefinition def = BossRegistry.get(bossId);
         if (def == null) {
             LOGGER.warning("Boss definition not found: " + bossId);
@@ -47,8 +48,22 @@ public final class BossSpawnService {
         LOGGER.info("Attempting to spawn boss '" + def.bossName + "' at position: " + spawnPos);
 
         // Calculate player-scaled modifiers
-        var nearbyPlayers = PlayerFinder.playersInRadius(world, spawnPos, 40);
-        int playerCount = nearbyPlayers.size();
+        int nearbyCount = PlayerFinder.countPlayersInRadius(world, spawnPos, 40);
+        int worldCount = world.getPlayerCount();
+        int playerCount = Math.max(nearbyCount, worldCount);
+        if (playerCount != nearbyCount) {
+            LOGGER.info("Using world player count for scaling: " + worldCount);
+        }
+        float baseHp = def.modifiers != null ? def.modifiers.hp : 1.0f;
+        float baseDamage = def.modifiers != null ? def.modifiers.damage : 1.0f;
+        float baseSize = def.modifiers != null ? def.modifiers.size : 1.0f;
+        float perHp = def.perPlayerIncrease != null ? def.perPlayerIncrease.hp : 0.0f;
+        float perDamage = def.perPlayerIncrease != null ? def.perPlayerIncrease.damage : 0.0f;
+        float perSize = def.perPlayerIncrease != null ? def.perPlayerIncrease.size : 0.0f;
+        LOGGER.info("Scaling with players=" + playerCount +
+                " (nearby=" + nearbyCount + ", world=" + worldCount + ")" +
+                " base(hp=" + baseHp + ", dmg=" + baseDamage + ", size=" + baseSize + ")" +
+                " perPlayer(hp=" + perHp + ", dmg=" + perDamage + ", size=" + perSize + ")");
         BossModifiers mods = BossScaler.calculateModifiers(def, playerCount);
 
         LOGGER.info("Boss modifiers calculated - HP: " + mods.hpMultiplier() + ", Damage: " + mods.damageMultiplier() + ", Size: " + mods.scaleMultiplier());
@@ -57,7 +72,11 @@ public final class BossSpawnService {
 
         // Spawn the boss(es)
         for (int i = 0; i < def.amount; i++) {
-            Vector3d spreadPos = spawnPos.add(i * 1.2, 0, i * 1.2);
+            Vector3d spreadPos = new Vector3d(
+                    spawnPos.x + (i * 1.2),
+                    spawnPos.y,
+                    spawnPos.z + (i * 1.2)
+            );
 
             LOGGER.info("Spawning NPC ID: " + def.npcId + " at: " + spreadPos);
 
@@ -81,8 +100,7 @@ public final class BossSpawnService {
                         primaryBossUuid = uuid;
                     }
 
-                    tracking.track(uuid, mods, trackingTtlMs);
-                    attachBossComponent(world, npcRef, mods);
+                    tracking.track(uuid, def.bossName, mods, arenaId, world, spreadPos);
                     applyModifiers(store, npcRef, mods);
 
                     LOGGER.info("Successfully spawned boss: " + def.bossName + " (" + uuid + ") at " + spreadPos);
@@ -246,9 +264,4 @@ public final class BossSpawnService {
         }
     }
 
-    private void attachBossComponent(World world, Ref<EntityStore> entityRef, BossModifiers mods) {
-        BossFightComponent fightData = new BossFightComponent();
-        fightData.hpMultiplier = mods.hpMultiplier();
-        world.getEntityStore().getStore().addComponent(entityRef, BossFightComponent.getComponentType(), fightData);
-    }
 }

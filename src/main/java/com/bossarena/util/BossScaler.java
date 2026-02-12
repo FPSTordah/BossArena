@@ -7,21 +7,24 @@ public final class BossScaler {
 
     private BossScaler() {}
 
-    /**
-     * Calculate the final multiplier based on base modifier + (per-player increase * player count)
-     */
-    public static float calculateMultiplier(float baseModifier, float perPlayerIncrease, int playerCount) {
-        return baseModifier + (perPlayerIncrease * playerCount);
-    }
-
     public static BossModifiers calculateModifiers(BossDefinition def, int playerCount) {
-        if (def == null || def.modifiers == null || def.perPlayerIncrease == null) {
+        if (def == null) {
             return new BossModifiers(1.0f, 1.0f, 1.0f, 1.0f);
         }
 
-        float hp = calculateMultiplier(def.modifiers.hp, def.perPlayerIncrease.hp, playerCount);
-        float damage = calculateMultiplier(def.modifiers.damage, def.perPlayerIncrease.damage, playerCount);
-        float size = calculateMultiplier(def.modifiers.size, def.perPlayerIncrease.size, playerCount);
+        float baseHp = def.modifiers != null ? def.modifiers.hp : 1.0f;
+        float baseDamage = def.modifiers != null ? def.modifiers.damage : 1.0f;
+        float baseSize = def.modifiers != null ? def.modifiers.size : 1.0f;
+
+        float perHp = def.perPlayerIncrease != null ? def.perPlayerIncrease.hp : 0.0f;
+        float perDamage = def.perPlayerIncrease != null ? def.perPlayerIncrease.damage : 0.0f;
+        float perSize = def.perPlayerIncrease != null ? def.perPlayerIncrease.size : 0.0f;
+
+        int extraPlayers = Math.max(0, playerCount - 1);
+
+        float hp = baseHp + (perHp * extraPlayers);
+        float damage = baseDamage + (perDamage * extraPlayers);
+        float size = baseSize + (perSize * extraPlayers);
 
         return new BossModifiers(hp, damage, 1.0f, size);
     }
