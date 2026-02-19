@@ -1,6 +1,5 @@
 package com.bossarena.data;
 
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -31,6 +30,7 @@ public final class BossRegistry {
   }
 
   public static boolean exists(String bossId) {
+    if (bossId == null) return false;
     return BOSSES.containsKey(bossId.toLowerCase());
   }
 

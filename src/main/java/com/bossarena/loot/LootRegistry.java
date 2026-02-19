@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -19,9 +20,18 @@ public class LootRegistry {
      * Register a loot table for a boss
      */
     public static void register(LootTable table) {
+        if (table == null) {
+            LOGGER.warning("Cannot register null loot table");
+            return;
+        }
         if (table.bossName == null || table.bossName.isBlank()) {
             LOGGER.warning("Cannot register loot table with null/empty boss name");
             return;
+        }
+        if (table.items == null) {
+            table.items = new ArrayList<>();
+        } else {
+            table.items.removeIf(item -> item == null);
         }
 
         String key = table.bossName.toLowerCase();

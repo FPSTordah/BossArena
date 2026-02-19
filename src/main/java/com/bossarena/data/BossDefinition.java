@@ -5,9 +5,9 @@ public class BossDefinition {
     public String npcId;
     public int amount;
 
-    public Modifiers modifiers;
-    public PerPlayerIncrease perPlayerIncrease;
-    public ExtraMobs extraMobs;
+    public Modifiers modifiers = new Modifiers();
+    public PerPlayerIncrease perPlayerIncrease = new PerPlayerIncrease();
+    public ExtraMobs extraMobs = new ExtraMobs();
 
     public static class Modifiers {
         public float hp = 1.0f;

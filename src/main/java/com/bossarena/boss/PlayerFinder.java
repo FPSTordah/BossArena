@@ -14,7 +14,6 @@ public final class PlayerFinder {
 
     private PlayerFinder() {}
 
-    @SuppressWarnings("deprecation")
     public static List<Player> playersInRadius(World world, Vector3d center, int radius) {
         if (world == null || center == null) {
             return Collections.emptyList();
@@ -22,12 +21,13 @@ public final class PlayerFinder {
 
         double radiusSq = (double) radius * radius;
 
-        // TODO: Update when getPlayers() is removed - check Hytale docs for replacement API
-        return world.getPlayers().stream()
-                .filter(player -> {
-                    Vector3d pPos = getPlayerPosition(player);
+        return world.getPlayerRefs().stream()
+                .filter(ref -> {
+                    Vector3d pPos = ref.getTransform().getPosition();
                     return pPos != null && getDistanceSq(pPos, center) <= radiusSq;
                 })
+                .map(PlayerFinder::resolvePlayerFromRef)
+                .filter(player -> player != null)
                 .collect(Collectors.toList());
     }
 
@@ -56,32 +56,18 @@ public final class PlayerFinder {
         return (dx * dx) + (dy * dy) + (dz * dz);
     }
 
-    @SuppressWarnings("SpellCheckingInspection")
-    private static Vector3d getPlayerPosition(Player player) {
-        // Try confirmed Hytale accessors via reflection to avoid compiler errors
-        for (String mName : new String[]{"getWorldPosition", "getPosition", "getPos"}) {
-            try {
-                Method m = player.getClass().getMethod(mName);
-                Object res = m.invoke(player);
-                if (res instanceof Vector3d v) {
-                    return v;
-                }
-            } catch (Exception ignored) {}
+    @SuppressWarnings("JavaReflectionMemberAccess")
+    private static Player resolvePlayerFromRef(PlayerRef ref) {
+        if (ref == null) {
+            return null;
         }
-
         try {
-            // Fallback to Transform component
-            Method getTransform = player.getClass().getMethod("getTransform");
-            Object transform = getTransform.invoke(player);
-            if (transform != null) {
-                Method getPos = transform.getClass().getMethod("getPosition");
-                Object pos = getPos.invoke(transform);
-                if (pos instanceof Vector3d v) {
-                    return v;
-                }
-            }
-        } catch (Exception ignored) {}
-
-        return null;
+            Method getComponent = ref.getClass().getMethod("getComponent", com.hypixel.hytale.component.ComponentType.class);
+            Object value = getComponent.invoke(ref, Player.getComponentType());
+            return value instanceof Player ? (Player) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
+
 }

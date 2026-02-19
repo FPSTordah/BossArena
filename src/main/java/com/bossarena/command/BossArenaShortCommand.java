@@ -11,6 +11,7 @@ public final class BossArenaShortCommand extends AbstractCommand {
 
   public BossArenaShortCommand(BossArenaPlugin plugin) {
     super("ba", "Shortcut for /bossarena");  // CHANGED from "bs" to "ba"
+    requirePermission(BossArenaCommand.ADMIN_PERMISSION);
 
     // Register all the same subcommands as BossArenaCommand
     addSubCommand(new BossArenaCommand.ArenaRoot(plugin));

@@ -22,6 +22,7 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.modules.entity.component.EntityScaleComponent;
 
 import java.util.UUID;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class BossSpawnService {
@@ -173,14 +174,12 @@ public final class BossSpawnService {
                         LOGGER.info("Created and added EntityScaleComponent with scale: " + mods.scaleMultiplier());
                     }
                 } catch (Exception e) {
-                    LOGGER.warning("Failed to apply scale modifier: " + e.getMessage());
-                    e.printStackTrace();
+                    LOGGER.log(Level.WARNING, "Failed to apply scale modifier", e);
                 }
             }
 
         } catch (Exception e) {
-            LOGGER.warning("Failed to apply modifiers: " + e.getMessage());
-            e.printStackTrace();
+            LOGGER.log(Level.WARNING, "Failed to apply modifiers", e);
         }
     }
 

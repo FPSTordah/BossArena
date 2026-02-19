@@ -2,8 +2,6 @@ package com.bossarena.shop;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 
 public class ShopRegistry {
     private static final List<ShopEntry> ENTRIES = new ArrayList<>();

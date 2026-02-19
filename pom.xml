@@ -5,7 +5,7 @@
 
     <groupId>com.bossarena</groupId>
     <artifactId>BossArena</artifactId>
-    <version>0.3.0</version>
+    <version>0.4.0</version>
     <packaging>jar</packaging>
 
     <properties>
@@ -42,6 +42,10 @@
                 <includes>
                     <include>**/*</include>
                 </includes>
+                <excludes>
+                    <exclude>**/*.bbmodel</exclude>
+                    <exclude>**/*.zip</exclude>
+                </excludes>
             </resource>
         </resources>
     </build>

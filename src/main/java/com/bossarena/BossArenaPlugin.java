@@ -14,11 +14,16 @@ import com.bossarena.loot.LootRegistry;
 import com.bossarena.loot.BossLootHandler;
 import com.bossarena.loot.BossLootChestState;
 import com.bossarena.loot.OpenBossChestInteraction;
+import com.bossarena.shop.BossShopConfig;
+import com.bossarena.shop.BossArenaShopPage;
+import com.bossarena.shop.OpenBossShopInteraction;
 import com.hypixel.hytale.server.core.asset.AssetModule;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
+import com.hypixel.hytale.server.core.asset.type.item.config.Item;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.event.events.entity.LivingEntityUseBlockEvent;
+import com.hypixel.hytale.server.core.event.events.ecs.UseBlockEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.command.system.CommandManager;
@@ -27,8 +32,10 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.RootInteraction;
+import com.hypixel.hytale.protocol.InteractionType;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockStateModule;
@@ -38,18 +45,33 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 
 public final class BossArenaPlugin extends JavaPlugin {
+    private static BossArenaPlugin INSTANCE;
+    public static final String ASSET_PACK_ID = "com.bossarena:BossArena";
+    private static final Path MOD_ROOT = Path.of("mods", "BossArena");
+    private static final String[] SHOP_ICON_NAMES = new String[]{
+            "common1.png", "common2.png", "common3.png", "common4.png",
+            "uncommon1.png", "uncommon2.png", "uncommon3.png", "uncommon4.png",
+            "rare1.png", "rare2.png", "rare3.png", "rare4.png",
+            "epic1.png", "epic2.png", "epic3.png", "epic4.png",
+            "legendary1.png", "legendary2.png", "legendary3.png", "legendary4.png"
+    };
+    private static final List<String> SHOP_TIERS = List.of("Common", "Uncommon", "Rare", "Epic", "Legendary");
 
     private BossTrackingSystem trackingSystem;
     private BossArenaConfig config = new BossArenaConfig();
+    private BossShopConfig shopConfig = new BossShopConfig();
     private BossSpawnService bossSpawnService;
     private Path bossesJsonPath;
     private Path arenasJsonPath;
     private Path lootTablesPath;
+    private Path shopJsonPath;
 
     public BossArenaPlugin(JavaPluginInit init) {
         super(init);
@@ -57,16 +79,19 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     @Override
     public void setup() {
+        INSTANCE = this;
         getLogger().atInfo().log("BossArena setup() called");
 
         registerCustomCodecs();
+        registerCustomInteractions();
         registerAssetPack();
         registerCustomBlocks();
-        registerCustomInteractions();
 
-        this.bossesJsonPath = Path.of("mods", "BossArena", "bosses.json");
-        this.arenasJsonPath = Path.of("mods", "BossArena", "arenas.json");
-        this.lootTablesPath = Path.of("mods", "BossArena", "loot_tables.json");
+        Path modRoot = getModRootDirectory();
+        this.bossesJsonPath = modRoot.resolve("bosses.json");
+        this.arenasJsonPath = modRoot.resolve("arenas.json");
+        this.lootTablesPath = modRoot.resolve("loot_tables.json");
+        this.shopJsonPath = modRoot.resolve("shop.json");
 
         // Create tracking system
         this.trackingSystem = new BossTrackingSystem();
@@ -82,8 +107,14 @@ public final class BossArenaPlugin extends JavaPlugin {
                 this::onBlockInteract
         );
         getLogger().atInfo().log("Registered chest interaction listener");
+        this.getEventRegistry().registerGlobal(
+                UseBlockEvent.Post.class,
+                this::onUseBlock
+        );
+        getLogger().atInfo().log("Registered block use interaction listener");
 
         config.load();
+        shopConfig.load(shopJsonPath);
 
         // Register commands
         try {
@@ -114,12 +145,6 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     private void registerCustomBlocks() {
         try {
-            // Register the custom block type
-            BlockTypeAssetMap<String, BlockType> blockTypeMap = BlockType.getAssetMap();
-
-            // Load from your assets folder
-            // This assumes you have boss_arena_chest_legendary.json in the right place
-
             getLogger().atInfo().log("Registering Boss Arena custom blocks...");
 
             // Note: Block registration might need to happen during asset loading phase
@@ -135,8 +160,18 @@ public final class BossArenaPlugin extends JavaPlugin {
             getLogger().atInfo().log("Registering Boss Arena custom interactions...");
 
             RootInteraction rootInteraction = new RootInteraction("BossArena_OpenChest", "BossArena_OpenChest");
-            RootInteraction.getAssetStore().loadAssets("BossArena", List.of(rootInteraction));
+            RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(rootInteraction));
             getLogger().atInfo().log("Registered RootInteraction: BossArena_OpenChest");
+
+            RootInteraction shopInteraction = new RootInteraction("BossArena_OpenShop", "BossArena_OpenShop");
+            RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(shopInteraction));
+            getLogger().atInfo().log("Registered RootInteraction: BossArena_OpenShop");
+
+            Interaction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(
+                    new OpenBossChestInteraction(),
+                    new OpenBossShopInteraction()
+            ));
+            getLogger().atInfo().log("Registered interaction assets for BossArena_OpenChest and BossArena_OpenShop");
 
         } catch (Exception e) {
             getLogger().atSevere().withCause(e).log("Failed to register custom interactions");
@@ -163,6 +198,12 @@ public final class BossArenaPlugin extends JavaPlugin {
                     OpenBossChestInteraction.CODEC
             );
 
+            Interaction.CODEC.register(
+                    "BossArena_OpenShop",
+                    OpenBossShopInteraction.class,
+                    OpenBossShopInteraction.CODEC
+            );
+
             getLogger().atInfo().log("✅ Successfully registered custom codecs");
 
         } catch (Exception e) {
@@ -172,21 +213,42 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     private void registerAssetPack() {
         try {
-            Path assetsRoot = getDataDirectory().resolve("assets");
+            Path modRoot = getModRootDirectory();
+            // Prevent mods/BossArena from being auto-detected as a separate external pack on restart.
+            // The canonical asset pack is the mod JAR (IncludesAssetPack=true).
+            Files.deleteIfExists(modRoot.resolve("manifest.json"));
+            migrateLegacyDataDirectory(modRoot);
+            Path assetsRoot = modRoot.resolve("assets");
             extractAssets(assetsRoot);
 
             AssetModule assetModule = AssetModule.get();
-            if (assetModule != null && assetModule.getAssetPack("BossArena") == null) {
-                assetModule.registerPack("BossArena", assetsRoot, getManifest());
+            if (assetModule != null
+                    && assetModule.getAssetPack(ASSET_PACK_ID) == null
+                    && assetModule.getAssetPack("BossArena") == null) {
+                assetModule.registerPack(ASSET_PACK_ID, assetsRoot, getManifest(), true);
                 assetModule.initPendingStores();
                 getLogger().atInfo().log("Registered BossArena asset pack at " + assetsRoot);
             }
 
             BlockTypeAssetMap<String, BlockType> blockTypeMap = BlockType.getAssetMap();
-            if (blockTypeMap.getAsset("Boss_Arena_Chest_Legendary") != null) {
+            if (findBlockType(blockTypeMap, "Boss_Arena_Chest_Legendary") != null) {
                 getLogger().atInfo().log("BossArena custom chest block found in asset map");
             } else {
                 getLogger().atWarning().log("BossArena custom chest block still missing from asset map");
+            }
+
+            BlockType shopBlockType = findBlockType(blockTypeMap, "Boss_Arena_Shop", "Boss_Arena_Shop_Pedestal", "Boss_Pedestal");
+            if (shopBlockType != null) {
+                getLogger().atInfo().log("BossArena shop pedestal block found in asset map");
+            } else {
+                getLogger().atWarning().log("BossArena shop pedestal block still missing from asset map");
+            }
+
+            Item shopItem = findItem("Boss_Arena_Shop", "Boss_Arena_Shop_Pedestal", "Boss_Pedestal");
+            if (shopItem != null) {
+                getLogger().atInfo().log("BossArena shop pedestal item found in asset map");
+            } else {
+                getLogger().atWarning().log("BossArena shop pedestal item still missing from asset map");
             }
         } catch (Exception e) {
             getLogger().atSevere().withCause(e).log("Failed to register BossArena asset pack");
@@ -194,34 +256,80 @@ public final class BossArenaPlugin extends JavaPlugin {
     }
 
     private void extractAssets(Path assetsRoot) throws IOException {
-        String blockTypePath = safeAssetPath(
-                BlockType.getAssetStore() != null ? BlockType.getAssetStore().getPath() : ""
-        );
+        Path serverRoot = assetsRoot.resolve("Server");
         String modelPath = safeAssetPath(
                 ModelAsset.getAssetStore() != null ? ModelAsset.getAssetStore().getPath() : ""
         );
+        String itemPath = defaultAssetPath(
+                Item.getAssetStore() != null ? Item.getAssetStore().getPath() : "",
+                "Item/Items"
+        );
+        Path modelDir = modelPath.isEmpty() ? serverRoot : serverRoot.resolve(trimServerPrefix(modelPath));
+        Path itemDir = itemPath.isEmpty() ? serverRoot : serverRoot.resolve(trimServerPrefix(itemPath));
 
-        Path blockTypeDir = blockTypePath.isEmpty() ? assetsRoot : assetsRoot.resolve(blockTypePath);
-        Path modelDir = modelPath.isEmpty() ? assetsRoot : assetsRoot.resolve(modelPath);
+        copyPackResource(assetsRoot, "manifest.json");
 
-        copyResourceIfMissing(
-                "assets/boss_arena_chest_legendary.json",
-                blockTypeDir.resolve("boss_arena_chest_legendary.json")
-        );
-        copyResourceIfMissing(
-                "assets/Boss_Arena_Chest_Legendary.blockymodel",
-                modelDir.resolve("Boss_Arena_Chest_Legendary.blockymodel")
-        );
-        copyResourceIfMissing(
-                "assets/Boss_Arena_Chest_Legendary_Texture.png",
-                assetsRoot.resolve("Boss_Arena_Chest_Legendary_Texture.png")
-        );
+        copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaShopPage.ui");
+        copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaShopElementButton.ui");
+
+        copyPackResource(assetsRoot, "Common/Blocks/Boss_Shop.blockymodel");
+        copyPackResource(assetsRoot, "Common/Blocks/boss_arena_shop_texture.png");
+        copyPackResource(assetsRoot, "Common/Blocks/Boss_Arena_Chest_Legendary.blockymodel");
+        copyPackResource(assetsRoot, "Common/Blocks/Boss_Arena_Chest_Legendary_Texture.png");
+        copyPackResource(assetsRoot, "Blocks/Boss_Shop.blockymodel");
+        copyPackResource(assetsRoot, "Blocks/boss_arena_shop_texture.png");
+        copyPackResource(assetsRoot, "Blocks/Boss_Arena_Chest_Legendary.blockymodel");
+        copyPackResource(assetsRoot, "Blocks/Boss_Arena_Chest_Legendary_Texture.png");
+        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Chest_Legendary.json");
+        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Chest_Legendary.blockymodel");
+        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Shop.json");
+        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Pedestal.json");
+        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Pedestal.blockymodel");
+        copyPackResource(assetsRoot, "Server/Item/RootInteractions/Block/BossArena_OpenShop.json");
+        copyPackResource(assetsRoot, "Server/Item/Interactions/Block/BossArena_OpenShop_Simple.json");
+
+        copyPackResource(assetsRoot, "Server/Textures/Boss_Arena_Chest_Legendary_Texture.png");
+        copyPackResource(assetsRoot, "Server/Textures/boss_arena_shop_texture.png");
+
+        copyPackResource(assetsRoot, "Common/Icons/ItemsGenerated/boss_arena_shop_icon.png");
+        copyPackResource(assetsRoot, "Server/Icons/ItemsGenerated/boss_arena_shop_icon.png");
+
+        // Shop item icons are intentionally disabled for now.
+
+        // Mirror key assets into runtime asset-store directories for compatibility.
+        copyResource("Blocks/Boss_Shop.blockymodel", modelDir.resolve("Boss_Shop.blockymodel"));
+        copyResource("Server/Item/Items/Boss_Pedestal.blockymodel", modelDir.resolve("Boss_Pedestal.blockymodel"));
+        copyResource("Server/Item/Items/Boss_Arena_Chest_Legendary.blockymodel", modelDir.resolve("Boss_Arena_Chest_Legendary.blockymodel"));
+        copyResource("Server/Item/Items/Boss_Arena_Shop.json", itemDir.resolve("Boss_Arena_Shop.json"));
+        copyResource("Server/Item/Items/Boss_Pedestal.json", itemDir.resolve("Boss_Pedestal.json"));
+        // Legacy compatibility copies for pre-Update 3 item path assumptions.
+        copyResource("Server/Item/Items/Boss_Arena_Shop.json", assetsRoot.resolve("Server/Items/Boss_Arena_Shop.json"));
+        copyResource("Server/Item/Items/Boss_Arena_Chest_Legendary.json", assetsRoot.resolve("Server/Items/Boss_Arena_Chest_Legendary.json"));
+        copyResource("Server/Item/Items/Boss_Pedestal.json", assetsRoot.resolve("Server/Items/Boss_Pedestal.json"));
+        copyResource("Server/Item/Items/Boss_Pedestal.blockymodel", assetsRoot.resolve("Server/Items/Boss_Pedestal.blockymodel"));
+
+        // Texture compatibility copies for model lookup differences.
+        copyResource("Blocks/boss_arena_shop_texture.png", modelDir.resolve("boss_arena_shop_texture.png"));
+        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("boss_arena_shop_texture.png"));
+        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("shop_texture.png"));
+        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("Textures/boss_arena_shop_texture.png"));
+        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("Blocks/boss_arena_shop_texture.png"));
+        copyResource("Blocks/boss_arena_shop_texture.png", assetsRoot.resolve("Blocks/boss_arena_shop_texture.png"));
+        copyResource("Blocks/Boss_Shop.blockymodel", assetsRoot.resolve("Blocks/Boss_Shop.blockymodel"));
+        copyResource("Blocks/Boss_Arena_Chest_Legendary.blockymodel", assetsRoot.resolve("Blocks/Boss_Arena_Chest_Legendary.blockymodel"));
+        copyResource("Blocks/Boss_Arena_Chest_Legendary_Texture.png", assetsRoot.resolve("Blocks/Boss_Arena_Chest_Legendary_Texture.png"));
+        copyResource("Server/Textures/boss_arena_shop_texture.png", modelDir.resolve("boss_arena_shop_texture.png"));
+        copyResource("Server/Textures/Boss_Arena_Chest_Legendary_Texture.png", modelDir.resolve("Boss_Arena_Chest_Legendary_Texture.png"));
+
+        // Clean up legacy lowercase file if it exists from prior versions.
+        Files.deleteIfExists(assetsRoot.resolve("Server/Item/Items/boss_arena_shop_pedestal.json"));
     }
 
-    private void copyResourceIfMissing(String resourcePath, Path destination) throws IOException {
-        if (Files.exists(destination)) {
-            return;
-        }
+    private void copyPackResource(Path assetsRoot, String resourcePath) throws IOException {
+        copyResource(resourcePath, assetsRoot.resolve(resourcePath));
+    }
+
+    private void copyResource(String resourcePath, Path destination) throws IOException {
         Files.createDirectories(destination.getParent());
         try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
             if (in == null) {
@@ -232,11 +340,245 @@ public final class BossArenaPlugin extends JavaPlugin {
         }
     }
 
+    private void copyResourceIfMissing(String resourcePath, Path destination) throws IOException {
+        if (Files.exists(destination)) {
+            return;
+        }
+        copyResource(resourcePath, destination);
+    }
+
+    private void syncExternalShopIcons(Path assetsRoot) throws IOException {
+        Path externalDir = getModRootDirectory().resolve("shopicons");
+        Files.createDirectories(externalDir);
+
+        // Seed easy-to-edit icon folder on first run.
+        for (String name : SHOP_ICON_NAMES) {
+            copyResourceIfMissing(
+                    "Common/Icons/Items/ShopItems/" + name,
+                    externalDir.resolve(name)
+            );
+        }
+
+        int copied = 0;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(externalDir)) {
+            for (Path iconFile : stream) {
+                if (!Files.isRegularFile(iconFile)) {
+                    continue;
+                }
+                String fileName = iconFile.getFileName().toString();
+                if (!fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
+                    continue;
+                }
+
+                Path commonDest = assetsRoot.resolve("Common/Icons/Items/ShopItems").resolve(fileName);
+                Path serverDest = assetsRoot.resolve("Server/Icons/Items/ShopItems").resolve(fileName);
+                Files.createDirectories(commonDest.getParent());
+                Files.createDirectories(serverDest.getParent());
+                Files.copy(iconFile, commonDest, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(iconFile, serverDest, StandardCopyOption.REPLACE_EXISTING);
+                copied++;
+            }
+        }
+
+        getLogger().atInfo().log("BossArena shop icon sync: loaded " + copied + " file(s) from " + externalDir);
+    }
+
+    private void generateShopIconItems(Path assetsRoot, Path itemDir) throws IOException {
+        JsonObject template = readJsonObjectResource("Server/Item/Items/Boss_Arena_Shop.json");
+        if (template == null) {
+            getLogger().atWarning().log("Skipping generated Boss_Shop items: missing Boss_Arena_Shop.json template");
+            return;
+        }
+
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        Path serverItemDir = assetsRoot.resolve("Server/Item/Items");
+        Files.createDirectories(serverItemDir);
+        Files.createDirectories(itemDir);
+
+        for (String tier : SHOP_TIERS) {
+            String lowerTier = tier.toLowerCase(Locale.ROOT);
+            for (int slot = 1; slot <= 4; slot++) {
+                String id = "Boss_Shop_" + tier + "_" + slot;
+                JsonObject itemJson = template.deepCopy();
+
+                JsonObject translation = itemJson.has("TranslationProperties")
+                        && itemJson.get("TranslationProperties").isJsonObject()
+                        ? itemJson.getAsJsonObject("TranslationProperties")
+                        : new JsonObject();
+                itemJson.add("TranslationProperties", translation);
+                translation.addProperty("Name", tier + " Contract " + slot);
+                translation.addProperty("Description", "BossArena tier contract icon.");
+
+                itemJson.addProperty("Icon", "Icons/Items/ShopItems/" + lowerTier + slot + ".png");
+                itemJson.addProperty("Quality", tier);
+                itemJson.addProperty("MaxStack", 1);
+
+                Path generatedPath = serverItemDir.resolve(id + ".json");
+                writeJson(gson, generatedPath, itemJson);
+
+                Path runtimePath = itemDir.resolve(id + ".json");
+                if (!generatedPath.normalize().equals(runtimePath.normalize())) {
+                    writeJson(gson, runtimePath, itemJson);
+                }
+            }
+        }
+    }
+
+    private JsonObject readJsonObjectResource(String resourcePath) throws IOException {
+        try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
+            if (in == null) {
+                return null;
+            }
+            String raw = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            return JsonParser.parseString(raw).getAsJsonObject();
+        }
+    }
+
+    private void writeJson(Gson gson, Path destination, JsonObject object) throws IOException {
+        Files.createDirectories(destination.getParent());
+        Files.writeString(
+                destination,
+                gson.toJson(object),
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING
+        );
+    }
+
     private static String safeAssetPath(String path) {
         if (path == null || path.isBlank() || ".".equals(path)) {
             return "";
         }
         return path;
+    }
+
+    private static String defaultAssetPath(String path, String fallback) {
+        String normalized = safeAssetPath(path);
+        return normalized.isEmpty() ? fallback : normalized;
+    }
+
+    private static String trimServerPrefix(String path) {
+        if (path == null) {
+            return "";
+        }
+        if (path.startsWith("Server/")) {
+            return path.substring("Server/".length());
+        }
+        return path;
+    }
+
+    private static BlockType findBlockType(BlockTypeAssetMap<String, BlockType> map, String... baseIds) {
+        for (String baseId : baseIds) {
+            if (baseId == null || baseId.isBlank()) {
+                continue;
+            }
+            BlockType direct = map.getAsset(baseId);
+            if (direct != null) {
+                return direct;
+            }
+            BlockType namespaced = map.getAsset(ASSET_PACK_ID + ":" + baseId);
+            if (namespaced != null) {
+                return namespaced;
+            }
+        }
+        return null;
+    }
+
+    private static Item findItem(String... baseIds) {
+        for (String baseId : baseIds) {
+            if (baseId == null || baseId.isBlank()) {
+                continue;
+            }
+            Item direct = Item.getAssetMap().getAsset(baseId);
+            if (direct != null) {
+                return direct;
+            }
+            Item namespaced = Item.getAssetMap().getAsset(ASSET_PACK_ID + ":" + baseId);
+            if (namespaced != null) {
+                return namespaced;
+            }
+        }
+        return null;
+    }
+
+    private Path getModRootDirectory() {
+        return MOD_ROOT;
+    }
+
+    private void migrateLegacyDataDirectory(Path canonicalRoot) {
+        try {
+            Path legacyRoot = getDataDirectory();
+            if (legacyRoot == null) {
+                return;
+            }
+
+            Path canonical = canonicalRoot.toAbsolutePath().normalize();
+            Path legacy = legacyRoot.toAbsolutePath().normalize();
+            if (legacy.equals(canonical) || !Files.isDirectory(legacy)) {
+                return;
+            }
+
+            Files.createDirectories(canonical);
+            copyMissingTree(legacy, canonical);
+            copyResource("manifest.json", canonical.resolve("manifest.json"));
+            getLogger().atInfo().log("Migrated BossArena data from legacy path " + legacy + " to " + canonical);
+            if (isLegacyBossArenaDirectory(legacy)) {
+                deleteTree(legacy);
+                getLogger().atInfo().log("Removed legacy BossArena directory at " + legacy);
+            }
+        } catch (Exception e) {
+            getLogger().atWarning().withCause(e).log("Failed to migrate legacy BossArena data directory");
+        }
+    }
+
+    private static void copyMissingTree(Path sourceRoot, Path targetRoot) throws IOException {
+        Files.walkFileTree(sourceRoot, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+                Path relative = sourceRoot.relativize(dir);
+                Files.createDirectories(targetRoot.resolve(relative));
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Path relative = sourceRoot.relativize(file);
+                Path destination = targetRoot.resolve(relative);
+                if (!Files.exists(destination)
+                        || Files.getLastModifiedTime(file).compareTo(Files.getLastModifiedTime(destination)) > 0) {
+                    Files.copy(file, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static boolean isLegacyBossArenaDirectory(Path path) {
+        Path fileName = path.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+        String name = fileName.toString().toLowerCase();
+        return name.equals("com.bossarena_bossarena");
+    }
+
+    private static void deleteTree(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        Files.walkFileTree(root, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                Files.deleteIfExists(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     private void onBlockInteract(LivingEntityUseBlockEvent event) {
@@ -291,9 +633,56 @@ public final class BossArenaPlugin extends JavaPlugin {
         manuallyOpenChest(playerRef, (BossLootChestState) state, world, x, y, z);
     }
 
+    private void onUseBlock(UseBlockEvent event) {
+        if (event == null) {
+            return;
+        }
+
+        InteractionType type = event.getInteractionType();
+        com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType blockType = event.getBlockType();
+        if (blockType == null) {
+            return;
+        }
+
+        String blockId = blockType.getId();
+        if (blockId == null) {
+            return;
+        }
+
+        if (!isShopBlockId(blockId)) {
+            return;
+        }
+
+        if (!isShopOpenInteraction(type)) {
+            return;
+        }
+        getLogger().atInfo().log("Shop use event (blockId=" + blockId + ", interaction=" + type + ")");
+        var context = event.getContext();
+        if (context == null) {
+            return;
+        }
+        Ref<EntityStore> playerRef = context.getEntity();
+        Store<EntityStore> store = playerRef.getStore();
+        Object playerObj = store.getComponent(playerRef, Player.getComponentType());
+        if (playerObj instanceof Player player) {
+            BossArenaShopPage.open(playerRef, store, player, this);
+        }
+    }
+
+    private static boolean isShopOpenInteraction(InteractionType type) {
+        return type == InteractionType.Use;
+    }
+
+    private static boolean isShopBlockId(String blockId) {
+        String normalized = blockId.toLowerCase(Locale.ROOT);
+        return normalized.contains("boss_arena_shop")
+                || normalized.contains("boss_pedestal")
+                || normalized.contains("boss_shop");
+    }
+
     private void manuallyOpenChest(Ref<EntityStore> playerRef, BossLootChestState state,
                                    World world, int x, int y, int z) {
-        getLogger().atInfo().log("TODO: Open chest UI for player");
+        // No-op: chest interaction is handled by OpenBossChestInteraction.
     }
 
     private void startBossArenaSystems() {
@@ -340,6 +729,18 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     public BossArenaConfig cfg() {
         return config;
+    }
+
+    public BossShopConfig getShopConfig() {
+        return shopConfig;
+    }
+
+    public void reloadShopConfig() {
+        shopConfig.load(shopJsonPath);
+    }
+
+    public static BossArenaPlugin getInstance() {
+        return INSTANCE;
     }
 
     public BossArenaConfig getConfigHandle() {

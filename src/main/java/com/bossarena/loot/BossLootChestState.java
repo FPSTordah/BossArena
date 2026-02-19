@@ -17,8 +17,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 
 public class BossLootChestState extends ItemContainerState {
+    private static final Logger LOGGER = Logger.getLogger("BossArena");
     public static final BuilderCodec<BossLootChestState> CODEC = BuilderCodec.builder(
             BossLootChestState.class,
             BossLootChestState::new,
@@ -36,11 +38,9 @@ public class BossLootChestState extends ItemContainerState {
     public BossLootChestState(Vector3d location) {
         this();
         this.chestLocation = location;
-        System.out.println("[BossArena] Created BossLootChestState at " + location);
     }
 
     public ItemContainer getItemContainer(Player playerComponent, UUID playerUuid) {
-        System.out.println("[BossArena] getItemContainer called for player " + playerUuid);
         return getOrCreateContainer(playerUuid);
     }
 
@@ -75,7 +75,6 @@ public class BossLootChestState extends ItemContainerState {
         // Check if we already created a container for this player
         ItemContainer cached = playerContainers.get(playerUuid);
         if (cached != null) {
-            System.out.println("[BossArena] Returning existing container");
             return cached;
         }
 
@@ -94,27 +93,20 @@ public class BossLootChestState extends ItemContainerState {
                 playerUuid
         );
 
-        System.out.println("[BossArena] Retrieved loot: " + (loot != null ? loot.size() + " items" : "null"));
-
         if (loot != null && !loot.isEmpty()) {
             // Fill the container with items
             int slot = 0;
             for (GeneratedLoot item : loot) {
                 if (slot >= 27) break; // Don't overflow the chest
 
-                System.out.println("[BossArena] Adding " + item.amount + "x " + item.itemId + " to slot " + slot);
-
                 try {
                     ItemStack stack = new ItemStack(item.itemId, item.amount);
                     container.setItemStackForSlot((short) slot, stack);
                     slot++;
                 } catch (Exception e) {
-                    System.err.println("[BossArena] Error creating ItemStack for " + item.itemId + ": " + e.getMessage());
+                    LOGGER.warning("Failed to create ItemStack for " + item.itemId + ": " + e.getMessage());
                 }
             }
-            System.out.println("[BossArena] Added " + slot + " items to container");
-        } else {
-            System.out.println("[BossArena] No loot found for player at location " + chestLocation);
         }
 
         // Cache the container

@@ -1,7 +1,7 @@
 package com.bossarena.util;
 
 import com.bossarena.data.BossDefinition;
-import com.bossarena.boss.BossModifiers;  // Add this import
+import com.bossarena.boss.BossModifiers;
 
 public final class BossScaler {
 

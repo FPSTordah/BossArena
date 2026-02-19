@@ -1,5 +1,6 @@
 package com.bossarena.loot;
 
+import com.bossarena.BossArenaPlugin;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.math.vector.Vector3d;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class BossLootHandler {
@@ -66,6 +68,10 @@ public class BossLootHandler {
         }
 
         LOGGER.info("Loot table found. Radius: " + table.lootRadius);
+        if (table.items == null || table.items.isEmpty()) {
+            LOGGER.warning("Loot table has no items for boss: " + bossName);
+            return;
+        }
 
         List<UUID> eligiblePlayers = new ArrayList<>();
         var playerRefs = world.getPlayerRefs();
@@ -239,18 +245,40 @@ public class BossLootHandler {
         Random random = new Random();
 
         for (LootItem item : table.items) {  // Changed from table.loot to table.items
+            if (item == null) {
+                LOGGER.warning("Skipping null loot item entry in table: " + table.bossName);
+                continue;
+            }
+            if (item.itemId == null || item.itemId.isBlank()) {
+                LOGGER.warning("Skipping loot item with empty itemId in table: " + table.bossName);
+                continue;
+            }
+
+            double dropChance = item.dropChance;
+            if (Double.isNaN(dropChance)) {
+                LOGGER.warning("Skipping loot item with NaN dropChance: " + item.itemId + " in table: " + table.bossName);
+                continue;
+            }
+            if (dropChance < 0.0d) {
+                dropChance = 0.0d;
+            } else if (dropChance > 1.0d) {
+                dropChance = 1.0d;
+            }
+
+            int minAmount = Math.max(1, item.minAmount);
+            int maxAmount = Math.max(minAmount, item.maxAmount);
             double roll = random.nextDouble();  // Returns 0.0 to 1.0
 
-            if (roll <= item.dropChance) {  // dropChance is 0.0-1.0
-                int amount = item.minAmount;
-                if (item.maxAmount > item.minAmount) {
-                    amount = random.nextInt(item.maxAmount - item.minAmount + 1) + item.minAmount;
+            if (roll <= dropChance) {  // dropChance is 0.0-1.0
+                int amount = minAmount;
+                if (maxAmount > minAmount) {
+                    amount = random.nextInt(maxAmount - minAmount + 1) + minAmount;
                 }
 
                 loot.add(new GeneratedLoot(item.itemId, amount));
-                LOGGER.info("  Rolled " + roll + " <= " + item.dropChance + " -> DROP " + amount + "x " + item.itemId);
+                LOGGER.info("  Rolled " + roll + " <= " + dropChance + " -> DROP " + amount + "x " + item.itemId);
             } else {
-                LOGGER.info("  Rolled " + roll + " > " + item.dropChance + " -> SKIP " + item.itemId);
+                LOGGER.info("  Rolled " + roll + " > " + dropChance + " -> SKIP " + item.itemId);
             }
         }
 
@@ -259,18 +287,13 @@ public class BossLootHandler {
 
     // Get stored loot for a player at a location (for BossLootChestState)
     public static List<GeneratedLoot> getStoredLootForPlayer(Vector3d location, UUID playerUuid) {
-        System.out.println("[BossArena] Looking for loot at location: " + location);
-        System.out.println("[BossArena] Available chest locations: " + CHEST_LOOT.keySet());
-
         Vector3d key = normalizeChestKey(location);
         Map<UUID, List<GeneratedLoot>> chestLoot = CHEST_LOOT.get(key);
 
         if (chestLoot == null) {
-            System.out.println("[BossArena] No chest found at exact location, searching nearby...");
             // Try to find nearby chest (in case of floating point precision issues)
             for (Vector3d chestLoc : CHEST_LOOT.keySet()) {
                 if (chestLoc.distanceTo(location) < 2.0) {
-                    System.out.println("[BossArena] Found nearby chest at " + chestLoc);
                     chestLoot = CHEST_LOOT.get(chestLoc);
                     break;
                 }
@@ -278,14 +301,10 @@ public class BossLootHandler {
         }
 
         if (chestLoot == null) {
-            System.out.println("[BossArena] Still no chest found!");
             return null;
         }
 
-        List<GeneratedLoot> playerLoot = chestLoot.get(playerUuid);
-        System.out.println("[BossArena] Player " + playerUuid + " has " + (playerLoot != null ? playerLoot.size() : 0) + " loot items");
-
-        return playerLoot;
+        return chestLoot.get(playerUuid);
     }
 
     // Spawn the chest block
@@ -293,7 +312,7 @@ public class BossLootHandler {
         world.execute(() -> {
             try {
                 BlockTypeAssetMap<String, BlockType> blockTypeAssetMap = BlockType.getAssetMap();
-                BlockType chestBlockType = blockTypeAssetMap.getAsset("Boss_Arena_Chest_Legendary");
+                BlockType chestBlockType = findBlockType(blockTypeAssetMap, "Boss_Arena_Chest_Legendary");
                 if (chestBlockType == null) {
                     LOGGER.warning("BossArena custom chest not found, falling back to Furniture_Dungeon_Chest_Legendary_Large");
                     chestBlockType = blockTypeAssetMap.getAsset("Furniture_Dungeon_Chest_Legendary_Large");
@@ -331,8 +350,7 @@ public class BossLootHandler {
                 replaceChestState(world, x, y, z, location);
 
             } catch (Exception e) {
-                LOGGER.severe("Error spawning boss chest: " + e.getMessage());
-                e.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Error spawning boss chest", e);
             }
         });
     }
@@ -381,8 +399,7 @@ public class BossLootHandler {
             LOGGER.info("✅ Replaced chest state with BossLootChestState!");
 
         } catch (Exception e) {
-            LOGGER.severe("Error replacing chest state: " + e.getMessage());
-            e.printStackTrace();
+            LOGGER.log(Level.SEVERE, "Error replacing chest state", e);
         }
     }
 
@@ -428,8 +445,7 @@ public class BossLootHandler {
 
                 LOGGER.info("Removed chest block at: " + x + ", " + y + ", " + z);
             } catch (Exception e) {
-                LOGGER.severe("Error removing chest block: " + e.getMessage());
-                e.printStackTrace();
+                LOGGER.log(Level.SEVERE, "Error removing chest block", e);
             }
         });
     }
@@ -481,13 +497,13 @@ public class BossLootHandler {
         }
 
         String id = type.getId();
-        if ("Boss_Arena_Chest_Legendary".equals(id)
+        if (matchesAssetId(id, "Boss_Arena_Chest_Legendary")
                 || "Furniture_Dungeon_Chest_Legendary_Large".equals(id)) {
             return true;
         }
 
         BlockTypeAssetMap<String, BlockType> map = BlockType.getAssetMap();
-        BlockType customBase = map.getAsset("Boss_Arena_Chest_Legendary");
+        BlockType customBase = findBlockType(map, "Boss_Arena_Chest_Legendary");
         if (customBase != null && customBase.getStateForBlock(type) != null) {
             return true;
         }
@@ -518,5 +534,23 @@ public class BossLootHandler {
         if (future != null) {
             future.cancel(false);
         }
+    }
+
+    private static BlockType findBlockType(BlockTypeAssetMap<String, BlockType> map, String baseId) {
+        BlockType direct = map.getAsset(baseId);
+        if (direct != null) {
+            return direct;
+        }
+        return map.getAsset(BossArenaPlugin.ASSET_PACK_ID + ":" + baseId);
+    }
+
+    private static boolean matchesAssetId(String currentId, String baseId) {
+        if (currentId == null || baseId == null) {
+            return false;
+        }
+        if (currentId.equalsIgnoreCase(baseId)) {
+            return true;
+        }
+        return currentId.equalsIgnoreCase(BossArenaPlugin.ASSET_PACK_ID + ":" + baseId);
     }
 }

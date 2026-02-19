@@ -1,0 +1,80 @@
+{
+  "TranslationProperties": {
+    "Name": "Boss Shop",
+    "Description": "A pedestal for the BossArena shop."
+  },
+  "Icon": "Icons/ItemsGenerated/boss_arena_shop_icon.png",
+  "Quality": "Common",
+  "MaxStack": 64,
+  "Categories": ["Blocks.Decoration"],
+  "PlayerAnimationsId": "Block",
+  "Interactions": {
+    "Primary": {
+      "Interactions": [{ "Type": "PlaceBlock" }]
+    }
+  },
+  "BlockType": {
+    "Material": "Solid",
+    "DrawType": "Model",
+    "Flags": {
+      "IsUsable": true
+    },
+    "Interactions": {
+      "Use": "BossArena_OpenShop",
+      "Secondary": "*Simple_Crafting_Default"
+    },
+    "Bench": {
+      "Type": "Crafting",
+      "Categories": [
+        {
+          "Id": "Workbench_Survival",
+          "Icon": "Icons/CraftingCategories/Workbench/WeaponsCrude.png",
+          "Name": "server.benchCategories.workbench.survival"
+        },
+        {
+          "Id": "Workbench_Tools",
+          "Icon": "Icons/CraftingCategories/Workbench/Tools.png",
+          "Name": "server.benchCategories.workbench.tools"
+        },
+        {
+          "Id": "Workbench_Crafting",
+          "Icon": "Icons/CraftingCategories/Workbench/Processing.png",
+          "Name": "server.benchCategories.workbench.crafting"
+        },
+        {
+          "Id": "Workbench_Tinkering",
+          "Icon": "Icons/CraftingCategories/Workbench/Deco_Target.png",
+          "Name": "server.benchCategories.workbench.tinkering"
+        }
+      ],
+      "LocalOpenSoundEventId": "SFX_Workbench_Open",
+      "LocalCloseSoundEventId": "SFX_Workbench_Close",
+      "CompletedSoundEventId": "SFX_Workbench_Craft",
+      "FailedSoundEventId": "SFX_Generic_Crafting_Failed",
+      "BenchUpgradeSoundEventId": "SFX_Workbench_Upgrade_Start_Default",
+      "BenchUpgradeCompletedSoundEventId": "SFX_Workbench_Upgrade_Complete_Default",
+      "Id": "Workbench",
+      "TierLevels": [
+        {
+          "CraftingTimeReductionModifier": 0.0
+        },
+        {
+          "CraftingTimeReductionModifier": 0.15
+        },
+        {
+          "CraftingTimeReductionModifier": 0.3
+        }
+      ]
+    },
+    "State": {
+      "Id": "crafting"
+    },
+    "CustomModel": "Blocks/Boss_Shop.blockymodel",
+    "CustomModelTexture": [
+      {
+        "Texture": "Blocks/boss_arena_shop_texture.png",
+        "Weight": 1
+      }
+    ]
+  }
+}

@@ -1,0 +1,321 @@
+Group {
+  Anchor: (Left: 0, Top: 0, Width: 1920, Height: 1080);
+
+  Panel #Overlay {
+    Anchor: (Left: 0, Top: 0, Width: 1920, Height: 1080);
+    Background: #000000(0.45);
+  }
+
+  Panel #Background {
+    Anchor: (Left: 330, Top: 88, Width: 1260, Height: 904);
+    Background: #0f1725;
+  }
+
+  Panel #AccentLeft {
+    Anchor: (Left: 330, Top: 88, Width: 4, Height: 904);
+    Background: #4f79ab;
+  }
+
+  Panel #HeaderPanel {
+    Anchor: (Left: 334, Top: 88, Width: 1256, Height: 104);
+    Background: #152238;
+  }
+
+  Label #TitleLabel {
+    Anchor: (Left: 368, Top: 108, Width: 860, Height: 42);
+    Text: "Boss Arena // Contract Board";
+    Style: (FontSize: 31, TextColor: #f3f7ff, RenderBold: true);
+  }
+
+  Label #SubtitleLabel {
+    Anchor: (Left: 368, Top: 150, Width: 880, Height: 26);
+    Text: "Choose a tier and summon a boss.";
+    Style: (FontSize: 15, TextColor: #b2c0d2);
+  }
+
+  TextButton #CloseButton {
+    Anchor: (Left: 1428, Top: 116, Width: 136, Height: 48);
+    Text: "Close";
+    Style: TextButtonStyle(
+      Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Disabled: (Background: #253244, LabelStyle: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  Panel #TierPanel {
+    Anchor: (Left: 360, Top: 214, Width: 1200, Height: 60);
+    Background: #182a44;
+  }
+
+  Panel #TierBordercommon {
+    Anchor: (Left: 606, Top: 220, Width: 234, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  Panel #TierBorderuncommon {
+    Anchor: (Left: 369, Top: 220, Width: 234, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  Panel #TierBorderrare {
+    Anchor: (Left: 843, Top: 220, Width: 234, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  Panel #TierBorderepic {
+    Anchor: (Left: 1080, Top: 220, Width: 234, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  Panel #TierBorderlegendary {
+    Anchor: (Left: 1317, Top: 220, Width: 234, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  TextButton #TierBtncommon {
+    Anchor: (Left: 609, Top: 223, Width: 228, Height: 42);
+    Text: "Common";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  TextButton #TierBtnuncommon {
+    Anchor: (Left: 372, Top: 223, Width: 228, Height: 42);
+    Text: "Uncommon";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  TextButton #TierBtnrare {
+    Anchor: (Left: 846, Top: 223, Width: 228, Height: 42);
+    Text: "Rare";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  TextButton #TierBtnepic {
+    Anchor: (Left: 1083, Top: 223, Width: 228, Height: 42);
+    Text: "Epic";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  TextButton #TierBtnlegendary {
+    Anchor: (Left: 1320, Top: 223, Width: 228, Height: 42);
+    Text: "Legendary";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  Group #ItemCard1 {
+    Anchor: (Left: 360, Top: 296, Width: 585, Height: 150);
+    Background: #172639;
+
+    ItemIcon #ItemIcon1 {
+      Anchor: (Left: 22, Top: 46, Width: 56, Height: 56);
+    }
+
+    Label #ItemName1 {
+      Anchor: (Left: 24, Top: 16, Width: 370, Height: 32);
+      Text: "Contract Name";
+      Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    Label #ItemPrice1 {
+      Anchor: (Left: 24, Top: 52, Width: 370, Height: 24);
+      Text: "Price";
+      Style: (FontSize: 15, TextColor: #ffd88f, RenderBold: true);
+    }
+
+    Label #ItemDesc1 {
+      Anchor: (Left: 24, Top: 82, Width: 370, Height: 46);
+      Text: "Description";
+      Style: (FontSize: 13, TextColor: #b1bfd4);
+    }
+
+    TextButton #BuyBtn1 {
+      Anchor: (Left: 416, Top: 52, Width: 150, Height: 46);
+      Text: "Summon";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Disabled: (Background: #334358, LabelStyle: (FontSize: 15, TextColor: #8ea0bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+  }
+
+  Group #ItemCard2 {
+    Anchor: (Left: 975, Top: 296, Width: 585, Height: 150);
+    Background: #172639;
+
+    ItemIcon #ItemIcon2 {
+      Anchor: (Left: 22, Top: 46, Width: 56, Height: 56);
+    }
+
+    Label #ItemName2 {
+      Anchor: (Left: 24, Top: 16, Width: 370, Height: 32);
+      Text: "Contract Name";
+      Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    Label #ItemPrice2 {
+      Anchor: (Left: 24, Top: 52, Width: 370, Height: 24);
+      Text: "Price";
+      Style: (FontSize: 15, TextColor: #ffd88f, RenderBold: true);
+    }
+
+    Label #ItemDesc2 {
+      Anchor: (Left: 24, Top: 82, Width: 370, Height: 46);
+      Text: "Description";
+      Style: (FontSize: 13, TextColor: #b1bfd4);
+    }
+
+    TextButton #BuyBtn2 {
+      Anchor: (Left: 416, Top: 52, Width: 150, Height: 46);
+      Text: "Summon";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Disabled: (Background: #334358, LabelStyle: (FontSize: 15, TextColor: #8ea0bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+  }
+
+  Group #ItemCard3 {
+    Anchor: (Left: 360, Top: 462, Width: 585, Height: 150);
+    Background: #172639;
+
+    ItemIcon #ItemIcon3 {
+      Anchor: (Left: 22, Top: 46, Width: 56, Height: 56);
+    }
+
+    Label #ItemName3 {
+      Anchor: (Left: 24, Top: 16, Width: 370, Height: 32);
+      Text: "Contract Name";
+      Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    Label #ItemPrice3 {
+      Anchor: (Left: 24, Top: 52, Width: 370, Height: 24);
+      Text: "Price";
+      Style: (FontSize: 15, TextColor: #ffd88f, RenderBold: true);
+    }
+
+    Label #ItemDesc3 {
+      Anchor: (Left: 24, Top: 82, Width: 370, Height: 46);
+      Text: "Description";
+      Style: (FontSize: 13, TextColor: #b1bfd4);
+    }
+
+    TextButton #BuyBtn3 {
+      Anchor: (Left: 416, Top: 52, Width: 150, Height: 46);
+      Text: "Summon";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Disabled: (Background: #334358, LabelStyle: (FontSize: 15, TextColor: #8ea0bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+  }
+
+  Group #ItemCard4 {
+    Anchor: (Left: 975, Top: 462, Width: 585, Height: 150);
+    Background: #172639;
+
+    ItemIcon #ItemIcon4 {
+      Anchor: (Left: 22, Top: 46, Width: 56, Height: 56);
+    }
+
+    Label #ItemName4 {
+      Anchor: (Left: 24, Top: 16, Width: 370, Height: 32);
+      Text: "Contract Name";
+      Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    Label #ItemPrice4 {
+      Anchor: (Left: 24, Top: 52, Width: 370, Height: 24);
+      Text: "Price";
+      Style: (FontSize: 15, TextColor: #ffd88f, RenderBold: true);
+    }
+
+    Label #ItemDesc4 {
+      Anchor: (Left: 24, Top: 82, Width: 370, Height: 46);
+      Text: "Description";
+      Style: (FontSize: 13, TextColor: #b1bfd4);
+    }
+
+    TextButton #BuyBtn4 {
+      Anchor: (Left: 416, Top: 52, Width: 150, Height: 46);
+      Text: "Summon";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Disabled: (Background: #334358, LabelStyle: (FontSize: 15, TextColor: #8ea0bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+  }
+
+  Group #ItemCard5 {
+    Anchor: (Left: 360, Top: 628, Width: 585, Height: 150);
+    Background: #172639;
+
+    ItemIcon #ItemIcon5 {
+      Anchor: (Left: 22, Top: 46, Width: 56, Height: 56);
+    }
+
+    Label #ItemName5 {
+      Anchor: (Left: 24, Top: 16, Width: 370, Height: 32);
+      Text: "Contract Name";
+      Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    Label #ItemPrice5 {
+      Anchor: (Left: 24, Top: 52, Width: 370, Height: 24);
+      Text: "Price";
+      Style: (FontSize: 15, TextColor: #ffd88f, RenderBold: true);
+    }
+
+    Label #ItemDesc5 {
+      Anchor: (Left: 24, Top: 82, Width: 370, Height: 46);
+      Text: "Description";
+      Style: (FontSize: 13, TextColor: #b1bfd4);
+    }
+
+    TextButton #BuyBtn5 {
+      Anchor: (Left: 416, Top: 52, Width: 150, Height: 46);
+      Text: "Summon";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Disabled: (Background: #334358, LabelStyle: (FontSize: 15, TextColor: #8ea0bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+  }
+}

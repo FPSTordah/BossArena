@@ -7,6 +7,7 @@ import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
 import com.bossarena.shop.ShopEntry;
 import com.bossarena.shop.ShopRegistry;
+import com.bossarena.shop.BossArenaShopPage;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
@@ -14,11 +15,18 @@ import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.command.system.CommandSender;
 import com.hypixel.hytale.server.core.command.system.arguments.system.RequiredArg;
 import com.hypixel.hytale.server.core.command.system.arguments.types.ArgTypes;
+import com.hypixel.hytale.server.core.asset.type.item.config.Item;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.inventory.Inventory;
+import com.hypixel.hytale.server.core.inventory.ItemStack;
+import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
+import com.hypixel.hytale.server.core.inventory.transaction.ItemStackTransaction;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.math.vector.Transform;
-import com.hypixel.hytale.server.core.command.system.arguments.system.OptionalArg;
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -26,19 +34,30 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.lang.reflect.Method;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public final class BossArenaCommand extends AbstractCommand {
 
+  private static final Logger LOGGER = Logger.getLogger("BossArena");
+  public static final String ADMIN_PERMISSION = "bossarena.admin";
   private final BossArenaPlugin plugin;
 
   public BossArenaCommand(BossArenaPlugin plugin) {
     super("bossarena", "BossArena admin commands");
     this.plugin = plugin;
+    requireAdminPermission(this);
 
     addSubCommand(new ArenaRoot(plugin));
     addSubCommand(new SpawnBoss(plugin));
     addSubCommand(new Reload(plugin));
     addSubCommand(new ShopRoot(plugin));
+  }
+
+  private static void requireAdminPermission(AbstractCommand command) {
+    if (command != null) {
+      command.requirePermission(ADMIN_PERMISSION);
+    }
   }
 
   @SuppressWarnings("JavaReflectionMemberAccess")
@@ -60,27 +79,26 @@ public final class BossArenaCommand extends AbstractCommand {
     return null;
   }
 
-  @SuppressWarnings({"SpellCheckingInspection", "deprecation"})
+  @SuppressWarnings("SpellCheckingInspection")
   private static Vector3d getPlayerPosition(Player player) {
     if (player == null) return new Vector3d(0, 0, 0);
 
     try {
-      PlayerRef playerRef = player.getPlayerRef();
+      Method getPlayerRef = player.getClass().getMethod("getPlayerRef");
+      Object refObj = getPlayerRef.invoke(player);
+      PlayerRef playerRef = refObj instanceof PlayerRef ? (PlayerRef) refObj : null;
       if (playerRef != null) {
         Transform transform = playerRef.getTransform();
         if (transform != null) {
           Vector3d position = transform.getPosition();
-          Vector3d copy = new Vector3d(position.x, position.y, position.z);
-          System.out.println("DEBUG: Got position successfully: " + copy);
-          return copy;
+          return new Vector3d(position.x, position.y, position.z);
         }
       }
     } catch (Throwable t) {
-      System.out.println("DEBUG: Failed to get position: " + t.getMessage());
-      t.printStackTrace();
+      LOGGER.log(Level.FINE, "Failed to get player position via reflection", t);
     }
 
-    System.out.println("DEBUG: All position methods failed, returning (0,0,0)");
+    LOGGER.fine("Falling back to default position (0,0,0)");
     return new Vector3d(0, 0, 0);
   }
 
@@ -99,6 +117,7 @@ public final class BossArenaCommand extends AbstractCommand {
 
     ArenaRoot(BossArenaPlugin plugin) {
       super("arena", "Arena management");
+      requireAdminPermission(this);
       addSubCommand(new ArenaCreate(plugin));
       addSubCommand(new ArenaDelete(plugin));
       addSubCommand(new ArenaList(plugin));
@@ -118,6 +137,7 @@ public final class BossArenaCommand extends AbstractCommand {
     ArenaCreate(BossArenaPlugin plugin) {
       super("create", "Create arena at your location: /bossarena arena create <arenaId>");
       this.plugin = plugin;
+      requireAdminPermission(this);
       this.idArg = withRequiredArg("arenaId", "Unique arena identifier", ArgTypes.STRING);
     }
 
@@ -170,6 +190,7 @@ public final class BossArenaCommand extends AbstractCommand {
     ArenaDelete(BossArenaPlugin plugin) {
       super("delete", "Delete an arena: /bossarena arena delete <arenaId>");
       this.plugin = plugin;
+      requireAdminPermission(this);
       this.idArg = withRequiredArg("arenaId", "Arena to delete", ArgTypes.STRING);
     }
 
@@ -203,6 +224,7 @@ public final class BossArenaCommand extends AbstractCommand {
   private static final class ArenaList extends AbstractCommand {
     ArenaList(BossArenaPlugin plugin) {
       super("list", "List all arenas: /bossarena arena list");
+      requireAdminPermission(this);
     }
 
     @Override
@@ -234,6 +256,7 @@ public final class BossArenaCommand extends AbstractCommand {
     SpawnBoss(BossArenaPlugin plugin) {
       super("spawn", "Spawn a boss: /spawn <bossId> <arena|here>");
       this.plugin = plugin;
+      requireAdminPermission(this);
 
       this.bossIdArg = withRequiredArg("bossId", "Boss ID to spawn", ArgTypes.STRING);
       this.locationArg = withRequiredArg("location", "Arena ID or 'here' for current location", ArgTypes.STRING);
@@ -313,6 +336,7 @@ public final class BossArenaCommand extends AbstractCommand {
     Reload(BossArenaPlugin plugin) {
       super("reload", "Reload config and boss definitions");
       this.plugin = plugin;
+      requireAdminPermission(this);
     }
 
     @Override
@@ -321,6 +345,7 @@ public final class BossArenaCommand extends AbstractCommand {
         var config = plugin.getConfigHandle();
         config.save();
         config.load();
+        plugin.reloadShopConfig();
         ctx.sendMessage(Message.raw("✓ Config reloaded"));
       } catch (Exception err) {
         ctx.sendMessage(Message.raw("✗ Config reload failed"));
@@ -365,10 +390,13 @@ public final class BossArenaCommand extends AbstractCommand {
 
     ShopRoot(BossArenaPlugin plugin) {
       super("shop", "Shop management");
+      requireAdminPermission(this);
       addSubCommand(new ShopAdd(plugin));
       addSubCommand(new ShopRemove(plugin));
       addSubCommand(new ShopList(plugin));
       addSubCommand(new ShopOpen(plugin));
+      addSubCommand(new ShopPlace(plugin));
+      addSubCommand(new ShopGive(plugin));
     }
 
     @Override
@@ -382,21 +410,22 @@ public final class BossArenaCommand extends AbstractCommand {
     private final BossArenaPlugin plugin;
     private final RequiredArg<String> arenaIdArg;
     private final RequiredArg<String> bossIdArg;
-    private final RequiredArg<Double> costArg;
+    private final RequiredArg<Integer> costArg;
 
     ShopAdd(BossArenaPlugin plugin) {
       super("add", "Add shop entry: /bossarena shop add <arenaId> <bossId> <cost>");
       this.plugin = plugin;
+      requireAdminPermission(this);
       this.arenaIdArg = withRequiredArg("arenaId", "Arena ID", ArgTypes.STRING);
       this.bossIdArg = withRequiredArg("bossId", "Boss ID", ArgTypes.STRING);
-      this.costArg = withRequiredArg("cost", "Cost in currency", ArgTypes.DOUBLE);
+      this.costArg = withRequiredArg("cost", "Cost in currency", ArgTypes.INTEGER);
     }
 
     @Override
     protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
       String arenaId = ctx.get(arenaIdArg);
       String bossId = ctx.get(bossIdArg);
-      Double cost = ctx.get(costArg);
+      int cost = ctx.get(costArg);
 
       if (!ArenaRegistry.exists(arenaId)) {
         ctx.sendMessage(Message.raw("Arena '" + arenaId + "' does not exist!"));
@@ -427,6 +456,7 @@ public final class BossArenaCommand extends AbstractCommand {
     ShopRemove(BossArenaPlugin plugin) {
       super("remove", "Remove shop entry: /bossarena shop remove <arenaId> <bossId>");
       this.plugin = plugin;
+      requireAdminPermission(this);
       this.arenaIdArg = withRequiredArg("arenaId", "Arena ID", ArgTypes.STRING);
       this.bossIdArg = withRequiredArg("bossId", "Boss ID", ArgTypes.STRING);
     }
@@ -455,6 +485,7 @@ public final class BossArenaCommand extends AbstractCommand {
   private static final class ShopList extends AbstractCommand {
     ShopList(BossArenaPlugin plugin) {
       super("list", "List all shop entries: /bossarena shop list");
+      requireAdminPermission(this);
     }
 
     @Override
@@ -481,6 +512,7 @@ public final class BossArenaCommand extends AbstractCommand {
     ShopOpen(BossArenaPlugin plugin) {
       super("open", "Open the shop GUI: /bossarena shop open");
       this.plugin = plugin;
+      requireAdminPermission(this);
     }
 
     @Override
@@ -491,10 +523,87 @@ public final class BossArenaCommand extends AbstractCommand {
       }
 
       Player player = ctx.senderAs(Player.class);
-
-      //gui.open(player);
+      // Use getPlayerRef() instead of getEntity() as getEntity() does not exist on Player
+      @SuppressWarnings("removal")
+      PlayerRef ref = player.getPlayerRef();
+      if (ref != null) {
+        Ref<EntityStore> entityRef = ref.getReference();
+        if (entityRef != null) {
+          Store<EntityStore> store = entityRef.getStore();
+          BossArenaShopPage.open(entityRef, store, player, plugin);
+        }
+      }
 
       return CompletableFuture.completedFuture(null);
     }
+  }
+
+  private static final class ShopPlace extends AbstractCommand {
+    ShopPlace(BossArenaPlugin plugin) {
+      super("place", "Give the shop pedestal item: /bossarena shop place");
+      requireAdminPermission(this);
+    }
+
+    @Override
+    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
+      return giveShopPedestal(ctx);
+    }
+  }
+
+  private static final class ShopGive extends AbstractCommand {
+    ShopGive(BossArenaPlugin plugin) {
+      super("give", "Give the shop pedestal item: /bossarena shop give");
+      requireAdminPermission(this);
+    }
+
+    @Override
+    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
+      return giveShopPedestal(ctx);
+    }
+  }
+
+  private static CompletableFuture<Void> giveShopPedestal(@Nonnull CommandContext ctx) {
+    if (!ctx.isPlayer()) {
+      ctx.sendMessage(Message.raw("Player-only command"));
+      return CompletableFuture.completedFuture(null);
+    }
+
+    Player player = ctx.senderAs(Player.class);
+    Inventory inventory = player.getInventory();
+    if (inventory == null) {
+      ctx.sendMessage(Message.raw("Could not resolve player inventory"));
+      return CompletableFuture.completedFuture(null);
+    }
+
+    ItemContainer container = inventory.getCombinedBackpackStorageHotbar();
+    if (container == null) {
+      ctx.sendMessage(Message.raw("Could not resolve player inventory container"));
+      return CompletableFuture.completedFuture(null);
+    }
+
+    String pedestalId = resolveShopPedestalItemId();
+    ItemStack stack = new ItemStack(pedestalId, 1);
+    ItemStackTransaction tx = container.addItemStack(stack);
+    if (tx == null || !tx.succeeded()) {
+      ctx.sendMessage(Message.raw("Inventory full - could not add shop pedestal"));
+      return CompletableFuture.completedFuture(null);
+    }
+
+    player.sendInventory();
+    ctx.sendMessage(Message.raw("Added shop pedestal to your inventory (" + pedestalId + ")"));
+    return CompletableFuture.completedFuture(null);
+  }
+
+  private static String resolveShopPedestalItemId() {
+    for (String id : List.of("Boss_Arena_Shop", "Boss_Arena_Shop_Pedestal", "Boss_Pedestal")) {
+      if (Item.getAssetMap().getAsset(id) != null) {
+        return id;
+      }
+      String namespaced = BossArenaPlugin.ASSET_PACK_ID + ":" + id;
+      if (Item.getAssetMap().getAsset(namespaced) != null) {
+        return namespaced;
+      }
+    }
+    return "Boss_Arena_Shop";
   }
 }

@@ -1,21 +1,17 @@
 {
   "Group": "com.bossarena",
   "Name": "BossArena",
-  "Version": "0.1.0",
+  "Version": "0.4.0",
   "Description": "Boss arena fights with per-player loot chests",
   "Authors": [
     { "Name": "Project42" }
   ],
+  "Website": "",
   "Main": "com.bossarena.BossArenaPlugin",
   "Dependencies": {},
-  "OptionalDependencies": {},
   "LoadBefore": {},
-  "disabledByDefault": false,
-  "SubPlugins": [],
-  "permissions": [
-    {
-      "id": "com.bossarena.admin",
-      "description": "Use BossArena admin commands (reload/arena/spawn/gui/help)"
-    }
-  ]
+  "DisabledByDefault": false,
+  "IncludesAssetPack": true,
+  "OptionalDependencies": {},
+  "ServerVersion": "2026.02.19-1a311a592"
 }
