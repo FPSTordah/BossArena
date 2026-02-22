@@ -486,7 +486,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         if (currencyItemId == null || currencyItemId.isBlank()) {
             return "Price: " + cost;
         }
-        return "Price: " + cost + " " + currencyItemId;
+        return "Price: " + cost + " " + ItemNameResolver.resolveCommonName(currencyItemId);
     }
 
     private static ShopEntry normalizeEntry(ShopEntry source, String tier, int slot) {

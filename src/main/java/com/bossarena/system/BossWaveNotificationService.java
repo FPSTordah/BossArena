@@ -29,13 +29,16 @@ public final class BossWaveNotificationService {
         if (world == null || eventCenter == null) {
             return;
         }
-        Message title = Message.raw("Boss Alive - " + safeBossName(bossName));
         String contextText = context == null || context.isBlank() ? "" : (context.trim() + " | ");
         int bossesAlive = Math.max(0, aliveBossCount);
         int addsAlive = Math.max(0, activeAdds);
-        Message subtitle = Message.raw(
-                contextText + "Boss alive: " + bossesAlive + " | Wave mobs alive: " + addsAlive
-        );
+        boolean eventFinished = bossesAlive <= 0 && addsAlive <= 0;
+        Message title = eventFinished
+                ? Message.raw("VICTORY! Claim your spoils!")
+                : Message.raw("The Shadows Stir—" + safeBossName(bossName) + " Approaches!");
+        Message subtitle = eventFinished
+                ? Message.raw("Boss alive: 0 | Wave mobs alive: 0")
+                : Message.raw(contextText + "Boss alive: " + bossesAlive + " | Wave mobs alive: " + addsAlive);
         float duration = (bossesAlive > 0 || addsAlive > 0)
                 ? PERSISTENT_DURATION_SECONDS
                 : FINAL_CLEAR_DURATION_SECONDS;

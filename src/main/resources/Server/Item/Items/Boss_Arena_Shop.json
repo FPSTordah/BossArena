@@ -5,14 +5,8 @@
   },
   "Icon": "Icons/ItemsGenerated/boss_arena_shop_icon.png",
   "Quality": "Common",
-  "MaxStack": 64,
   "Categories": ["Blocks.Decoration"],
   "PlayerAnimationsId": "Block",
-  "Interactions": {
-    "Primary": {
-      "Interactions": [{ "Type": "PlaceBlock" }]
-    }
-  },
   "BlockType": {
     "Material": "Solid",
     "DrawType": "Model",
@@ -66,6 +60,12 @@
         }
       ]
     },
+    "Gathering": {
+      "Breaking": {
+        "GatherType": "Benches",
+        "ItemId": "Boss_Arena_Shop"
+      }
+    },
     "State": {
       "Id": "crafting"
     },
@@ -76,5 +76,6 @@
         "Weight": 1
       }
     ]
-  }
+  },
+  "MaxStack": 1
 }

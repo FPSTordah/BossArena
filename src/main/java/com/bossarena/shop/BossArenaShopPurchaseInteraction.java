@@ -159,7 +159,8 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
             return ChargeResult.fail("Shop currency is not configured.");
         }
         if (!consumeCurrency(player, currencyItemId, amount)) {
-            return ChargeResult.fail("Not enough currency. Need " + amount + " " + currencyItemId + ".");
+            return ChargeResult.fail("Not enough currency. Need "
+                    + amount + " " + ItemNameResolver.resolveCommonName(currencyItemId) + ".");
         }
         return ChargeResult.ok();
     }

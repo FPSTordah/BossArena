@@ -14,7 +14,8 @@ For support, join:
 
 ## Credits
 
-- Frog
+- JJBYosepi - Extensive testing and feedback across the project.
+- Sully     - Key development support and implementation help.
 
 ## What This Mod Does
 
