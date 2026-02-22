@@ -1,26 +1,31 @@
 # BossArena
 
-BossArena is a Hytale server mod that adds configurable boss encounters, a world shop pedestal UI to summon raids, and per-player instanced loot chests.
+BossArena is a Hytale server mod that adds configurable boss encounters, table-based boss purchasing, and per-player loot rewards.
 
-## Current Status
+## Version
 
-- The shop table/pedestal asset is currently a placeholder and not final art/content.
+- Current project version: `0.9.0`
+
+## Support
+
+For support, join:
+
+- `https://discord.gg/r5MBWdzWWW`
+
+## Credits
+
+- Frog
 
 ## What This Mod Does
 
 - Spawns configured bosses in configured arenas.
-- Supports manual spawning for admin/testing workflows.
-- Provides a shop pedestal UI where players can buy raid summons.
-- Uses per-player loot generation so each eligible player gets their own rewards.
-- Spawns a loot chest at boss death and cleans it up automatically.
-
-## Key Gameplay Flow
-
-1. Admin configures bosses, arenas, loot, and shop entries in JSON.
-2. Players interact with the shop pedestal block in-world.
-3. Players choose a tier and buy a configured raid contract.
-4. Boss spawns in the configured arena.
-5. On boss death, eligible nearby players get personal loot rolls.
+- Supports admin spawning for testing and event control.
+- Uses an in-world shop table (`Boss_Arena_Shop`) to buy boss contracts.
+- Supports tiered bosses and table-specific boss availability.
+- Supports boss waves with multiple add types and per-wave cadence.
+- Shows persistent event notifications while boss/adds are alive.
+- Drops per-player loot from a shared chest interaction.
+- Delays chest spawn until both the boss and all tracked adds are dead.
 
 ## Permissions (LuckPerms)
 
@@ -28,14 +33,14 @@ All admin commands are protected by:
 
 - `bossarena.admin`
 
-No permission is required for players to buy a raid from the world shop pedestal. That interaction is intentionally public.
-
-Example LuckPerms setup:
+Example:
 
 ```text
 /lp group admin permission set bossarena.admin true
 /lp group default permission set bossarena.admin false
 ```
+
+Player shop interaction is public and does not require admin permission.
 
 ## Commands
 
@@ -68,7 +73,17 @@ Reloads:
 - `arenas.json`
 - `loot_tables.json`
 
-### Shop Admin Commands
+### Config GUI
+
+- `/bossarena config`
+
+Opens the BossArena config UI with tabs for:
+
+- Bosses
+- Shop
+- Arenas
+
+### Legacy Shop Admin Commands
 
 - `/bossarena shop open`
 - `/bossarena shop place`
@@ -79,8 +94,20 @@ Reloads:
 
 Notes:
 
-- `shop add/remove/list` currently use in-memory `ShopRegistry` (legacy tooling).
-- The active player-facing shop UI is driven by `mods/BossArena/shop.json`.
+- The active player-facing shop behavior is driven by `mods/BossArena/shop.json` and table location config.
+- `shop add/remove/list` are legacy registry tooling.
+
+## Config GUI Highlights (`/ba config`)
+
+- Opens on the Bosses tab by default.
+- Bosses tab allows editing boss core fields, tier, and loot rows.
+- Bosses tab includes a separate Boss Waves overlay for wave timing and add definitions.
+- Boss Waves supports multi-add setup (`npcId`, `mobsPerWave`, `everyWave`) per line.
+- Shop tab lists saved shop tables in the current world.
+- Shop tab sorts tables nearest to farthest from player.
+- Shop tab assigns table arena and enables/disables boss contracts per table.
+- Arenas tab supports inline arena id and xyz editing.
+- Arenas tab can add an arena at player location and delete arena rows.
 
 ## JSON Customization Files
 
@@ -92,19 +119,25 @@ Defines each summonable boss.
 
 Fields:
 
-- `bossName`: internal boss id used by commands/shop.
-- `npcId`: NPC asset id to spawn.
-- `amount`: count spawned for this boss definition.
-- `modifiers.hp`, `modifiers.damage`, `modifiers.size`: base multipliers.
-- `perPlayerIncrease.hp`, `perPlayerIncrease.damage`, `perPlayerIncrease.size`: scaling added per nearby player.
-- `extraMobs.npcId`: optional extra mob id.
-- `extraMobs.timeLimitMs`: optional wave time window.
-- `extraMobs.waves`: optional wave count.
-- `extraMobs.mobsPerWave`: mobs per wave.
+- `bossName`
+- `npcId`
+- `tier`: `uncommon`, `common`, `rare`, `epic`, `legendary`
+- `amount`
+- `modifiers.hp`, `modifiers.damage`, `modifiers.size`
+- `perPlayerIncrease.hp`, `perPlayerIncrease.damage`, `perPlayerIncrease.size`
+- `extraMobs.timeLimitMs`: interval between wave spawns (stored in ms)
+- `extraMobs.waves`:
+- `0` = no waves
+- `1..N` = finite waves
+- `-1` = infinite waves until boss dies
+- `extraMobs.adds[]`:
+- `npcId`
+- `mobsPerWave`
+- `everyWave` (`1` every wave, `2` every 2nd wave, etc.)
 
 ### `arenas.json`
 
-Defines valid raid spawn locations.
+Defines valid spawn locations.
 
 Fields per arena:
 
@@ -116,79 +149,80 @@ Fields per arena:
 
 ### `loot_tables.json`
 
-Defines loot logic per boss.
+Defines per-boss loot drops.
 
 Fields per loot table:
 
-- `bossName`: must match the boss id/name key used for that boss.
-- `lootRadius`: players within this radius are eligible.
-- `items`: loot entries.
+- `bossName` (must match boss id/name)
+- `lootRadius`
+- `items[]`
 
 Fields per item:
 
 - `itemId`
-- `dropChance` (0.0 to 1.0)
+- `dropChance` (`0.0` to `1.0`)
 - `minAmount`
 - `maxAmount`
 
 ### `shop.json`
 
-This is the main raid shop configuration.
+Main shop configuration.
 
 Top-level fields:
 
 - `currencyProvider`: `auto`, `item`, `hymarket`, `economysystem`
-- `currencyItemId`: used when provider resolves to `item`
-- `visibleSlotsByTier`: how many slots to show per tier
-- `entries`: actual shop contracts
+- `currencyItemId`
+- `visibleSlotsByTier`
+- `entries[]`
+- `tableLocations[]`
 
 `currencyProvider` behavior:
 
-- `auto`: prefers `EconomySystem` if active, then `HyMarketPlus` if active, else item currency.
-- `economysystem`: uses EconomySystem balance API.
-- `hymarket`: uses HyMarket copper API.
-- `item`: removes item stacks matching `currencyItemId`.
+- `auto`: prefers `HyMarketPlus`, then `EconomySystem`, else item currency
+- `hymarket`: uses HyMarket currency
+- `economysystem`: uses EconomySystem balance
+- `item`: uses item removal with `currencyItemId`
 
-Tier order in UI:
+When item currency is needed and shop-level currency item is blank, fallback order is:
 
-- `uncommon`, `common`, `rare`, `epic`, `legendary`
+1. `config.json.currencyItemId`
+2. `config.json.fallbackCurrencyItemId`
+3. `Ingredient_Bar_Iron`
 
-Entry fields:
+`tableLocations[]` fields:
 
-- `tier`: one of the valid tiers above.
-- `slot`: slot index in that tier (1..5).
-- `enabled`: whether this entry is purchasable.
-- `displayName`: name shown in shop UI.
-- `description`: description shown in shop UI.
-- `cost`: currency cost.
-- `arenaId`: target arena id.
-- `bossId`: target boss id.
-- `icon`: reserved field (icons are currently disabled in the shop UI rendering).
+- `worldName`
+- `x`
+- `y`
+- `z`
+- `arenaId` (table-level arena assignment)
+- `enabledBossIds[]` (bosses allowed on that table)
 
 Important behavior:
 
-- If `enabled=true` but `bossId` or `arenaId` is blank, button shows `Please Configure` and is disabled.
-- `visibleSlotsByTier` controls displayed layout without deleting entries.
+- Shop tables are tracked by world position.
+- Breaking a `Boss_Arena_Shop` table removes its saved table location entry.
+- Boss contracts shown to players are filtered by that table's `enabledBossIds` and boss tier.
 
 ### `config.json`
 
-Legacy/general config currently used for:
+General/global config.
 
-- `currencyItemId` fallback (when shop-level `currencyItemId` is blank)
-- legacy arena array field
+Fields:
 
-Use `shop.json` for active shop customization and currency provider selection.
+- `currencyItemId`
+- `fallbackCurrencyItemId`
+- `arenas` (legacy field)
 
-## Shop Access for Players
+## Event and Loot Behavior
 
-Players buy raids by interacting with the shop pedestal block in-world. No admin permission is required for this action.
-
-## Loot Chest Behavior
-
-- Loot is generated per eligible player at boss death.
-- Player loot is claimed when chest data is resolved for that player.
-- Chest is removed when all loot is claimed and chest closes, or when expiry triggers.
-- Current chest expiry timer is 30 seconds.
+- Event titles show live state:
+- `Boss alive: <count> | Wave mobs alive: <count>`
+- Notification stays persistent while boss or adds are alive.
+- After both hit zero, final status remains briefly before clearing.
+- Loot chest is queued only after the tracked boss and tracked adds are dead.
+- Loot is per-player and claim-based.
+- Chest auto-cleans after claim completion/expiry logic.
 
 ## Build
 
@@ -198,4 +232,4 @@ mvn -q -DskipTests package
 
 Output jar:
 
-- `target/BossArena-0.4.0.jar`
+- `target/BossArena-0.9.0.jar`

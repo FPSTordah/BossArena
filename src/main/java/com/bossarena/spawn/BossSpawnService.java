@@ -6,6 +6,7 @@ import com.bossarena.util.BossScaler;
 import com.bossarena.boss.BossModifiers;
 import com.bossarena.boss.PlayerFinder;
 import com.bossarena.system.BossTrackingSystem;
+import com.bossarena.system.BossWaveNotificationService;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.server.core.command.system.CommandSender;
@@ -22,12 +23,21 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.modules.entity.component.EntityScaleComponent;
 
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class BossSpawnService {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private static final String HEALTH_MODIFIER_KEY = "BossArena.HealthMultiplier";
+    private static final ScheduledExecutorService EXTRA_WAVE_SCHEDULER =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "BossArena-ExtraWaves");
+                t.setDaemon(true);
+                return t;
+            });
 
     private final BossTrackingSystem tracking;
 
@@ -112,7 +122,21 @@ public final class BossSpawnService {
         }
 
         // Schedule extra mobs if configured
-        if (primaryBossUuid != null && def.extraMobs != null && def.extraMobs.npcId != null && !def.extraMobs.npcId.isBlank()) {
+        if (primaryBossUuid != null) {
+            BossTrackingSystem.BossData bossData = tracking.getBossData(primaryBossUuid);
+            if (bossData != null) {
+                BossWaveNotificationService.notifyBossAliveStatus(
+                        world,
+                        bossData.spawnLocation,
+                        bossData.bossName,
+                        1,
+                        tracking.getActiveAddCount(primaryBossUuid),
+                        null
+                );
+            }
+        }
+
+        if (primaryBossUuid != null && def.extraMobs != null && def.extraMobs.hasConfiguredAdds()) {
             scheduleExtraMobWaves(world, def, spawnPos, primaryBossUuid);
         }
 
@@ -184,39 +208,77 @@ public final class BossSpawnService {
     }
 
     private void scheduleExtraMobWaves(World world, BossDefinition def, Vector3d spawnPos, UUID bossUuid) {
-        if (def.extraMobs.waves <= 0) return;
-
-        for (int wave = 0; wave < def.extraMobs.waves; wave++) {
-            final int currentWave = wave;
-            final long delayMs = def.extraMobs.timeLimitMs * (wave + 1);
-
-            // Use Java's ScheduledExecutorService for delay
-            java.util.concurrent.Executors.newSingleThreadScheduledExecutor().schedule(() -> {
-                world.execute(() -> spawnExtraMobWave(world, def, spawnPos, bossUuid, currentWave));
-            }, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS);
-
-            LOGGER.info("Scheduled wave " + (currentWave + 1) + " to spawn in " + delayMs + "ms");
+        BossDefinition.ExtraMobs extra = def.extraMobs;
+        if (extra == null) {
+            return;
         }
+        extra.sanitize();
+
+        if (extra.waves == 0) {
+            LOGGER.info("Extra mob waves disabled (waves=0) for boss '" + def.bossName + "'.");
+            return;
+        }
+        if (!extra.hasConfiguredAdds()) {
+            LOGGER.info("No configured add entries for boss '" + def.bossName + "'.");
+            return;
+        }
+
+        long intervalMs = Math.max(1L, extra.timeLimitMs);
+        int maxWaves = extra.waves; // -1 = infinite
+
+        if (maxWaves < 0) {
+            LOGGER.info("Scheduling infinite extra mob waves every " + intervalMs + "ms for boss '" + def.bossName + "'.");
+        } else {
+            LOGGER.info("Scheduling " + maxWaves + " extra mob waves every " + intervalMs + "ms for boss '" + def.bossName + "'.");
+        }
+
+        scheduleWave(world, def, spawnPos, bossUuid, 1, maxWaves, intervalMs);
     }
 
-    private void spawnExtraMobWave(World world, BossDefinition def, Vector3d spawnPos, UUID bossUuid, int waveNumber) {
-        LOGGER.info("Wave " + (waveNumber + 1) + " timer triggered");
+    private void scheduleWave(World world,
+                              BossDefinition def,
+                              Vector3d spawnPos,
+                              UUID bossUuid,
+                              int waveNumber,
+                              int maxWaves,
+                              long intervalMs) {
+        if (maxWaves > 0 && waveNumber > maxWaves) {
+            return;
+        }
+
+        EXTRA_WAVE_SCHEDULER.schedule(() -> world.execute(() -> {
+            if (!isBossAlive(world, bossUuid, waveNumber)) {
+                return;
+            }
+
+            spawnExtraMobWave(world, def, spawnPos, waveNumber, bossUuid);
+
+            if (maxWaves < 0 || waveNumber < maxWaves) {
+                scheduleWave(world, def, spawnPos, bossUuid, waveNumber + 1, maxWaves, intervalMs);
+            }
+        }), intervalMs, TimeUnit.MILLISECONDS);
+
+        LOGGER.info("Scheduled wave " + waveNumber + " to spawn in " + intervalMs + "ms");
+    }
+
+    private boolean isBossAlive(World world, UUID bossUuid, int waveNumber) {
+        LOGGER.info("Wave " + waveNumber + " timer triggered");
 
         // Check if boss is still tracked
         boolean bossTracked = tracking.isTracked(bossUuid);
 
         if (!bossTracked) {
-            LOGGER.info("Boss not in tracking system - CANCELLING wave " + (waveNumber + 1));
-            return;
+            LOGGER.info("Boss not in tracking system - CANCELLING wave " + waveNumber);
+            return false;
         }
 
         // Also check if boss entity still exists and is alive
         try {
             var entityRef = world.getEntityRef(bossUuid);
             if (entityRef == null || !entityRef.isValid()) {
-                LOGGER.info("Boss entity no longer exists - CANCELLING wave " + (waveNumber + 1));
+                LOGGER.info("Boss entity no longer exists - CANCELLING wave " + waveNumber);
                 tracking.untrack(bossUuid);
-                return;
+                return false;
             }
 
             var store = world.getEntityStore().getStore();
@@ -227,38 +289,82 @@ public final class BossSpawnService {
             if (statMapObj instanceof EntityStatMap statMap) {
                 var healthValue = statMap.get(healthIndex);
                 if (healthValue != null && healthValue.get() <= 0) {
-                    LOGGER.info("Boss is dead (HP <= 0) - CANCELLING wave " + (waveNumber + 1));
+                    LOGGER.info("Boss is dead (HP <= 0) - CANCELLING wave " + waveNumber);
                     tracking.untrack(bossUuid);
-                    return;
+                    return false;
                 }
             }
         } catch (Exception e) {
             LOGGER.warning("Error checking boss status: " + e.getMessage());
             tracking.untrack(bossUuid);
+            return false;
+        }
+
+        return true;
+    }
+
+    private void spawnExtraMobWave(World world,
+                                   BossDefinition def,
+                                   Vector3d spawnPos,
+                                   int waveNumber,
+                                   UUID bossUuid) {
+        if (def.extraMobs == null) {
+            return;
+        }
+        var adds = def.extraMobs.getConfiguredAdds();
+        if (adds.isEmpty()) {
             return;
         }
 
-        LOGGER.info("Boss is alive - SPAWNING wave " + (waveNumber + 1));
+        LOGGER.info("Boss is alive - SPAWNING wave " + waveNumber);
 
-        int mobCount = (def.extraMobs.mobsPerWave > 0) ? def.extraMobs.mobsPerWave : 3;
+        int spawnedThisWave = 0;
+        for (BossDefinition.ExtraMobs.WaveAdd add : adds) {
+            int everyWave = Math.max(1, add.everyWave);
+            if (waveNumber % everyWave != 0) {
+                continue;
+            }
 
-        for (int i = 0; i < mobCount; i++) {
-            Vector3d mobPos = spawnPos.add(
-                    (Math.random() - 0.5) * 5,
-                    0,
-                    (Math.random() - 0.5) * 5
-            );
+            int mobCount = Math.max(1, add.mobsPerWave);
+            for (int i = 0; i < mobCount; i++) {
+                Vector3d mobPos = spawnPos.add(
+                        (Math.random() - 0.5) * 5,
+                        0,
+                        (Math.random() - 0.5) * 5
+                );
 
-            var result = NPCPlugin.get().spawnNPC(
-                    world.getEntityStore().getStore(),
-                    def.extraMobs.npcId,
-                    null,
-                    mobPos,
-                    new Vector3f(0, 0, 0)
-            );
+                var result = NPCPlugin.get().spawnNPC(
+                        world.getEntityStore().getStore(),
+                        add.npcId,
+                        null,
+                        mobPos,
+                        new Vector3f(0, 0, 0)
+                );
 
-            if (result != null) {
-                LOGGER.info("Spawned extra mob " + (i+1) + "/" + mobCount + " (wave " + (waveNumber + 1) + ")");
+                if (result != null) {
+                    Ref<EntityStore> addRef = result.first();
+                    Object addUuidObj = world.getEntityStore().getStore().getComponent(addRef, UUIDComponent.getComponentType());
+                    if (addUuidObj instanceof UUIDComponent addUuidComp) {
+                        tracking.trackAdd(bossUuid, addUuidComp.getUuid());
+                        spawnedThisWave++;
+                    }
+                    LOGGER.info("Spawned add '" + add.npcId + "' " + (i + 1) + "/" + mobCount + " (wave " + waveNumber + ", every " + everyWave + ")");
+                }
+            }
+        }
+
+        if (spawnedThisWave > 0) {
+            BossTrackingSystem.BossData bossData = tracking.getBossData(bossUuid);
+            if (bossData != null) {
+                int activeAdds = tracking.getActiveAddCount(bossUuid);
+                BossWaveNotificationService.notifyWaveSpawn(
+                        world,
+                        bossData.spawnLocation,
+                        bossData.bossName,
+                        waveNumber,
+                        spawnedThisWave,
+                        activeAdds
+                );
             }
         }
     }

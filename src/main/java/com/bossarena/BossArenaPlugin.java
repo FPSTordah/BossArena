@@ -23,6 +23,7 @@ import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.asset.type.item.config.Item;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.event.events.entity.LivingEntityUseBlockEvent;
+import com.hypixel.hytale.server.core.event.events.ecs.BreakBlockEvent;
 import com.hypixel.hytale.server.core.event.events.ecs.UseBlockEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
@@ -31,6 +32,7 @@ import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
@@ -46,7 +48,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -112,9 +116,19 @@ public final class BossArenaPlugin extends JavaPlugin {
                 this::onUseBlock
         );
         getLogger().atInfo().log("Registered block use interaction listener");
+        this.getEventRegistry().registerGlobal(
+                BreakBlockEvent.class,
+                this::onBreakBlock
+        );
+        getLogger().atInfo().log("Registered block break listener");
 
         config.load();
         shopConfig.load(shopJsonPath);
+        if (shopConfig.applyRuntimeCurrencyDetection(resolveFallbackCurrencyItemId())) {
+            saveShopConfig();
+            getLogger().atInfo().log("Detected currency provider at startup: " + shopConfig.currencyProvider
+                    + " (item fallback: " + shopConfig.currencyItemId + ")");
+        }
 
         // Register commands
         try {
@@ -237,14 +251,14 @@ public final class BossArenaPlugin extends JavaPlugin {
                 getLogger().atWarning().log("BossArena custom chest block still missing from asset map");
             }
 
-            BlockType shopBlockType = findBlockType(blockTypeMap, "Boss_Arena_Shop", "Boss_Arena_Shop_Pedestal", "Boss_Pedestal");
+            BlockType shopBlockType = findBlockType(blockTypeMap, "Boss_Arena_Shop");
             if (shopBlockType != null) {
                 getLogger().atInfo().log("BossArena shop pedestal block found in asset map");
             } else {
                 getLogger().atWarning().log("BossArena shop pedestal block still missing from asset map");
             }
 
-            Item shopItem = findItem("Boss_Arena_Shop", "Boss_Arena_Shop_Pedestal", "Boss_Pedestal");
+            Item shopItem = findItem("Boss_Arena_Shop");
             if (shopItem != null) {
                 getLogger().atInfo().log("BossArena shop pedestal item found in asset map");
             } else {
@@ -271,6 +285,7 @@ public final class BossArenaPlugin extends JavaPlugin {
 
         copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaShopPage.ui");
         copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaShopElementButton.ui");
+        copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaConfigPage.ui");
 
         copyPackResource(assetsRoot, "Common/Blocks/Boss_Shop.blockymodel");
         copyPackResource(assetsRoot, "Common/Blocks/boss_arena_shop_texture.png");
@@ -283,8 +298,6 @@ public final class BossArenaPlugin extends JavaPlugin {
         copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Chest_Legendary.json");
         copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Chest_Legendary.blockymodel");
         copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Shop.json");
-        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Pedestal.json");
-        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Pedestal.blockymodel");
         copyPackResource(assetsRoot, "Server/Item/RootInteractions/Block/BossArena_OpenShop.json");
         copyPackResource(assetsRoot, "Server/Item/Interactions/Block/BossArena_OpenShop_Simple.json");
 
@@ -298,15 +311,11 @@ public final class BossArenaPlugin extends JavaPlugin {
 
         // Mirror key assets into runtime asset-store directories for compatibility.
         copyResource("Blocks/Boss_Shop.blockymodel", modelDir.resolve("Boss_Shop.blockymodel"));
-        copyResource("Server/Item/Items/Boss_Pedestal.blockymodel", modelDir.resolve("Boss_Pedestal.blockymodel"));
         copyResource("Server/Item/Items/Boss_Arena_Chest_Legendary.blockymodel", modelDir.resolve("Boss_Arena_Chest_Legendary.blockymodel"));
         copyResource("Server/Item/Items/Boss_Arena_Shop.json", itemDir.resolve("Boss_Arena_Shop.json"));
-        copyResource("Server/Item/Items/Boss_Pedestal.json", itemDir.resolve("Boss_Pedestal.json"));
         // Legacy compatibility copies for pre-Update 3 item path assumptions.
         copyResource("Server/Item/Items/Boss_Arena_Shop.json", assetsRoot.resolve("Server/Items/Boss_Arena_Shop.json"));
         copyResource("Server/Item/Items/Boss_Arena_Chest_Legendary.json", assetsRoot.resolve("Server/Items/Boss_Arena_Chest_Legendary.json"));
-        copyResource("Server/Item/Items/Boss_Pedestal.json", assetsRoot.resolve("Server/Items/Boss_Pedestal.json"));
-        copyResource("Server/Item/Items/Boss_Pedestal.blockymodel", assetsRoot.resolve("Server/Items/Boss_Pedestal.blockymodel"));
 
         // Texture compatibility copies for model lookup differences.
         copyResource("Blocks/boss_arena_shop_texture.png", modelDir.resolve("boss_arena_shop_texture.png"));
@@ -321,7 +330,7 @@ public final class BossArenaPlugin extends JavaPlugin {
         copyResource("Server/Textures/boss_arena_shop_texture.png", modelDir.resolve("boss_arena_shop_texture.png"));
         copyResource("Server/Textures/Boss_Arena_Chest_Legendary_Texture.png", modelDir.resolve("Boss_Arena_Chest_Legendary_Texture.png"));
 
-        // Clean up legacy lowercase file if it exists from prior versions.
+        // Clean up legacy pedestal files if they exist from prior versions.
         Files.deleteIfExists(assetsRoot.resolve("Server/Item/Items/boss_arena_shop_pedestal.json"));
     }
 
@@ -661,12 +670,57 @@ public final class BossArenaPlugin extends JavaPlugin {
         if (context == null) {
             return;
         }
+        Vector3i targetBlock = event.getTargetBlock();
+        if (targetBlock != null) {
+            recordShopTableLocation(playerRefWorldName(context), targetBlock);
+        }
         Ref<EntityStore> playerRef = context.getEntity();
         Store<EntityStore> store = playerRef.getStore();
         Object playerObj = store.getComponent(playerRef, Player.getComponentType());
         if (playerObj instanceof Player player) {
-            BossArenaShopPage.open(playerRef, store, player, this);
+            if (targetBlock != null) {
+                BossArenaShopPage.openAtTable(
+                        playerRef,
+                        store,
+                        player,
+                        this,
+                        playerRefWorldName(context),
+                        targetBlock.x,
+                        targetBlock.y,
+                        targetBlock.z
+                );
+            } else {
+                BossArenaShopPage.open(playerRef, store, player, this);
+            }
         }
+    }
+
+    private void onBreakBlock(BreakBlockEvent event) {
+        if (event == null || shopConfig == null) {
+            return;
+        }
+
+        var blockType = event.getBlockType();
+        if (blockType == null || blockType.getId() == null) {
+            return;
+        }
+        if (!isShopBlockId(blockType.getId())) {
+            return;
+        }
+
+        Vector3i target = event.getTargetBlock();
+        if (target == null) {
+            return;
+        }
+
+        int removed = shopConfig.removeTableLocationsByPosition(target.x, target.y, target.z);
+        if (removed <= 0) {
+            return;
+        }
+
+        getLogger().atInfo().log("Removed " + removed + " saved shop table location(s) at "
+                + target.x + ", " + target.y + ", " + target.z + " after block break");
+        saveShopConfig();
     }
 
     private static boolean isShopOpenInteraction(InteractionType type) {
@@ -675,9 +729,7 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     private static boolean isShopBlockId(String blockId) {
         String normalized = blockId.toLowerCase(Locale.ROOT);
-        return normalized.contains("boss_arena_shop")
-                || normalized.contains("boss_pedestal")
-                || normalized.contains("boss_shop");
+        return normalized.contains("boss_arena_shop");
     }
 
     private void manuallyOpenChest(Ref<EntityStore> playerRef, BossLootChestState state,
@@ -737,6 +789,64 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     public void reloadShopConfig() {
         shopConfig.load(shopJsonPath);
+        if (shopConfig.applyRuntimeCurrencyDetection(resolveFallbackCurrencyItemId())) {
+            saveShopConfig();
+        }
+    }
+
+    private String resolveFallbackCurrencyItemId() {
+        if (config == null) {
+            return "Ingredient_Bar_Iron";
+        }
+        if (config.fallbackCurrencyItemId != null && !config.fallbackCurrencyItemId.isBlank()) {
+            return config.fallbackCurrencyItemId.trim();
+        }
+        return "Ingredient_Bar_Iron";
+    }
+
+    public CompletableFuture<Void> saveShopConfig() {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                shopConfig.save(shopJsonPath);
+                getLogger().atInfo().log("Saved shop config");
+            } catch (IOException e) {
+                getLogger().atSevere().withCause(e).log("Failed to save shop config");
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    public void recordShopTableLocation(String worldName, Vector3i position) {
+        if (position == null || worldName == null || worldName.isBlank()) {
+            return;
+        }
+        if (shopConfig == null) {
+            return;
+        }
+        boolean changed = shopConfig.recordTableLocation(worldName, position.x, position.y, position.z);
+        if (!changed) {
+            return;
+        }
+        saveShopConfig();
+    }
+
+    private String playerRefWorldName(com.hypixel.hytale.server.core.entity.InteractionContext context) {
+        if (context == null) {
+            return null;
+        }
+        Ref<EntityStore> playerRef = context.getEntity();
+        if (playerRef == null) {
+            return null;
+        }
+        Store<EntityStore> store = playerRef.getStore();
+        Object playerObj = store.getComponent(playerRef, Player.getComponentType());
+        if (playerObj instanceof Player player) {
+            World world = player.getWorld();
+            if (world != null) {
+                return world.getName();
+            }
+        }
+        return null;
     }
 
     public static BossArenaPlugin getInstance() {
@@ -749,6 +859,10 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     public Path getLootTablesPath() {
         return lootTablesPath;
+    }
+
+    public Path getBossesJsonPath() {
+        return bossesJsonPath;
     }
 
     public CompletableFuture<Integer> reloadBossDefinitions() {
@@ -843,10 +957,40 @@ public final class BossArenaPlugin extends JavaPlugin {
         });
     }
 
+    public CompletableFuture<Void> saveBossDefinitions() {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                List<BossDefinition> bosses = new ArrayList<>(BossRegistry.getAll().values());
+                bosses.sort(Comparator.comparing(
+                        boss -> boss != null && boss.bossName != null ? boss.bossName.toLowerCase(Locale.ROOT) : ""
+                ));
+                String prettyJson = new GsonBuilder().setPrettyPrinting().create().toJson(bosses);
+                Files.createDirectories(bossesJsonPath.getParent());
+                Files.writeString(bossesJsonPath, prettyJson, StandardCharsets.UTF_8);
+                getLogger().atInfo().log("Saved " + bosses.size() + " boss definitions");
+            } catch (IOException e) {
+                getLogger().atSevere().withCause(e).log("Failed to save boss definitions");
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    public CompletableFuture<Void> saveLootTables() {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                LootRegistry.saveToFile(lootTablesPath);
+            } catch (IOException e) {
+                getLogger().atSevere().withCause(e).log("Failed to save loot tables");
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
     private void writeDefaultBosses() throws IOException {
         BossDefinition exampleBoss = new BossDefinition();
         exampleBoss.bossName = "Example Boss";
         exampleBoss.npcId = "Bat";
+        exampleBoss.tier = "uncommon";
         exampleBoss.amount = 1;
 
         exampleBoss.modifiers = new BossDefinition.Modifiers();
@@ -864,6 +1008,12 @@ public final class BossArenaPlugin extends JavaPlugin {
         exampleBoss.extraMobs.timeLimitMs = 30000;
         exampleBoss.extraMobs.waves = 2;
         exampleBoss.extraMobs.mobsPerWave = 5;
+        BossDefinition.ExtraMobs.WaveAdd exampleAdd = new BossDefinition.ExtraMobs.WaveAdd();
+        exampleAdd.npcId = "Bat";
+        exampleAdd.mobsPerWave = 5;
+        exampleAdd.everyWave = 1;
+        exampleBoss.extraMobs.adds.add(exampleAdd);
+        exampleBoss.extraMobs.sanitize();
 
         BossDefinition[] bosses = new BossDefinition[] { exampleBoss };
 

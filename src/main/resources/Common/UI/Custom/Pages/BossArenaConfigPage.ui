@@ -1,0 +1,847 @@
+Group {
+  Anchor: (Left: 0, Top: 0, Width: 1920, Height: 1080);
+
+  Panel #Overlay {
+    Anchor: (Left: 0, Top: 0, Width: 1920, Height: 1080);
+    Background: #000000(0.45);
+  }
+
+  Panel #Background {
+    Anchor: (Left: 330, Top: 88, Width: 1260, Height: 904);
+    Background: #0f1725;
+  }
+
+  Panel #AccentLeft {
+    Anchor: (Left: 330, Top: 88, Width: 4, Height: 904);
+    Background: #4f79ab;
+  }
+
+  Panel #HeaderPanel {
+    Anchor: (Left: 334, Top: 88, Width: 1256, Height: 104);
+    Background: #152238;
+  }
+
+  Label #TitleLabel {
+    Anchor: (Left: 368, Top: 108, Width: 860, Height: 42);
+    Text: "BossArena Config";
+    Style: (FontSize: 31, TextColor: #f3f7ff, RenderBold: true);
+  }
+
+  Label #SubtitleLabel {
+    Anchor: (Left: 368, Top: 150, Width: 880, Height: 26);
+    Text: "Configure bosses, shop, and arenas";
+    Style: (FontSize: 15, TextColor: #b2c0d2);
+  }
+
+  TextButton #CloseButton {
+    Anchor: (Left: 1428, Top: 116, Width: 136, Height: 48);
+    Text: "Close";
+    Style: TextButtonStyle(
+      Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Disabled: (Background: #253244, LabelStyle: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  Panel #TabPanel {
+    Anchor: (Left: 360, Top: 214, Width: 1200, Height: 60);
+    Background: #182a44;
+  }
+
+  Panel #TabIndicatorBosses {
+    Anchor: (Left: 369, Top: 220, Width: 394, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  Panel #TabIndicatorShop {
+    Anchor: (Left: 766, Top: 220, Width: 394, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  Panel #TabIndicatorArenas {
+    Anchor: (Left: 1163, Top: 220, Width: 394, Height: 48);
+    Background: #8fb7ff;
+    Visible: false;
+  }
+
+  TextButton #BossesTab {
+    Anchor: (Left: 372, Top: 223, Width: 388, Height: 42);
+    Text: "Bosses";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  TextButton #ShopTab {
+    Anchor: (Left: 769, Top: 223, Width: 388, Height: 42);
+    Text: "Shop";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  TextButton #ArenasTab {
+    Anchor: (Left: 1166, Top: 223, Width: 388, Height: 42);
+    Text: "Arenas";
+    Style: TextButtonStyle(
+      Default: (Background: #2b4568, LabelStyle: (FontSize: 14, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #3f6391, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+
+  Panel #ContentPanel {
+    Anchor: (Left: 360, Top: 296, Width: 1200, Height: 660);
+    Background: #172639;
+  }
+
+  Group #BossesPanel {
+    Anchor: (Left: 360, Top: 296, Width: 1200, Height: 660);
+    Visible: false;
+
+    Label #BossTitleLabel {
+      Anchor: (Left: 32, Top: 28, Width: 800, Height: 30);
+      Text: "Bosses";
+      Style: (FontSize: 24, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    TextButton #BossAddButton {
+      Anchor: (Left: 1040, Top: 24, Width: 150, Height: 36);
+      Text: "Add Boss";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 16, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 16, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 16, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+
+    Label #BossHeaderName {
+      Anchor: (Left: 44, Top: 68, Width: 420, Height: 24);
+      Text: "Boss";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #BossHeaderNpc {
+      Anchor: (Left: 484, Top: 68, Width: 220, Height: 24);
+      Text: "NPC ID";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #BossHeaderAmount {
+      Anchor: (Left: 724, Top: 68, Width: 80, Height: 24);
+      Text: "Amt";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #BossHeaderEdit {
+      Anchor: (Left: 892, Top: 68, Width: 110, Height: 24);
+      Text: "Edit";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #BossHeaderDelete {
+      Anchor: (Left: 1030, Top: 68, Width: 110, Height: 24);
+      Text: "Del";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #BossEmptyLabel {
+      Anchor: (Left: 32, Top: 124, Width: 1136, Height: 30);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 16, TextColor: #b2c0d2);
+    }
+
+    Label #BossOverflowLabel {
+      Anchor: (Left: 32, Top: 546, Width: 1136, Height: 26);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 14, TextColor: #ffd88f);
+    }
+
+    Panel #BossRow1 {
+      Anchor: (Left: 32, Top: 96, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName1 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc1 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount1 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen1 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete1 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow2 {
+      Anchor: (Left: 32, Top: 150, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName2 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc2 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount2 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen2 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete2 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow3 {
+      Anchor: (Left: 32, Top: 204, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName3 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc3 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount3 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen3 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete3 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow4 {
+      Anchor: (Left: 32, Top: 258, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName4 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc4 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount4 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen4 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete4 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow5 {
+      Anchor: (Left: 32, Top: 312, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName5 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc5 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount5 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen5 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete5 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow6 {
+      Anchor: (Left: 32, Top: 366, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName6 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc6 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount6 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen6 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete6 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow7 {
+      Anchor: (Left: 32, Top: 420, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName7 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc7 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount7 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen7 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete7 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #BossRow8 {
+      Anchor: (Left: 32, Top: 474, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #BossName8 { Anchor: (Left: 16, Top: 8, Width: 418, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #BossNpc8 { Anchor: (Left: 454, Top: 8, Width: 222, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #BossAmount8 { Anchor: (Left: 690, Top: 8, Width: 102, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #BossOpen8 { Anchor: (Left: 860, Top: 8, Width: 110, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #BossDelete8 { Anchor: (Left: 998, Top: 8, Width: 110, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Label #BossStatusLabel {
+      Anchor: (Left: 32, Top: 610, Width: 1136, Height: 30);
+      Text: "";
+      Style: (FontSize: 14, TextColor: #b2c0d2);
+    }
+
+    Group #BossEditorOverlay {
+      Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+      Visible: false;
+
+      Panel #BossEditorBackdrop {
+        Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+        Background: #05090f(0.75);
+      }
+
+      Panel #BossEditorWindow {
+        Anchor: (Left: 90, Top: 56, Width: 1020, Height: 548);
+        Background: #0f1725;
+      }
+
+      Label #BossEditorTitle {
+        Anchor: (Left: 118, Top: 78, Width: 760, Height: 30);
+        Text: "Editing Boss";
+        Style: (FontSize: 22, TextColor: #f3f7ff, RenderBold: true);
+      }
+
+      TextButton #BossEditorCloseButton {
+        Anchor: (Left: 964, Top: 78, Width: 120, Height: 34);
+        Text: "Close";
+        Style: TextButtonStyle(
+          Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Label #BossEditNameLabel { Anchor: (Left: 118, Top: 118, Width: 155, Height: 20); Text: "Boss Name"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditName { Anchor: (Left: 118, Top: 140, Width: 155, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditNpcIdLabel { Anchor: (Left: 283, Top: 118, Width: 155, Height: 20); Text: "NPC ID"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditNpcId { Anchor: (Left: 283, Top: 140, Width: 155, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditTierLabel { Anchor: (Left: 448, Top: 118, Width: 100, Height: 20); Text: "Tier"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditTier { Anchor: (Left: 448, Top: 140, Width: 100, Height: 28); Value: "uncommon"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditAmountLabel { Anchor: (Left: 558, Top: 118, Width: 100, Height: 20); Text: "Amount"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditAmount { Anchor: (Left: 558, Top: 140, Width: 100, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditLootRadiusLabel { Anchor: (Left: 668, Top: 118, Width: 100, Height: 20); Text: "Loot Radius"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditLootRadius { Anchor: (Left: 668, Top: 140, Width: 100, Height: 28); Value: "40.0"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+      Label #BossEditHpLabel { Anchor: (Left: 118, Top: 174, Width: 110, Height: 20); Text: "HP Mult"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditHp { Anchor: (Left: 118, Top: 196, Width: 100, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditDamageLabel { Anchor: (Left: 228, Top: 174, Width: 110, Height: 20); Text: "DMG Mult"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditDamage { Anchor: (Left: 228, Top: 196, Width: 100, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditSizeLabel { Anchor: (Left: 338, Top: 174, Width: 110, Height: 20); Text: "Size Mult"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditSize { Anchor: (Left: 338, Top: 196, Width: 100, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+      Label #BossEditPpHpLabel { Anchor: (Left: 448, Top: 174, Width: 110, Height: 20); Text: "PP HP"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditPpHp { Anchor: (Left: 448, Top: 196, Width: 100, Height: 28); Value: "0.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditPpDamageLabel { Anchor: (Left: 558, Top: 174, Width: 110, Height: 20); Text: "PP DMG"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditPpDamage { Anchor: (Left: 558, Top: 196, Width: 100, Height: 28); Value: "0.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #BossEditPpSizeLabel { Anchor: (Left: 668, Top: 174, Width: 110, Height: 20); Text: "PP Size"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditPpSize { Anchor: (Left: 668, Top: 196, Width: 100, Height: 28); Value: "0.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+      Label #BossPpNote { Anchor: (Left: 448, Top: 241, Width: 340, Height: 18); Text: "PP = Per Player scaling"; Style: (FontSize: 12, TextColor: #8ea1bb); }
+
+      Panel #BossWavesDivider {
+        Anchor: (Left: 779, Top: 118, Width: 2, Height: 116);
+        Background: #2a3d58;
+      }
+
+      Label #BossWavesLabel { Anchor: (Left: 792, Top: 92, Width: 220, Height: 22); Text: "Boss Waves"; Style: (FontSize: 16, TextColor: #f3f7ff, RenderBold: true); }
+      Label #BossWavesAdd1 { Anchor: (Left: 792, Top: 124, Width: 266, Height: 16); Text: ""; Style: (FontSize: 12, TextColor: #b2c0d2); }
+      Label #BossWavesAdd2 { Anchor: (Left: 826, Top: 140, Width: 232, Height: 16); Text: ""; Style: (FontSize: 12, TextColor: #b2c0d2); }
+      Label #BossWavesMeta { Anchor: (Left: 792, Top: 156, Width: 266, Height: 16); Text: ""; Style: (FontSize: 12, TextColor: #8ea1bb); }
+      Label #BossEditWavesLabel { Anchor: (Left: 792, Top: 174, Width: 136, Height: 20); Text: "Total Waves"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #BossEditWaves { Anchor: (Left: 792, Top: 196, Width: 136, Height: 28); Value: "0"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #BossEditWavesButton {
+        Anchor: (Left: 938, Top: 196, Width: 120, Height: 28);
+        Text: "Edit Waves";
+        Style: TextButtonStyle(
+          Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #38567b, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Label #BossLootLabel { Anchor: (Left: 118, Top: 238, Width: 220, Height: 24); Text: "Loot"; Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true); }
+      Label #BossLootHint { Anchor: (Left: 360, Top: 241, Width: 430, Height: 20); Text: ""; Visible: false; Style: (FontSize: 12, TextColor: #8ea1bb); }
+
+      Label #BossLootHeaderName { Anchor: (Left: 118, Top: 266, Width: 490, Height: 20); Text: "Item Name"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossLootHeaderMin { Anchor: (Left: 614, Top: 266, Width: 80, Height: 20); Text: "Min"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossLootHeaderMax { Anchor: (Left: 700, Top: 266, Width: 80, Height: 20); Text: "Max"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossLootHeaderChance { Anchor: (Left: 786, Top: 266, Width: 120, Height: 20); Text: "Chance"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+
+      Panel #BossLootRow1 { Anchor: (Left: 118, Top: 288, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName1 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin1 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax1 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance1 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete1 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow2 { Anchor: (Left: 118, Top: 324, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName2 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin2 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax2 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance2 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete2 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow3 { Anchor: (Left: 118, Top: 360, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName3 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin3 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax3 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance3 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete3 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow4 { Anchor: (Left: 118, Top: 396, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName4 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin4 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax4 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance4 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete4 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow5 { Anchor: (Left: 118, Top: 432, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName5 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin5 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax5 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance5 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete5 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow6 { Anchor: (Left: 118, Top: 468, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName6 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin6 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax6 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance6 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete6 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow7 { Anchor: (Left: 118, Top: 504, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName7 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin7 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax7 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance7 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete7 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #BossLootRow8 { Anchor: (Left: 118, Top: 540, Width: 940, Height: 32); Background: #1a2b41; TextField #BossLootName8 { Anchor: (Left: 8, Top: 2, Width: 486, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMin8 { Anchor: (Left: 500, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootMax8 { Anchor: (Left: 586, Top: 2, Width: 80, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossLootChance8 { Anchor: (Left: 672, Top: 2, Width: 120, Height: 28); Value: "0.25"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossLootDelete8 { Anchor: (Left: 860, Top: 2, Width: 64, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+
+      TextButton #BossLootAddButton {
+        Anchor: (Left: 118, Top: 577, Width: 160, Height: 30);
+        Text: "Add Loot Row";
+        Visible: false;
+        Style: TextButtonStyle(
+          Default: (Background: #2b4568, LabelStyle: (FontSize: 13, TextColor: #d8e3f4, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #3f6391, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4f79ab, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      TextButton #BossEditorSaveButton {
+        Anchor: (Left: 964, Top: 548, Width: 120, Height: 34);
+        Text: "Save";
+        Style: TextButtonStyle(
+          Default: (Background: #1f7d4b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #17633c, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Panel #BossWavesOverlay {
+        Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+        Visible: false;
+
+        Panel #BossWavesBackdrop {
+          Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+          Background: #05090f(0.78);
+        }
+
+        Panel #BossWavesWindow {
+          Anchor: (Left: 240, Top: 118, Width: 720, Height: 430);
+          Background: #0f1725;
+        }
+
+        Label #BossWavesTitle {
+          Anchor: (Left: 268, Top: 146, Width: 340, Height: 28);
+          Text: "Edit Boss Waves";
+          Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+        }
+
+        TextButton #BossWavesCloseButton {
+          Anchor: (Left: 812, Top: 144, Width: 120, Height: 34);
+          Text: "Close";
+          Style: TextButtonStyle(
+            Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+          );
+        }
+
+        Label #BossWavesTimeLabel { Anchor: (Left: 268, Top: 194, Width: 220, Height: 20); Text: "Time Between Waves (sec)"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        TextField #BossWavesTimeSec { Anchor: (Left: 268, Top: 216, Width: 220, Height: 28); Value: "0"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        Label #BossWavesHint { Anchor: (Left: 500, Top: 219, Width: 432, Height: 20); Text: "Every 1 = every wave, 2 = every 2nd wave, etc."; Style: (FontSize: 12, TextColor: #8ea1bb); }
+
+        Label #BossWavesHeaderNpc { Anchor: (Left: 268, Top: 254, Width: 332, Height: 20); Text: "NPC ID"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderAmount { Anchor: (Left: 614, Top: 254, Width: 110, Height: 20); Text: "Amount"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderEvery { Anchor: (Left: 730, Top: 254, Width: 130, Height: 20); Text: "Every N Waves"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+
+        Panel #BossWavesRow1 { Anchor: (Left: 268, Top: 276, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc1 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount1 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery1 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction1 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow2 { Anchor: (Left: 268, Top: 310, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc2 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount2 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery2 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction2 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow3 { Anchor: (Left: 268, Top: 344, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc3 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount3 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery3 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction3 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow4 { Anchor: (Left: 268, Top: 378, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc4 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount4 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery4 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction4 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow5 { Anchor: (Left: 268, Top: 412, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc5 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount5 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery5 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction5 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow6 { Anchor: (Left: 268, Top: 446, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc6 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount6 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery6 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction6 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+
+        TextButton #BossWavesSaveButton {
+          Anchor: (Left: 812, Top: 494, Width: 120, Height: 34);
+          Text: "Save";
+          Style: TextButtonStyle(
+            Default: (Background: #1f7d4b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Pressed: (Background: #17633c, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+          );
+        }
+      }
+    }
+  }
+
+  Group #ShopPanel {
+    Anchor: (Left: 360, Top: 296, Width: 1200, Height: 660);
+    Visible: false;
+
+    Label #ShopTitleLabel {
+      Anchor: (Left: 32, Top: 28, Width: 800, Height: 30);
+      Text: "Shop Tables";
+      Style: (FontSize: 24, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    Label #ShopHeaderArena {
+      Anchor: (Left: 44, Top: 68, Width: 520, Height: 24);
+      Text: "Table / Arena";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ShopHeaderDistance {
+      Anchor: (Left: 584, Top: 68, Width: 160, Height: 24);
+      Text: "Distance";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ShopHeaderBosses {
+      Anchor: (Left: 772, Top: 68, Width: 140, Height: 24);
+      Text: "Bosses";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ShopHeaderEntries {
+      Anchor: (Left: 930, Top: 68, Width: 110, Height: 24);
+      Text: "Enabled";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ShopHeaderEdit {
+      Anchor: (Left: 1050, Top: 68, Width: 90, Height: 24);
+      Text: "Edit";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ShopEmptyLabel {
+      Anchor: (Left: 32, Top: 124, Width: 1136, Height: 30);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 16, TextColor: #b2c0d2);
+    }
+
+    Label #ShopOverflowLabel {
+      Anchor: (Left: 32, Top: 546, Width: 1136, Height: 26);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 14, TextColor: #ffd88f);
+    }
+
+    Panel #ShopRow1 {
+      Anchor: (Left: 32, Top: 96, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena1 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance1 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses1 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries1 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit1 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow2 {
+      Anchor: (Left: 32, Top: 150, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena2 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance2 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses2 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries2 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit2 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow3 {
+      Anchor: (Left: 32, Top: 204, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena3 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance3 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses3 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries3 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit3 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow4 {
+      Anchor: (Left: 32, Top: 258, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena4 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance4 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses4 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries4 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit4 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow5 {
+      Anchor: (Left: 32, Top: 312, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena5 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance5 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses5 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries5 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit5 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow6 {
+      Anchor: (Left: 32, Top: 366, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena6 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance6 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses6 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries6 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit6 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow7 {
+      Anchor: (Left: 32, Top: 420, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena7 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance7 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses7 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries7 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit7 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ShopRow8 {
+      Anchor: (Left: 32, Top: 474, Width: 1136, Height: 46);
+      Background: #1a2b41;
+      Label #ShopArena8 { Anchor: (Left: 16, Top: 8, Width: 520, Height: 30); Text: ""; Style: (FontSize: 14, TextColor: #d8e3f4, VerticalAlignment: Center); }
+      Label #ShopDistance8 { Anchor: (Left: 556, Top: 8, Width: 160, Height: 30); Text: "--"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopBosses8 { Anchor: (Left: 744, Top: 8, Width: 140, Height: 30); Text: "0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      Label #ShopEntries8 { Anchor: (Left: 902, Top: 8, Width: 120, Height: 30); Text: "0/0"; Style: (FontSize: 14, TextColor: #e6eefc, VerticalAlignment: Center); }
+      TextButton #ShopEdit8 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Group #ShopTableEditorOverlay {
+      Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+      Visible: false;
+
+      Panel #ShopTableEditorBackdrop {
+        Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+        Background: #05090f(0.75);
+      }
+
+      Panel #ShopTableEditorWindow {
+        Anchor: (Left: 124, Top: 74, Width: 952, Height: 512);
+        Background: #0f1725;
+      }
+
+      Label #ShopTableEditorTitle {
+        Anchor: (Left: 152, Top: 96, Width: 660, Height: 30);
+        Text: "Table";
+        Style: (FontSize: 22, TextColor: #f3f7ff, RenderBold: true);
+      }
+
+      Label #ShopTableEditorHint {
+        Anchor: (Left: 152, Top: 128, Width: 760, Height: 22);
+        Text: "";
+        Style: (FontSize: 13, TextColor: #8ea1bb);
+      }
+
+      TextButton #ShopTableEditorCloseButton {
+        Anchor: (Left: 920, Top: 96, Width: 128, Height: 34);
+        Text: "Close";
+        Style: TextButtonStyle(
+          Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Label #ShopTableEditorArenaLabel {
+        Anchor: (Left: 920, Top: 134, Width: 128, Height: 18);
+        Text: "Arena ID";
+        Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true);
+      }
+
+      TextField #ShopTableEditorArena {
+        Anchor: (Left: 920, Top: 154, Width: 128, Height: 28);
+        Value: "";
+        Style: (FontSize: 12, TextColor: #e6eefc);
+        Padding: (Left: 8);
+        Background: #122036;
+      }
+
+      Label #ShopEditHeaderBoss {
+        Anchor: (Left: 152, Top: 170, Width: 460, Height: 22);
+        Text: "Boss";
+        Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+      }
+
+      Label #ShopEditHeaderTier {
+        Anchor: (Left: 622, Top: 170, Width: 130, Height: 22);
+        Text: "Tier";
+        Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+      }
+
+      Label #ShopEditHeaderToggle {
+        Anchor: (Left: 762, Top: 170, Width: 170, Height: 22);
+        Text: "Enabled";
+        Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+      }
+
+      Panel #ShopEditBossRow1 { Anchor: (Left: 152, Top: 194, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName1 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier1 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle1 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow2 { Anchor: (Left: 152, Top: 228, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName2 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier2 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle2 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow3 { Anchor: (Left: 152, Top: 262, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName3 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier3 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle3 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow4 { Anchor: (Left: 152, Top: 296, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName4 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier4 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle4 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow5 { Anchor: (Left: 152, Top: 330, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName5 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier5 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle5 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow6 { Anchor: (Left: 152, Top: 364, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName6 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier6 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle6 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow7 { Anchor: (Left: 152, Top: 398, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName7 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier7 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle7 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow8 { Anchor: (Left: 152, Top: 432, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName8 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier8 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle8 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow9 { Anchor: (Left: 152, Top: 466, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName9 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier9 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle9 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow10 { Anchor: (Left: 152, Top: 500, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName10 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier10 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle10 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow11 { Anchor: (Left: 152, Top: 534, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName11 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier11 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle11 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+      Panel #ShopEditBossRow12 { Anchor: (Left: 152, Top: 568, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName12 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier12 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle12 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+
+      Label #ShopTableEditorOverflowLabel {
+        Anchor: (Left: 152, Top: 600, Width: 620, Height: 22);
+        Text: "";
+        Visible: false;
+        Style: (FontSize: 13, TextColor: #ffd88f);
+      }
+
+      TextButton #ShopTableEditorSaveButton {
+        Anchor: (Left: 920, Top: 600, Width: 128, Height: 34);
+        Text: "Save";
+        Style: TextButtonStyle(
+          Default: (Background: #1f7d4b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #17633c, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+    }
+
+    Label #ShopStatusLabel {
+      Anchor: (Left: 32, Top: 610, Width: 1136, Height: 30);
+      Text: "";
+      Style: (FontSize: 14, TextColor: #b2c0d2);
+    }
+  }
+
+  Group #ArenasPanel {
+    Anchor: (Left: 360, Top: 296, Width: 1200, Height: 660);
+    Visible: false;
+
+    Label #ArenaTitleLabel {
+      Anchor: (Left: 32, Top: 28, Width: 800, Height: 30);
+      Text: "Arenas";
+      Style: (FontSize: 24, TextColor: #f3f7ff, RenderBold: true);
+    }
+
+    TextButton #ArenaAddButton {
+      Anchor: (Left: 1150, Top: 24, Width: 40, Height: 36);
+      Text: "+";
+      Style: TextButtonStyle(
+        Default: (Background: #1f7d4b, LabelStyle: (FontSize: 20, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 20, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #17633c, LabelStyle: (FontSize: 20, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+
+    Label #ArenaHeaderName {
+      Anchor: (Left: 44, Top: 68, Width: 320, Height: 24);
+      Text: "Arena";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ArenaHeaderX {
+      Anchor: (Left: 380, Top: 68, Width: 120, Height: 24);
+      Text: "X";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ArenaHeaderY {
+      Anchor: (Left: 512, Top: 68, Width: 120, Height: 24);
+      Text: "Y";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ArenaHeaderZ {
+      Anchor: (Left: 644, Top: 68, Width: 120, Height: 24);
+      Text: "Z";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ArenaHeaderSave {
+      Anchor: (Left: 956, Top: 68, Width: 120, Height: 24);
+      Text: "Save";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ArenaHeaderDelete {
+      Anchor: (Left: 1088, Top: 68, Width: 60, Height: 24);
+      Text: "Del";
+      Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
+    }
+
+    Label #ArenaEmptyLabel {
+      Anchor: (Left: 32, Top: 124, Width: 1136, Height: 30);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 16, TextColor: #b2c0d2);
+    }
+
+    Label #ArenaOverflowLabel {
+      Anchor: (Left: 32, Top: 546, Width: 1136, Height: 26);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 14, TextColor: #ffd88f);
+    }
+
+    Panel #ArenaRow1 {
+      Anchor: (Left: 32, Top: 96, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName1 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX1 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY1 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ1 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave1 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete1 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow2 {
+      Anchor: (Left: 32, Top: 150, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName2 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX2 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY2 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ2 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave2 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete2 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow3 {
+      Anchor: (Left: 32, Top: 204, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName3 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX3 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY3 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ3 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave3 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete3 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow4 {
+      Anchor: (Left: 32, Top: 258, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName4 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX4 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY4 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ4 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave4 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete4 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow5 {
+      Anchor: (Left: 32, Top: 312, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName5 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX5 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY5 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ5 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave5 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete5 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow6 {
+      Anchor: (Left: 32, Top: 366, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName6 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX6 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY6 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ6 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave6 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete6 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow7 {
+      Anchor: (Left: 32, Top: 420, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName7 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX7 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY7 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ7 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave7 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete7 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Panel #ArenaRow8 {
+      Anchor: (Left: 32, Top: 474, Width: 1136, Height: 46);
+      Background: #1a2b41;
+
+      TextField #ArenaName8 { Anchor: (Left: 12, Top: 8, Width: 320, Height: 30); Value: ""; Style: (FontSize: 14, TextColor: #d8e3f4); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaX8 { Anchor: (Left: 348, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaY8 { Anchor: (Left: 480, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextField #ArenaZ8 { Anchor: (Left: 612, Top: 8, Width: 120, Height: 30); Value: "0.0"; Style: (FontSize: 14, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      TextButton #ArenaSave8 { Anchor: (Left: 924, Top: 8, Width: 120, Height: 30); Text: "Save"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+      TextButton #ArenaDelete8 { Anchor: (Left: 1056, Top: 8, Width: 60, Height: 30); Text: "-"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 17, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 17, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
+    }
+
+    Label #ArenaStatusLabel {
+      Anchor: (Left: 32, Top: 610, Width: 1136, Height: 30);
+      Text: "";
+      Style: (FontSize: 14, TextColor: #b2c0d2);
+    }
+  }
+
+  Label #StatusLabel {
+    Anchor: (Left: 392, Top: 332, Width: 1136, Height: 80);
+    Text: "";
+    Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+  }
+}

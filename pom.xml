@@ -5,7 +5,7 @@
 
     <groupId>com.bossarena</groupId>
     <artifactId>BossArena</artifactId>
-    <version>0.4.0</version>
+    <version>0.9.0</version>
     <packaging>jar</packaging>
 
     <properties>

@@ -117,7 +117,7 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
             return tryChargeItemCurrency(player, currency.itemId, amount);
         }
 
-        // Auto mode: prefer EconomySystem, then HyMarket, then item currency.
+        // Auto mode: prefer HyMarket, then EconomySystem, then item currency.
         String autoProvider = ShopCurrencySupport.resolveAutoProvider();
         if (ShopCurrencySupport.PROVIDER_ECONOMY_SYSTEM.equals(autoProvider)) {
             return tryChargeEconomySystem(playerRef.getUuid(), amount);
@@ -148,7 +148,10 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
         if (global != null && global.currencyItemId != null && !global.currencyItemId.isBlank()) {
             return new CurrencySettings(provider, global.currencyItemId);
         }
-        return new CurrencySettings(provider, "");
+        if (global != null && global.fallbackCurrencyItemId != null && !global.fallbackCurrencyItemId.isBlank()) {
+            return new CurrencySettings(provider, global.fallbackCurrencyItemId);
+        }
+        return new CurrencySettings(provider, "Ingredient_Bar_Iron");
     }
 
     private static ChargeResult tryChargeItemCurrency(Player player, String currencyItemId, int amount) {

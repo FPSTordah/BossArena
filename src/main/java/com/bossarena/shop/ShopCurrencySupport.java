@@ -18,6 +18,9 @@ final class ShopCurrencySupport {
             return PROVIDER_AUTO;
         }
         String provider = rawProvider.trim().toLowerCase(Locale.ROOT);
+        if ("hymarketplus".equals(provider) || "hy_market".equals(provider) || "marketplace".equals(provider)) {
+            return PROVIDER_HYMARKET;
+        }
         if ("economy".equals(provider) || "ecosystem".equals(provider)) {
             return PROVIDER_ECONOMY_SYSTEM;
         }
@@ -31,11 +34,11 @@ final class ShopCurrencySupport {
     }
 
     static String resolveAutoProvider() {
-        if (EconomySystemBridge.isActive()) {
-            return PROVIDER_ECONOMY_SYSTEM;
-        }
         if (HyMarketBridge.isActive()) {
             return PROVIDER_HYMARKET;
+        }
+        if (EconomySystemBridge.isActive()) {
+            return PROVIDER_ECONOMY_SYSTEM;
         }
         return PROVIDER_ITEM;
     }

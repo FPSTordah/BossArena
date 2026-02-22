@@ -17,13 +17,14 @@ public final class BossArenaShortCommand extends AbstractCommand {
     addSubCommand(new BossArenaCommand.ArenaRoot(plugin));
     addSubCommand(new BossArenaCommand.SpawnBoss(plugin));
     addSubCommand(new BossArenaCommand.Reload(plugin));
+    addSubCommand(new BossArenaCommand.Config(plugin));
     addSubCommand(new BossArenaCommand.ShopRoot(plugin));
   }
 
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
     ctx.sendMessage(com.hypixel.hytale.server.core.Message.raw(
-            "Use: /ba arena <create|delete|list> OR /ba spawn <bossId> [arenaId] OR /ba reload"
+            "Use: /ba arena <create|delete|list> OR /ba spawn <bossId> [arenaId] OR /ba reload OR /ba config"
     ));
     return CompletableFuture.completedFuture(null);
   }

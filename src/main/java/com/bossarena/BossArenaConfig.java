@@ -9,9 +9,12 @@ import java.util.logging.Logger;
 
 public final class BossArenaConfig {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
+    private static final String DEFAULT_CURRENCY_ITEM_ID = "Coin";
+    private static final String DEFAULT_FALLBACK_CURRENCY_ITEM_ID = "Ingredient_Bar_Iron";
 
     public ArenaDef[] arenas = new ArenaDef[0];
-    public String currencyItemId = "Coin";
+    public String currencyItemId = DEFAULT_CURRENCY_ITEM_ID;
+    public String fallbackCurrencyItemId = DEFAULT_FALLBACK_CURRENCY_ITEM_ID;
 
 //    public ArenaDef getArena(String arenaId) {
 //        if (arenaId == null || arenas == null) return null;
@@ -42,8 +45,12 @@ public final class BossArenaConfig {
                 String content = Files.readString(path);
                 BossArenaConfig loaded = new GsonBuilder().create().fromJson(content, BossArenaConfig.class);
                 if (loaded != null) {
-                    this.arenas = loaded.arenas;
-                    this.currencyItemId = loaded.currencyItemId;
+                    this.arenas = loaded.arenas != null ? loaded.arenas : new ArenaDef[0];
+                    this.currencyItemId = sanitizeItemId(loaded.currencyItemId, DEFAULT_CURRENCY_ITEM_ID);
+                    this.fallbackCurrencyItemId = sanitizeItemId(
+                            loaded.fallbackCurrencyItemId,
+                            DEFAULT_FALLBACK_CURRENCY_ITEM_ID
+                    );
                     LOGGER.info("Successfully loaded BossArena config");
                 }
             } else {
@@ -52,5 +59,12 @@ public final class BossArenaConfig {
         } catch (IOException e) {
             LOGGER.severe("Failed to load BossArena config: " + e.getMessage());
         }
+    }
+
+    private static String sanitizeItemId(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.trim();
     }
 }

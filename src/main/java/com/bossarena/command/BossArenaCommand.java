@@ -1,6 +1,7 @@
 package com.bossarena.command;
 
 import com.bossarena.BossArenaPlugin;
+import com.bossarena.config.BossArenaConfigPage;
 import com.bossarena.data.Arena;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
@@ -51,6 +52,7 @@ public final class BossArenaCommand extends AbstractCommand {
     addSubCommand(new ArenaRoot(plugin));
     addSubCommand(new SpawnBoss(plugin));
     addSubCommand(new Reload(plugin));
+    addSubCommand(new Config(plugin));
     addSubCommand(new ShopRoot(plugin));
   }
 
@@ -105,7 +107,7 @@ public final class BossArenaCommand extends AbstractCommand {
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
     ctx.sendMessage(Message.raw(
-            "Use: /bossarena arena <create|delete|list> OR /bossarena spawn <id> OR /bossarena reload"
+            "Use: /bossarena arena <create|delete|list> OR /bossarena spawn <id> OR /bossarena reload OR /bossarena config"
     ));
     return CompletableFuture.completedFuture(null);
   }
@@ -384,6 +386,52 @@ public final class BossArenaCommand extends AbstractCommand {
   }
 
   // ============================================================
+  // /bossarena config
+  // ============================================================
+  static final class Config extends AbstractCommand {
+    private final BossArenaPlugin plugin;
+
+    Config(BossArenaPlugin plugin) {
+      super("config", "Open the BossArena config GUI");
+      this.plugin = plugin;
+      requireAdminPermission(this);
+    }
+
+    @Override
+    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
+      if (!ctx.isPlayer()) {
+        ctx.sendMessage(Message.raw("Player-only command"));
+        return CompletableFuture.completedFuture(null);
+      }
+
+      Player player = ctx.senderAs(Player.class);
+      World world = player.getWorld();
+      if (world == null) {
+        ctx.sendMessage(Message.raw("Could not resolve player world"));
+        return CompletableFuture.completedFuture(null);
+      }
+
+      world.execute(() -> {
+        @SuppressWarnings("removal")
+        PlayerRef ref = player.getPlayerRef();
+        if (ref == null) {
+          return;
+        }
+
+        Ref<EntityStore> entityRef = ref.getReference();
+        if (entityRef == null) {
+          return;
+        }
+
+        Store<EntityStore> store = entityRef.getStore();
+        BossArenaConfigPage.open(entityRef, store, player, plugin);
+      });
+
+      return CompletableFuture.completedFuture(null);
+    }
+  }
+
+  // ============================================================
   // /bossarena shop ...
   // ============================================================
   static final class ShopRoot extends AbstractCommand {
@@ -523,16 +571,27 @@ public final class BossArenaCommand extends AbstractCommand {
       }
 
       Player player = ctx.senderAs(Player.class);
-      // Use getPlayerRef() instead of getEntity() as getEntity() does not exist on Player
-      @SuppressWarnings("removal")
-      PlayerRef ref = player.getPlayerRef();
-      if (ref != null) {
-        Ref<EntityStore> entityRef = ref.getReference();
-        if (entityRef != null) {
-          Store<EntityStore> store = entityRef.getStore();
-          BossArenaShopPage.open(entityRef, store, player, plugin);
-        }
+      World world = player.getWorld();
+      if (world == null) {
+        ctx.sendMessage(Message.raw("Could not resolve player world"));
+        return CompletableFuture.completedFuture(null);
       }
+
+      world.execute(() -> {
+        @SuppressWarnings("removal")
+        PlayerRef ref = player.getPlayerRef();
+        if (ref == null) {
+          return;
+        }
+
+        Ref<EntityStore> entityRef = ref.getReference();
+        if (entityRef == null) {
+          return;
+        }
+
+        Store<EntityStore> store = entityRef.getStore();
+        BossArenaShopPage.open(entityRef, store, player, plugin);
+      });
 
       return CompletableFuture.completedFuture(null);
     }
@@ -595,7 +654,7 @@ public final class BossArenaCommand extends AbstractCommand {
   }
 
   private static String resolveShopPedestalItemId() {
-    for (String id : List.of("Boss_Arena_Shop", "Boss_Arena_Shop_Pedestal", "Boss_Pedestal")) {
+    for (String id : List.of("Boss_Arena_Shop")) {
       if (Item.getAssetMap().getAsset(id) != null) {
         return id;
       }

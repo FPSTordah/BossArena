@@ -50,7 +50,8 @@ public final class OpenBossShopInteraction extends SimpleBlockInteraction {
             return;
         }
 
-        BossArenaShopPage.open(ref, store, player, plugin);
+        plugin.recordShopTableLocation(world.getName(), pos);
+        BossArenaShopPage.openAtTable(ref, store, player, plugin, world.getName(), pos.x, pos.y, pos.z);
     }
 
     private static boolean isShopOpenInteraction(InteractionType type) {

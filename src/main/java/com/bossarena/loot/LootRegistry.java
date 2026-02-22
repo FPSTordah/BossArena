@@ -47,6 +47,15 @@ public class LootRegistry {
         return LOOT_TABLES.get(bossName.toLowerCase());
     }
 
+    public static LootTable remove(String bossName) {
+        if (bossName == null) return null;
+        return LOOT_TABLES.remove(bossName.toLowerCase());
+    }
+
+    public static Map<String, LootTable> getAll() {
+        return new HashMap<>(LOOT_TABLES);
+    }
+
     /**
      * Clear all loot tables
      */
