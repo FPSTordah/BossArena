@@ -1,5 +1,7 @@
 package com.bossarena.spawn;
 
+import com.bossarena.BossArenaConfig;
+import com.bossarena.BossArenaPlugin;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
 import com.bossarena.util.BossScaler;
@@ -17,10 +19,12 @@ import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
 import com.hypixel.hytale.server.core.modules.entitystats.asset.EntityStatType;
 import com.hypixel.hytale.server.core.modules.entitystats.modifier.StaticModifier;
 import com.hypixel.hytale.server.core.modules.entitystats.modifier.Modifier;
+import com.hypixel.hytale.server.core.modules.interaction.Interactions;
 import com.hypixel.hytale.server.npc.NPCPlugin;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.modules.entity.component.EntityScaleComponent;
+import com.hypixel.hytale.protocol.InteractionType;
 
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -32,6 +36,8 @@ import java.util.logging.Logger;
 public final class BossSpawnService {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private static final String HEALTH_MODIFIER_KEY = "BossArena.HealthMultiplier";
+    private static final double GOLDEN_ANGLE_RADIANS = 2.399963229728653d;
+    private static final double BOSS_SPAWN_SPACING_BLOCKS = 2.75d;
     private static final ScheduledExecutorService EXTRA_WAVE_SCHEDULER =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "BossArena-ExtraWaves");
@@ -40,9 +46,11 @@ public final class BossSpawnService {
             });
 
     private final BossTrackingSystem tracking;
+    private final BossArenaConfig config;
 
-    public BossSpawnService(BossTrackingSystem tracking) {
+    public BossSpawnService(BossTrackingSystem tracking, BossArenaConfig config) {
         this.tracking = tracking;
+        this.config = config;
     }
 
     public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
@@ -80,14 +88,13 @@ public final class BossSpawnService {
         LOGGER.info("Boss modifiers calculated - HP: " + mods.hpMultiplier() + ", Damage: " + mods.damageMultiplier() + ", Size: " + mods.scaleMultiplier());
 
         UUID primaryBossUuid = null;
+        UUID bossEventId = null;
+        int countdownMinutes = config != null ? config.getBossTierCountdownMinutes(def.tier) : 30;
+        long countdownDurationMs = TimeUnit.MINUTES.toMillis(Math.max(1, countdownMinutes));
 
         // Spawn the boss(es)
         for (int i = 0; i < def.amount; i++) {
-            Vector3d spreadPos = new Vector3d(
-                    spawnPos.x + (i * 1.2),
-                    spawnPos.y,
-                    spawnPos.z + (i * 1.2)
-            );
+            Vector3d spreadPos = computeBossSpawnPosition(spawnPos, i);
 
             LOGGER.info("Spawning NPC ID: " + def.npcId + " at: " + spreadPos);
 
@@ -111,8 +118,13 @@ public final class BossSpawnService {
                         primaryBossUuid = uuid;
                     }
 
-                    tracking.track(uuid, def.bossName, mods, arenaId, world, spreadPos);
+                    if (bossEventId == null) {
+                        bossEventId = tracking.createEvent(world, spawnPos, def.bossName, def.tier, countdownDurationMs);
+                    }
+
+                    tracking.track(uuid, def.bossName, mods, arenaId, world, spreadPos, def.tier, bossEventId, spawnPos);
                     applyModifiers(store, npcRef, mods);
+                    disableDefaultEntityLoot(store, npcRef, def.bossName + "#" + (i + 1));
 
                     LOGGER.info("Successfully spawned boss: " + def.bossName + " (" + uuid + ") at " + spreadPos);
                 }
@@ -129,9 +141,10 @@ public final class BossSpawnService {
                         world,
                         bossData.spawnLocation,
                         bossData.bossName,
-                        1,
-                        tracking.getActiveAddCount(primaryBossUuid),
-                        null
+                        tracking.getAliveBossCount(primaryBossUuid),
+                        tracking.getActiveAddCountForEvent(primaryBossUuid),
+                        null,
+                        tracking.getRemainingCountdownMillis(primaryBossUuid)
                 );
             }
         }
@@ -277,7 +290,6 @@ public final class BossSpawnService {
             var entityRef = world.getEntityRef(bossUuid);
             if (entityRef == null || !entityRef.isValid()) {
                 LOGGER.info("Boss entity no longer exists - CANCELLING wave " + waveNumber);
-                tracking.untrack(bossUuid);
                 return false;
             }
 
@@ -290,13 +302,11 @@ public final class BossSpawnService {
                 var healthValue = statMap.get(healthIndex);
                 if (healthValue != null && healthValue.get() <= 0) {
                     LOGGER.info("Boss is dead (HP <= 0) - CANCELLING wave " + waveNumber);
-                    tracking.untrack(bossUuid);
                     return false;
                 }
             }
         } catch (Exception e) {
             LOGGER.warning("Error checking boss status: " + e.getMessage());
-            tracking.untrack(bossUuid);
             return false;
         }
 
@@ -343,12 +353,25 @@ public final class BossSpawnService {
 
                 if (result != null) {
                     Ref<EntityStore> addRef = result.first();
+                    BossModifiers addMods = new BossModifiers(
+                            Math.max(0.01f, add.hp),
+                            Math.max(0.01f, add.damage),
+                            1.0f,
+                            Math.max(0.01f, add.size)
+                    );
+                    applyModifiers(world.getEntityStore().getStore(), addRef, addMods);
+                    disableDefaultEntityLoot(world.getEntityStore().getStore(), addRef, add.npcId);
+
                     Object addUuidObj = world.getEntityStore().getStore().getComponent(addRef, UUIDComponent.getComponentType());
                     if (addUuidObj instanceof UUIDComponent addUuidComp) {
                         tracking.trackAdd(bossUuid, addUuidComp.getUuid());
                         spawnedThisWave++;
                     }
-                    LOGGER.info("Spawned add '" + add.npcId + "' " + (i + 1) + "/" + mobCount + " (wave " + waveNumber + ", every " + everyWave + ")");
+                    LOGGER.info("Spawned add '" + add.npcId + "' " + (i + 1) + "/" + mobCount
+                            + " (wave " + waveNumber + ", every " + everyWave
+                            + ", hp=" + addMods.hpMultiplier()
+                            + ", dmg=" + addMods.damageMultiplier()
+                            + ", size=" + addMods.scaleMultiplier() + ")");
                 }
             }
         }
@@ -356,17 +379,45 @@ public final class BossSpawnService {
         if (spawnedThisWave > 0) {
             BossTrackingSystem.BossData bossData = tracking.getBossData(bossUuid);
             if (bossData != null) {
-                int activeAdds = tracking.getActiveAddCount(bossUuid);
                 BossWaveNotificationService.notifyWaveSpawn(
                         world,
                         bossData.spawnLocation,
                         bossData.bossName,
                         waveNumber,
                         spawnedThisWave,
-                        activeAdds
+                        tracking.getActiveAddCountForEvent(bossUuid),
+                        tracking.getRemainingCountdownMillis(bossUuid)
                 );
             }
         }
+    }
+
+    private void disableDefaultEntityLoot(Store<EntityStore> store, Ref<EntityStore> entityRef, String label) {
+        try {
+            Object interactionsObj = store.getComponent(entityRef, Interactions.getComponentType());
+            if (interactionsObj instanceof Interactions interactions) {
+                // Route death interaction to a valid no-op interaction to suppress prefab death droplists.
+                interactions.setInteractionId(InteractionType.Death, BossArenaPlugin.NO_DEATH_DROPS_INTERACTION_ID);
+                LOGGER.info("Disabled default entity death drops for '" + label + "'.");
+            } else {
+                LOGGER.warning("Could not disable drops for '" + label + "' (missing Interactions component).");
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Failed to disable default drops for '" + label + "'.", e);
+        }
+    }
+
+    private Vector3d computeBossSpawnPosition(Vector3d center, int index) {
+        if (center == null || index <= 0) {
+            return center;
+        }
+
+        // Golden-angle spiral keeps dense waves spread around the arena center without clumping.
+        double radius = BOSS_SPAWN_SPACING_BLOCKS * Math.sqrt(index);
+        double angle = index * GOLDEN_ANGLE_RADIANS;
+        double x = center.x + (Math.cos(angle) * radius);
+        double z = center.z + (Math.sin(angle) * radius);
+        return new Vector3d(x, center.y, z);
     }
 
 }

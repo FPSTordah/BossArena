@@ -12,7 +12,7 @@ import java.util.logging.Logger;
 
 public final class BossWaveNotificationService {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
-    private static final double NOTIFY_RADIUS = 80.0d;
+    private static final double NOTIFY_RADIUS = 100.0d;
     private static final float TRANSIENT_DURATION_SECONDS = 3.0f;
     private static final float PERSISTENT_DURATION_SECONDS = 999.0f;
     private static final float FINAL_CLEAR_DURATION_SECONDS = 8.0f;
@@ -26,10 +26,21 @@ public final class BossWaveNotificationService {
                                              int aliveBossCount,
                                              int activeAdds,
                                              String context) {
+        notifyBossAliveStatus(world, eventCenter, bossName, aliveBossCount, activeAdds, context, -1L);
+    }
+
+    public static void notifyBossAliveStatus(World world,
+                                             Vector3d eventCenter,
+                                             String bossName,
+                                             int aliveBossCount,
+                                             int activeAdds,
+                                             String context,
+                                             long remainingCountdownMillis) {
         if (world == null || eventCenter == null) {
             return;
         }
         String contextText = context == null || context.isBlank() ? "" : (context.trim() + " | ");
+        String countdownText = formatCountdownPrefix(remainingCountdownMillis);
         int bossesAlive = Math.max(0, aliveBossCount);
         int addsAlive = Math.max(0, activeAdds);
         boolean eventFinished = bossesAlive <= 0 && addsAlive <= 0;
@@ -38,7 +49,7 @@ public final class BossWaveNotificationService {
                 : Message.raw("The Shadows Stir—" + safeBossName(bossName) + " Approaches!");
         Message subtitle = eventFinished
                 ? Message.raw("Boss alive: 0 | Wave mobs alive: 0")
-                : Message.raw(contextText + "Boss alive: " + bossesAlive + " | Wave mobs alive: " + addsAlive);
+                : Message.raw(contextText + countdownText + "Boss alive: " + bossesAlive + " | Wave mobs alive: " + addsAlive);
         float duration = (bossesAlive > 0 || addsAlive > 0)
                 ? PERSISTENT_DURATION_SECONDS
                 : FINAL_CLEAR_DURATION_SECONDS;
@@ -50,7 +61,8 @@ public final class BossWaveNotificationService {
                                        String bossName,
                                        int waveNumber,
                                        int spawnedNow,
-                                       int activeAdds) {
+                                       int activeAdds,
+                                       long remainingCountdownMillis) {
         if (world == null || eventCenter == null || spawnedNow <= 0) {
             return;
         }
@@ -60,7 +72,8 @@ public final class BossWaveNotificationService {
                 bossName,
                 1,
                 activeAdds,
-                "Wave " + waveNumber + " spawned: " + spawnedNow
+                "Wave " + waveNumber + " spawned: " + spawnedNow,
+                remainingCountdownMillis
         );
     }
 
@@ -88,6 +101,12 @@ public final class BossWaveNotificationService {
             }
 
             if (playerPosition.distanceTo(center) > NOTIFY_RADIUS) {
+                try {
+                    // Clear any previously shown BossArena title once the player leaves range.
+                    EventTitleUtil.hideEventTitleFromPlayer(playerRef, 0f);
+                } catch (Exception e) {
+                    LOGGER.fine(() -> "Failed to hide out-of-range wave notification: " + e.getMessage());
+                }
                 continue;
             }
 
@@ -114,5 +133,16 @@ public final class BossWaveNotificationService {
             return "Boss";
         }
         return bossName.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String formatCountdownPrefix(long remainingCountdownMillis) {
+        if (remainingCountdownMillis < 0L) {
+            return "";
+        }
+
+        long totalSeconds = Math.max(0L, remainingCountdownMillis / 1000L);
+        long minutes = totalSeconds / 60L;
+        long seconds = totalSeconds % 60L;
+        return "Time left: " + String.format(Locale.ROOT, "%02d:%02d", minutes, seconds) + " | ";
     }
 }

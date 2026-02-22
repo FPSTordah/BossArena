@@ -387,6 +387,21 @@ public final class BossShopConfig {
         return before - tableLocations.size();
     }
 
+    public boolean hasTableLocationAt(int x, int y, int z) {
+        if (tableLocations == null || tableLocations.isEmpty()) {
+            return false;
+        }
+        for (ShopTableLocation location : tableLocations) {
+            if (location == null) {
+                continue;
+            }
+            if (location.x == x && location.y == y && location.z == z) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean containsLocation(List<ShopTableLocation> list, String worldName, int x, int y, int z) {
         if (list == null || list.isEmpty()) {
             return false;

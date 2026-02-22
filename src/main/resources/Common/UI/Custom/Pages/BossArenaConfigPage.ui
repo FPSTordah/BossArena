@@ -152,6 +152,94 @@ Group {
       Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
     }
 
+    TextButton #BossScrollUp {
+      Anchor: (Left: 1168, Top: 96, Width: 22, Height: 22);
+      Text: "^";
+      Visible: false;
+      Style: TextButtonStyle(
+        Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #38567b, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+
+    Panel #BossScrollTrack {
+      Anchor: (Left: 1174, Top: 122, Width: 10, Height: 376);
+      Background: #122036;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb1 {
+      Anchor: (Left: 1174, Top: 122, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb2 {
+      Anchor: (Left: 1174, Top: 156, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb3 {
+      Anchor: (Left: 1174, Top: 190, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb4 {
+      Anchor: (Left: 1174, Top: 224, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb5 {
+      Anchor: (Left: 1174, Top: 258, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb6 {
+      Anchor: (Left: 1174, Top: 292, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb7 {
+      Anchor: (Left: 1174, Top: 326, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb8 {
+      Anchor: (Left: 1174, Top: 360, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb9 {
+      Anchor: (Left: 1174, Top: 394, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    Panel #BossScrollThumb10 {
+      Anchor: (Left: 1174, Top: 428, Width: 10, Height: 70);
+      Background: #4f79ab;
+      Visible: false;
+    }
+
+    TextButton #BossScrollDown {
+      Anchor: (Left: 1168, Top: 500, Width: 22, Height: 22);
+      Text: "v";
+      Visible: false;
+      Style: TextButtonStyle(
+        Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #38567b, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+
     Label #BossEmptyLabel {
       Anchor: (Left: 32, Top: 124, Width: 1136, Height: 30);
       Text: "";
@@ -160,10 +248,17 @@ Group {
     }
 
     Label #BossOverflowLabel {
-      Anchor: (Left: 32, Top: 546, Width: 1136, Height: 26);
+      Anchor: (Left: 32, Top: 546, Width: 950, Height: 26);
       Text: "";
       Visible: false;
       Style: (FontSize: 14, TextColor: #ffd88f);
+    }
+
+    Label #BossScrollPageLabel {
+      Anchor: (Left: 994, Top: 546, Width: 196, Height: 26);
+      Text: "";
+      Visible: false;
+      Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true, VerticalAlignment: Center);
     }
 
     Panel #BossRow1 {
@@ -400,18 +495,21 @@ Group {
 
         Label #BossWavesTimeLabel { Anchor: (Left: 268, Top: 194, Width: 220, Height: 20); Text: "Time Between Waves (sec)"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
         TextField #BossWavesTimeSec { Anchor: (Left: 268, Top: 216, Width: 220, Height: 28); Value: "0"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
-        Label #BossWavesHint { Anchor: (Left: 500, Top: 219, Width: 432, Height: 20); Text: "Every 1 = every wave, 2 = every 2nd wave, etc."; Style: (FontSize: 12, TextColor: #8ea1bb); }
+        Label #BossWavesHint { Anchor: (Left: 500, Top: 219, Width: 432, Height: 20); Text: "Every 1 = every wave. Scale uses multipliers (1.00 = default)."; Style: (FontSize: 12, TextColor: #8ea1bb); }
 
-        Label #BossWavesHeaderNpc { Anchor: (Left: 268, Top: 254, Width: 332, Height: 20); Text: "NPC ID"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
-        Label #BossWavesHeaderAmount { Anchor: (Left: 614, Top: 254, Width: 110, Height: 20); Text: "Amount"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
-        Label #BossWavesHeaderEvery { Anchor: (Left: 730, Top: 254, Width: 130, Height: 20); Text: "Every N Waves"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderNpc { Anchor: (Left: 268, Top: 254, Width: 220, Height: 20); Text: "NPC ID"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderAmount { Anchor: (Left: 504, Top: 254, Width: 60, Height: 20); Text: "Amt"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderEvery { Anchor: (Left: 572, Top: 254, Width: 78, Height: 20); Text: "Every"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderHp { Anchor: (Left: 658, Top: 254, Width: 70, Height: 20); Text: "HP"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderDamage { Anchor: (Left: 736, Top: 254, Width: 70, Height: 20); Text: "DMG"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossWavesHeaderSize { Anchor: (Left: 814, Top: 254, Width: 70, Height: 20); Text: "Size"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
 
-        Panel #BossWavesRow1 { Anchor: (Left: 268, Top: 276, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc1 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount1 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery1 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction1 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
-        Panel #BossWavesRow2 { Anchor: (Left: 268, Top: 310, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc2 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount2 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery2 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction2 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
-        Panel #BossWavesRow3 { Anchor: (Left: 268, Top: 344, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc3 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount3 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery3 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction3 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
-        Panel #BossWavesRow4 { Anchor: (Left: 268, Top: 378, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc4 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount4 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery4 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction4 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
-        Panel #BossWavesRow5 { Anchor: (Left: 268, Top: 412, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc5 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount5 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery5 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction5 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
-        Panel #BossWavesRow6 { Anchor: (Left: 268, Top: 446, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc6 { Anchor: (Left: 8, Top: 1, Width: 330, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount6 { Anchor: (Left: 346, Top: 1, Width: 108, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery6 { Anchor: (Left: 462, Top: 1, Width: 128, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction6 { Anchor: (Left: 598, Top: 1, Width: 56, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow1 { Anchor: (Left: 268, Top: 276, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc1 { Anchor: (Left: 8, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount1 { Anchor: (Left: 236, Top: 1, Width: 60, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery1 { Anchor: (Left: 304, Top: 1, Width: 78, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveHp1 { Anchor: (Left: 390, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveDamage1 { Anchor: (Left: 468, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveSize1 { Anchor: (Left: 546, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction1 { Anchor: (Left: 624, Top: 1, Width: 32, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow2 { Anchor: (Left: 268, Top: 310, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc2 { Anchor: (Left: 8, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount2 { Anchor: (Left: 236, Top: 1, Width: 60, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery2 { Anchor: (Left: 304, Top: 1, Width: 78, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveHp2 { Anchor: (Left: 390, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveDamage2 { Anchor: (Left: 468, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveSize2 { Anchor: (Left: 546, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction2 { Anchor: (Left: 624, Top: 1, Width: 32, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow3 { Anchor: (Left: 268, Top: 344, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc3 { Anchor: (Left: 8, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount3 { Anchor: (Left: 236, Top: 1, Width: 60, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery3 { Anchor: (Left: 304, Top: 1, Width: 78, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveHp3 { Anchor: (Left: 390, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveDamage3 { Anchor: (Left: 468, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveSize3 { Anchor: (Left: 546, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction3 { Anchor: (Left: 624, Top: 1, Width: 32, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow4 { Anchor: (Left: 268, Top: 378, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc4 { Anchor: (Left: 8, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount4 { Anchor: (Left: 236, Top: 1, Width: 60, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery4 { Anchor: (Left: 304, Top: 1, Width: 78, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveHp4 { Anchor: (Left: 390, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveDamage4 { Anchor: (Left: 468, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveSize4 { Anchor: (Left: 546, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction4 { Anchor: (Left: 624, Top: 1, Width: 32, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow5 { Anchor: (Left: 268, Top: 412, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc5 { Anchor: (Left: 8, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount5 { Anchor: (Left: 236, Top: 1, Width: 60, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery5 { Anchor: (Left: 304, Top: 1, Width: 78, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveHp5 { Anchor: (Left: 390, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveDamage5 { Anchor: (Left: 468, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveSize5 { Anchor: (Left: 546, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction5 { Anchor: (Left: 624, Top: 1, Width: 32, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
+        Panel #BossWavesRow6 { Anchor: (Left: 268, Top: 446, Width: 664, Height: 30); Background: #1a2b41; TextField #BossWaveNpc6 { Anchor: (Left: 8, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveAmount6 { Anchor: (Left: 236, Top: 1, Width: 60, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveEvery6 { Anchor: (Left: 304, Top: 1, Width: 78, Height: 28); Value: "1"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveHp6 { Anchor: (Left: 390, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveDamage6 { Anchor: (Left: 468, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #BossWaveSize6 { Anchor: (Left: 546, Top: 1, Width: 70, Height: 28); Value: "1.00"; Style: (FontSize: 13, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextButton #BossWaveAction6 { Anchor: (Left: 624, Top: 1, Width: 32, Height: 28); Text: "+"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 14, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 14, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
 
         TextButton #BossWavesSaveButton {
           Anchor: (Left: 812, Top: 494, Width: 120, Height: 34);
@@ -649,7 +747,7 @@ Group {
       }
 
       TextButton #ShopTableEditorSaveButton {
-        Anchor: (Left: 920, Top: 600, Width: 128, Height: 34);
+        Anchor: (Left: 920, Top: 536, Width: 128, Height: 34);
         Text: "Save";
         Style: TextButtonStyle(
           Default: (Background: #1f7d4b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),

@@ -9,6 +9,7 @@ import com.bossarena.command.BossArenaShortCommand;
 import com.bossarena.spawn.BossSpawnService;
 import com.bossarena.system.BossTrackingSystem;
 import com.bossarena.system.BossDeathSystem;
+import com.bossarena.system.BossEventNotificationSystem;
 import com.bossarena.system.LootSpawnSystem;
 import com.bossarena.loot.LootRegistry;
 import com.bossarena.loot.BossLootHandler;
@@ -37,6 +38,7 @@ import com.hypixel.hytale.server.core.modules.entity.component.TransformComponen
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.RootInteraction;
+import com.hypixel.hytale.server.core.modules.interaction.interaction.config.SimpleInteraction;
 import com.hypixel.hytale.protocol.InteractionType;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
@@ -58,6 +60,7 @@ import java.util.concurrent.CompletableFuture;
 public final class BossArenaPlugin extends JavaPlugin {
     private static BossArenaPlugin INSTANCE;
     public static final String ASSET_PACK_ID = "com.bossarena:BossArena";
+    public static final String NO_DEATH_DROPS_INTERACTION_ID = "BossArena_NoDeathDrops";
     private static final Path MOD_ROOT = Path.of("mods", "BossArena");
     private static final String[] SHOP_ICON_NAMES = new String[]{
             "common1.png", "common2.png", "common3.png", "common4.png",
@@ -103,6 +106,7 @@ public final class BossArenaPlugin extends JavaPlugin {
         // Register ECS systems
         this.getEntityStoreRegistry().registerSystem(new LootSpawnSystem());
         this.getEntityStoreRegistry().registerSystem(new BossDeathSystem(trackingSystem));
+        this.getEntityStoreRegistry().registerSystem(new BossEventNotificationSystem(trackingSystem));
         getLogger().atInfo().log("Successfully registered boss systems");
 
         // Register chest interaction event
@@ -144,7 +148,7 @@ public final class BossArenaPlugin extends JavaPlugin {
             getLogger().atSevere().withCause(e).log("Failed to register BossArena commands");
         }
 
-        this.bossSpawnService = new BossSpawnService(trackingSystem);
+        this.bossSpawnService = new BossSpawnService(trackingSystem, config);
 
         // Async startup
         CompletableFuture.runAsync(() -> {
@@ -181,11 +185,19 @@ public final class BossArenaPlugin extends JavaPlugin {
             RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(shopInteraction));
             getLogger().atInfo().log("Registered RootInteraction: BossArena_OpenShop");
 
+            RootInteraction noDeathDropsInteraction = new RootInteraction(
+                    NO_DEATH_DROPS_INTERACTION_ID,
+                    NO_DEATH_DROPS_INTERACTION_ID
+            );
+            RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(noDeathDropsInteraction));
+            getLogger().atInfo().log("Registered RootInteraction: " + NO_DEATH_DROPS_INTERACTION_ID);
+
             Interaction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(
                     new OpenBossChestInteraction(),
-                    new OpenBossShopInteraction()
+                    new OpenBossShopInteraction(),
+                    new SimpleInteraction(NO_DEATH_DROPS_INTERACTION_ID)
             ));
-            getLogger().atInfo().log("Registered interaction assets for BossArena_OpenChest and BossArena_OpenShop");
+            getLogger().atInfo().log("Registered interaction assets for BossArena_OpenChest, BossArena_OpenShop, and " + NO_DEATH_DROPS_INTERACTION_ID);
 
         } catch (Exception e) {
             getLogger().atSevere().withCause(e).log("Failed to register custom interactions");
@@ -700,16 +712,19 @@ public final class BossArenaPlugin extends JavaPlugin {
             return;
         }
 
-        var blockType = event.getBlockType();
-        if (blockType == null || blockType.getId() == null) {
-            return;
-        }
-        if (!isShopBlockId(blockType.getId())) {
+        Vector3i target = event.getTargetBlock();
+        if (target == null) {
             return;
         }
 
-        Vector3i target = event.getTargetBlock();
-        if (target == null) {
+        String blockId = null;
+        var blockType = event.getBlockType();
+        if (blockType != null) {
+            blockId = blockType.getId();
+        }
+
+        boolean looksLikeShop = blockId != null && isShopBlockId(blockId);
+        if (!looksLikeShop && !shopConfig.hasTableLocationAt(target.x, target.y, target.z)) {
             return;
         }
 
@@ -718,8 +733,10 @@ public final class BossArenaPlugin extends JavaPlugin {
             return;
         }
 
+        String resolvedBlockId = blockId == null ? "<unknown>" : blockId;
         getLogger().atInfo().log("Removed " + removed + " saved shop table location(s) at "
-                + target.x + ", " + target.y + ", " + target.z + " after block break");
+                + target.x + ", " + target.y + ", " + target.z
+                + " after block break (blockId=" + resolvedBlockId + ")");
         saveShopConfig();
     }
 
@@ -729,7 +746,8 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     private static boolean isShopBlockId(String blockId) {
         String normalized = blockId.toLowerCase(Locale.ROOT);
-        return normalized.contains("boss_arena_shop");
+        return normalized.contains("boss_arena_shop")
+                || normalized.contains("boss_shop");
     }
 
     private void manuallyOpenChest(Ref<EntityStore> playerRef, BossLootChestState state,
@@ -961,9 +979,6 @@ public final class BossArenaPlugin extends JavaPlugin {
         return CompletableFuture.runAsync(() -> {
             try {
                 List<BossDefinition> bosses = new ArrayList<>(BossRegistry.getAll().values());
-                bosses.sort(Comparator.comparing(
-                        boss -> boss != null && boss.bossName != null ? boss.bossName.toLowerCase(Locale.ROOT) : ""
-                ));
                 String prettyJson = new GsonBuilder().setPrettyPrinting().create().toJson(bosses);
                 Files.createDirectories(bossesJsonPath.getParent());
                 Files.writeString(bossesJsonPath, prettyJson, StandardCharsets.UTF_8);

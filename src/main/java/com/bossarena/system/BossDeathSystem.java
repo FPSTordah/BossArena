@@ -4,14 +4,20 @@ import com.bossarena.loot.BossLootHandler;
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.component.dependency.Dependency;
+import com.hypixel.hytale.component.dependency.Order;
+import com.hypixel.hytale.component.dependency.SystemDependency;
 import com.hypixel.hytale.component.query.Query;
+import com.hypixel.hytale.server.core.asset.type.gameplay.DeathConfig;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.modules.entity.damage.DeathComponent;
 import com.hypixel.hytale.server.core.modules.entity.damage.DeathSystems;
+import com.hypixel.hytale.server.npc.systems.NPCDamageSystems;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 
 import javax.annotation.Nonnull;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -29,6 +35,12 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
         return TransformComponent.getComponentType();
     }
 
+    @Nonnull
+    @Override
+    public Set<Dependency<EntityStore>> getDependencies() {
+        return Set.of(new SystemDependency<>(Order.BEFORE, NPCDamageSystems.DropDeathItems.class));
+    }
+
     @Override
     public void onComponentAdded(@Nonnull Ref<EntityStore> ref,
                                  @Nonnull DeathComponent component,
@@ -43,46 +55,56 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
 
         UUIDComponent uuidComp = (UUIDComponent) uuidCompObj;
         UUID entityUuid = uuidComp.getUuid();
+        boolean trackedBoss = trackingSystem.isTracked(entityUuid);
+        boolean trackedAdd = trackingSystem.isTrackedAdd(entityUuid);
 
-        if (trackingSystem.isTracked(entityUuid)) {
+        if (trackedBoss || trackedAdd) {
+            // Prevent NPCDamageSystems.DropDeathItems from generating world loot.
+            component.setItemsLossMode(DeathConfig.ItemsLossMode.NONE);
+        }
+
+        if (trackedBoss) {
             handleTrackedBossDeath(entityUuid);
             return;
         }
 
-        if (trackingSystem.isTrackedAdd(entityUuid)) {
+        if (trackedAdd) {
             handleTrackedAddDeath(entityUuid);
         }
     }
 
     private void handleTrackedBossDeath(UUID bossUuid) {
         LOGGER.info("🎯 BOSS DIED! UUID: " + bossUuid);
-        BossTrackingSystem.BossEventContext eventContext = trackingSystem.getEventContext(bossUuid);
-        int activeAdds = trackingSystem.getActiveAddCount(bossUuid);
         BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.markBossDead(bossUuid);
+        BossTrackingSystem.BossEventContext eventContext = trackingSystem.getEventContext(bossUuid);
+        int aliveBosses = trackingSystem.getAliveBossCount(bossUuid);
+        int activeAdds = trackingSystem.getActiveAddCountForEvent(bossUuid);
 
         if (pendingLoot != null) {
-            LOGGER.info("Boss '" + pendingLoot.bossName + "' died with no active adds, spawning loot now.");
+            LOGGER.info("Boss event for '" + pendingLoot.bossName + "' is complete, spawning one loot chest.");
             BossWaveNotificationService.notifyBossAliveStatus(
                     pendingLoot.world,
                     pendingLoot.spawnLocation,
                     pendingLoot.bossName,
                     0,
                     0,
-                    null
+                    null,
+                    0L
             );
             BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
             return;
         }
 
-        LOGGER.info("Boss died but waiting on " + activeAdds + " active add(s) before spawning loot chest.");
+        LOGGER.info("Boss died but event still has " + aliveBosses + " boss(es) and " + activeAdds + " add(s) alive.");
         if (eventContext != null) {
             BossWaveNotificationService.notifyBossAliveStatus(
                     eventContext.world,
                     eventContext.spawnLocation,
                     eventContext.bossName,
-                    0,
+                    aliveBosses,
                     activeAdds,
-                    null
+                    null,
+                    eventContext.remainingCountdownMillis
             );
         }
     }
@@ -91,35 +113,34 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
         UUID bossUuid = trackingSystem.getBossUuidForAdd(addUuid);
         BossTrackingSystem.BossEventContext eventContext = trackingSystem.getEventContext(bossUuid);
         BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.handleTrackedAddDeath(addUuid);
-        int remainingAdds = bossUuid != null ? trackingSystem.getActiveAddCount(bossUuid) : 0;
+        int remainingAdds = bossUuid != null ? trackingSystem.getActiveAddCountForEvent(bossUuid) : 0;
+        int remainingBosses = bossUuid != null ? trackingSystem.getAliveBossCount(bossUuid) : 0;
 
-        if (eventContext != null) {
-            if (bossUuid != null && trackingSystem.isTracked(bossUuid)) {
-                BossWaveNotificationService.notifyBossAliveStatus(
-                        eventContext.world,
-                        eventContext.spawnLocation,
-                        eventContext.bossName,
-                        1,
-                        remainingAdds,
-                        null
-                );
-            } else {
-                BossWaveNotificationService.notifyBossAliveStatus(
-                        eventContext.world,
-                        eventContext.spawnLocation,
-                        eventContext.bossName,
-                        0,
-                        remainingAdds,
-                        null
-                );
-            }
-        }
-
-        if (pendingLoot == null) {
+        if (pendingLoot != null) {
+            LOGGER.info("All bosses and tracked adds are dead for '" + pendingLoot.bossName + "', spawning one loot chest.");
+            BossWaveNotificationService.notifyBossAliveStatus(
+                    pendingLoot.world,
+                    pendingLoot.spawnLocation,
+                    pendingLoot.bossName,
+                    0,
+                    0,
+                    null,
+                    0L
+            );
+            BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
             return;
         }
 
-        LOGGER.info("All tracked adds dead for boss '" + pendingLoot.bossName + "', spawning loot chest.");
-        BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
+        if (eventContext != null) {
+            BossWaveNotificationService.notifyBossAliveStatus(
+                    eventContext.world,
+                    eventContext.spawnLocation,
+                    eventContext.bossName,
+                    remainingBosses,
+                    remainingAdds,
+                    null,
+                    eventContext.remainingCountdownMillis
+            );
+        }
     }
 }

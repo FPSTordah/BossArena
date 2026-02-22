@@ -1,12 +1,12 @@
 package com.bossarena.data;
 
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
 public final class BossRegistry {
   private static final Logger LOGGER = Logger.getLogger("BossArena");
-  private static final Map<String, BossDefinition> BOSSES = new HashMap<>();
+  private static final Map<String, BossDefinition> BOSSES = new LinkedHashMap<>();
   private static final String DEFAULT_TIER = "uncommon";
 
   private BossRegistry() {}
@@ -63,6 +63,6 @@ public final class BossRegistry {
   }
 
   public static Map<String, BossDefinition> getAll() {
-    return new HashMap<>(BOSSES);
+    return new LinkedHashMap<>(BOSSES);
   }
 }

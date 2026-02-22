@@ -38,6 +38,9 @@ public class BossDefinition {
             public int mobsPerWave = 3;
             // 1 = every wave, 2 = every 2nd wave, etc.
             public int everyWave = 1;
+            public float hp = 1.0f;
+            public float damage = 1.0f;
+            public float size = 1.0f;
         }
 
         public void sanitize() {
@@ -70,6 +73,15 @@ public class BossDefinition {
                 }
                 if (add.everyWave < 1) {
                     add.everyWave = 1;
+                }
+                if (!Float.isFinite(add.hp) || add.hp <= 0f) {
+                    add.hp = 1.0f;
+                }
+                if (!Float.isFinite(add.damage) || add.damage <= 0f) {
+                    add.damage = 1.0f;
+                }
+                if (!Float.isFinite(add.size) || add.size <= 0f) {
+                    add.size = 1.0f;
                 }
                 cleaned.add(add);
             }
