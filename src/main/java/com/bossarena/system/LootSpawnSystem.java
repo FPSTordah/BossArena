@@ -13,6 +13,9 @@ public class LootSpawnSystem extends TickingSystem<EntityStore> {
 
     @Override
     public void tick(float dt, int index, @Nonnull Store<EntityStore> store) {
+        // If worlds finish loading after plugin setup, restore any pending expiry tasks.
+        BossLootHandler.restorePendingExpiryTasks();
+
         // Process all pending loot spawns
         while (!BossLootHandler.PENDING_SPAWNS.isEmpty()) {
             var spawn = BossLootHandler.PENDING_SPAWNS.poll();

@@ -1,12 +1,15 @@
 package com.bossarena.loot;
 
 import com.bossarena.BossArenaPlugin;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.asset.type.blockhitbox.BlockBoundingBoxes;
+import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
@@ -14,6 +17,10 @@ import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.util.FillerBlockUtil;
 import com.hypixel.hytale.function.consumer.TriIntConsumer;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -26,6 +33,8 @@ import java.util.logging.Logger;
 
 public class BossLootHandler {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final int PERSISTENCE_VERSION = 1;
 
     public static class PendingLootSpawn {
         public final World world;
@@ -41,7 +50,9 @@ public class BossLootHandler {
 
     public static final Queue<PendingLootSpawn> PENDING_SPAWNS = new ConcurrentLinkedQueue<>();
     private static final Map<Vector3d, Map<UUID, List<GeneratedLoot>>> CHEST_LOOT = new ConcurrentHashMap<>();
+    private static final Map<Vector3d, String> CHEST_WORLD = new ConcurrentHashMap<>();
     private static final Map<Vector3d, ScheduledFuture<?>> CHEST_EXPIRY_TASKS = new ConcurrentHashMap<>();
+    private static final Map<Vector3d, Long> CHEST_EXPIRY_DEADLINES = new ConcurrentHashMap<>();
     private static final ScheduledExecutorService CHEST_EXPIRY_EXECUTOR =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "BossArena-ChestExpiry");
@@ -49,6 +60,54 @@ public class BossLootHandler {
                 return t;
             });
     private static final long CHEST_EXPIRY_MS = 30_000L;
+    private static volatile Path persistencePath;
+
+    private static final class PersistedLootState {
+        int version = PERSISTENCE_VERSION;
+        List<PersistedChest> chests = new ArrayList<>();
+    }
+
+    private static final class PersistedChest {
+        String world;
+        double x;
+        double y;
+        double z;
+        Long expiresAtEpochMs;
+        List<PersistedPlayerLoot> players = new ArrayList<>();
+    }
+
+    private static final class PersistedPlayerLoot {
+        String playerUuid;
+        List<PersistedLootItem> loot = new ArrayList<>();
+    }
+
+    private static final class PersistedLootItem {
+        String itemId;
+        int amount;
+    }
+
+    public static synchronized void initializePersistence(Path stateFilePath) {
+        persistencePath = stateFilePath;
+        clearRuntimeState();
+        loadPersistentState();
+        restorePendingExpiryTasks();
+    }
+
+    public static synchronized void flushPersistence() {
+        persistState();
+    }
+
+    private static void clearRuntimeState() {
+        for (ScheduledFuture<?> future : CHEST_EXPIRY_TASKS.values()) {
+            if (future != null) {
+                future.cancel(false);
+            }
+        }
+        CHEST_EXPIRY_TASKS.clear();
+        CHEST_EXPIRY_DEADLINES.clear();
+        CHEST_WORLD.clear();
+        CHEST_LOOT.clear();
+    }
 
     // Queue a loot spawn
     public static void queueLootSpawn(World world, Vector3d location, String bossName) {
@@ -110,28 +169,37 @@ public class BossLootHandler {
         Vector3d chestCopy = new Vector3d(chestLocation.x, chestLocation.y, chestLocation.z);
 
         // Store the loot at this location
-        storeLootAtChest(chestCopy, allPlayerLoot);
+        storeLootAtChest(world, chestCopy, allPlayerLoot);
 
         // Spawn the chest
         spawnLootChest(world, chestCopy);
     }
 
     // Store loot at chest location
-    private static void storeLootAtChest(Vector3d location, Map<UUID, List<GeneratedLoot>> playerLoot) {
+    private static void storeLootAtChest(World world, Vector3d location, Map<UUID, List<GeneratedLoot>> playerLoot) {
         Vector3d key = normalizeChestKey(location);
-        CHEST_LOOT.put(key, playerLoot);
+        CHEST_LOOT.put(key, new ConcurrentHashMap<>(playerLoot));
+        if (world != null) {
+            CHEST_WORLD.put(key, world.getName());
+        }
+        CHEST_EXPIRY_DEADLINES.remove(key);
         LOGGER.info("Stored loot at chest location: " + key + " for " + playerLoot.size() + " players");
+        persistStateSafe();
     }
 
     // Check if there's loot at a location (within 2 blocks)
     public static boolean hasLootAtLocation(Vector3d location) {
+        return hasLootAtLocation(null, location);
+    }
+
+    public static boolean hasLootAtLocation(World world, Vector3d location) {
         Vector3d key = normalizeChestKey(location);
-        if (CHEST_LOOT.containsKey(key)) {
+        if (CHEST_LOOT.containsKey(key) && isWorldMatch(world, key)) {
             return true;
         }
         for (Vector3d chestLoc : CHEST_LOOT.keySet()) {
             double dist = chestLoc.distanceTo(location);
-            if (dist < 2.0) {
+            if (dist < 2.0 && isWorldMatch(world, chestLoc)) {
                 return true;
             }
         }
@@ -140,13 +208,17 @@ public class BossLootHandler {
 
     // Get loot chest location near a position
     public static Vector3d getChestLocationNear(Vector3d location) {
+        return getChestLocationNear(null, location);
+    }
+
+    public static Vector3d getChestLocationNear(World world, Vector3d location) {
         Vector3d key = normalizeChestKey(location);
-        if (CHEST_LOOT.containsKey(key)) {
+        if (CHEST_LOOT.containsKey(key) && isWorldMatch(world, key)) {
             return key;
         }
         for (Vector3d chestLoc : CHEST_LOOT.keySet()) {
             double dist = chestLoc.distanceTo(location);
-            if (dist < 2.0) {
+            if (dist < 2.0 && isWorldMatch(world, chestLoc)) {
                 return chestLoc;
             }
         }
@@ -156,7 +228,7 @@ public class BossLootHandler {
     // Claim loot for a player
     public static List<GeneratedLoot> claimLoot(World world, Vector3d location, UUID playerUuid) {
         // Find the chest (within 2 blocks)
-        Vector3d chestLoc = getChestLocationNear(location);
+        Vector3d chestLoc = getChestLocationNear(world, location);
 
         if (chestLoc == null) {
             LOGGER.info("No chest found near " + location);
@@ -183,11 +255,12 @@ public class BossLootHandler {
             LOGGER.info("All loot claimed at " + chestLoc + ", waiting for chest close to remove");
         }
 
+        persistStateSafe();
         return loot;
     }
 
     public static void cleanupChestIfEmpty(World world, Vector3d location) {
-        Vector3d chestLoc = getChestLocationNear(location);
+        Vector3d chestLoc = getChestLocationNear(world, location);
         if (chestLoc == null) {
             return;
         }
@@ -195,9 +268,11 @@ public class BossLootHandler {
         Map<UUID, List<GeneratedLoot>> playerLoot = CHEST_LOOT.get(chestLoc);
         if (playerLoot == null || playerLoot.isEmpty()) {
             CHEST_LOOT.remove(chestLoc);
-            cancelChestExpiry(chestLoc);
+            CHEST_WORLD.remove(chestLoc);
+            cancelChestExpiry(chestLoc, false);
             removeChestBlock(world, chestLoc);
             LOGGER.info("All loot claimed, removed chest at " + chestLoc);
+            persistStateSafe();
         }
     }
 
@@ -207,26 +282,17 @@ public class BossLootHandler {
         }
 
         Vector3d key = normalizeChestKey(location);
-        ScheduledFuture<?> existing = CHEST_EXPIRY_TASKS.remove(key);
-        if (existing != null) {
-            existing.cancel(false);
-        }
-
-        ScheduledFuture<?> future = CHEST_EXPIRY_EXECUTOR.schedule(() -> {
-            world.execute(() -> {
-                CHEST_LOOT.remove(key);
-                CHEST_EXPIRY_TASKS.remove(key);
-                removeChestBlock(world, key);
-                LOGGER.info("Chest expired after inactivity: " + key);
-            });
-        }, CHEST_EXPIRY_MS, TimeUnit.MILLISECONDS);
-
-        CHEST_EXPIRY_TASKS.put(key, future);
+        long expiresAtEpochMs = System.currentTimeMillis() + CHEST_EXPIRY_MS;
+        scheduleChestExpiryInternal(world, key, CHEST_EXPIRY_MS, expiresAtEpochMs, true);
     }
 
     // Check if player has unclaimed loot at a location
     public static boolean hasUnclaimedLoot(Vector3d location, UUID playerUuid) {
-        Vector3d chestLoc = getChestLocationNear(location);
+        return hasUnclaimedLoot(null, location, playerUuid);
+    }
+
+    public static boolean hasUnclaimedLoot(World world, Vector3d location, UUID playerUuid) {
+        Vector3d chestLoc = getChestLocationNear(world, location);
         if (chestLoc == null) {
             return false;
         }
@@ -287,13 +353,18 @@ public class BossLootHandler {
 
     // Get stored loot for a player at a location (for BossLootChestState)
     public static List<GeneratedLoot> getStoredLootForPlayer(Vector3d location, UUID playerUuid) {
+        return getStoredLootForPlayer(null, location, playerUuid);
+    }
+
+    public static List<GeneratedLoot> getStoredLootForPlayer(World world, Vector3d location, UUID playerUuid) {
         Vector3d key = normalizeChestKey(location);
         Map<UUID, List<GeneratedLoot>> chestLoot = CHEST_LOOT.get(key);
 
-        if (chestLoot == null) {
+        if (chestLoot == null || !isWorldMatch(world, key)) {
+            chestLoot = null;
             // Try to find nearby chest (in case of floating point precision issues)
             for (Vector3d chestLoc : CHEST_LOOT.keySet()) {
-                if (chestLoc.distanceTo(location) < 2.0) {
+                if (chestLoc.distanceTo(location) < 2.0 && isWorldMatch(world, chestLoc)) {
                     chestLoot = CHEST_LOOT.get(chestLoc);
                     break;
                 }
@@ -419,6 +490,83 @@ public class BossLootHandler {
         );
     }
 
+    private static boolean isWorldMatch(World world, Vector3d chestLoc) {
+        if (world == null) {
+            return true;
+        }
+        String expectedWorld = CHEST_WORLD.get(chestLoc);
+        return expectedWorld == null || expectedWorld.equalsIgnoreCase(world.getName());
+    }
+
+    private static World resolveWorldForChest(Vector3d chestLoc) {
+        String worldName = CHEST_WORLD.get(chestLoc);
+        if (worldName == null || worldName.isBlank()) {
+            return null;
+        }
+        Universe universe = Universe.get();
+        if (universe == null) {
+            return null;
+        }
+        return universe.getWorld(worldName);
+    }
+
+    public static void restorePendingExpiryTasks() {
+        long now = System.currentTimeMillis();
+        List<Map.Entry<Vector3d, Long>> pending = new ArrayList<>(CHEST_EXPIRY_DEADLINES.entrySet());
+        for (Map.Entry<Vector3d, Long> entry : pending) {
+            Vector3d key = entry.getKey();
+            Long expiresAt = entry.getValue();
+            if (key == null || expiresAt == null || CHEST_EXPIRY_TASKS.containsKey(key)) {
+                continue;
+            }
+
+            World world = resolveWorldForChest(key);
+            if (world == null) {
+                continue;
+            }
+
+            long delay = Math.max(0L, expiresAt - now);
+            scheduleChestExpiryInternal(world, key, delay, expiresAt, false);
+        }
+    }
+
+    private static void scheduleChestExpiryInternal(World world,
+                                                    Vector3d key,
+                                                    long delayMs,
+                                                    long expiresAtEpochMs,
+                                                    boolean persist) {
+        if (world == null || key == null) {
+            return;
+        }
+
+        cancelChestExpiry(key, false);
+        CHEST_WORLD.putIfAbsent(key, world.getName());
+        CHEST_EXPIRY_DEADLINES.put(key, expiresAtEpochMs);
+
+        ScheduledFuture<?> future = CHEST_EXPIRY_EXECUTOR.schedule(
+                () -> expireChestOnWorldThread(world, key),
+                Math.max(0L, delayMs),
+                TimeUnit.MILLISECONDS
+        );
+        CHEST_EXPIRY_TASKS.put(key, future);
+
+        if (persist) {
+            persistStateSafe();
+        }
+    }
+
+    private static void expireChestOnWorldThread(World world, Vector3d key) {
+        world.execute(() -> {
+            CHEST_LOOT.remove(key);
+            CHEST_WORLD.remove(key);
+            CHEST_EXPIRY_DEADLINES.remove(key);
+            CHEST_EXPIRY_TASKS.remove(key);
+            removeChestBlock(world, key);
+            LOGGER.info("Chest expired after inactivity: " + key);
+            persistStateSafe();
+        });
+    }
+
     private static void removeChestBlock(World world, Vector3d location) {
         if (world == null) {
             LOGGER.warning("Cannot remove chest block: world is null");
@@ -529,10 +677,189 @@ public class BossLootHandler {
     }
 
     private static void cancelChestExpiry(Vector3d location) {
+        cancelChestExpiry(location, true);
+    }
+
+    private static void cancelChestExpiry(Vector3d location, boolean persist) {
         Vector3d key = normalizeChestKey(location);
         ScheduledFuture<?> future = CHEST_EXPIRY_TASKS.remove(key);
         if (future != null) {
             future.cancel(false);
+        }
+        CHEST_EXPIRY_DEADLINES.remove(key);
+        if (persist) {
+            persistStateSafe();
+        }
+    }
+
+    private static synchronized void loadPersistentState() {
+        if (persistencePath == null || !Files.exists(persistencePath)) {
+            return;
+        }
+
+        try {
+            String json = Files.readString(persistencePath, StandardCharsets.UTF_8);
+            if (json.isBlank()) {
+                return;
+            }
+
+            PersistedLootState state = GSON.fromJson(json, PersistedLootState.class);
+            if (state == null || state.chests == null || state.chests.isEmpty()) {
+                return;
+            }
+
+            long now = System.currentTimeMillis();
+            int restored = 0;
+
+            for (PersistedChest persistedChest : state.chests) {
+                if (persistedChest == null) {
+                    continue;
+                }
+
+                Vector3d key = normalizeChestKey(new Vector3d(persistedChest.x, persistedChest.y, persistedChest.z));
+                Map<UUID, List<GeneratedLoot>> playerLoot = new ConcurrentHashMap<>();
+
+                if (persistedChest.players != null) {
+                    for (PersistedPlayerLoot player : persistedChest.players) {
+                        if (player == null || player.playerUuid == null || player.playerUuid.isBlank()) {
+                            continue;
+                        }
+
+                        UUID playerUuid;
+                        try {
+                            playerUuid = UUID.fromString(player.playerUuid.trim());
+                        } catch (IllegalArgumentException ignored) {
+                            continue;
+                        }
+
+                        List<GeneratedLoot> loot = new ArrayList<>();
+                        if (player.loot != null) {
+                            for (PersistedLootItem item : player.loot) {
+                                if (item == null || item.itemId == null || item.itemId.isBlank() || item.amount <= 0) {
+                                    continue;
+                                }
+                                loot.add(new GeneratedLoot(item.itemId, item.amount));
+                            }
+                        }
+
+                        if (!loot.isEmpty()) {
+                            playerLoot.put(playerUuid, loot);
+                        }
+                    }
+                }
+
+                if (playerLoot.isEmpty()) {
+                    continue;
+                }
+
+                CHEST_LOOT.put(key, playerLoot);
+                restored++;
+
+                if (persistedChest.world != null && !persistedChest.world.isBlank()) {
+                    CHEST_WORLD.put(key, persistedChest.world.trim());
+                }
+
+                if (persistedChest.expiresAtEpochMs != null) {
+                    long expiresAt = persistedChest.expiresAtEpochMs;
+                    if (expiresAt <= now) {
+                        World world = resolveWorldForChest(key);
+                        if (world != null) {
+                            scheduleChestExpiryInternal(world, key, 0L, now, false);
+                        } else {
+                            CHEST_LOOT.remove(key);
+                            CHEST_WORLD.remove(key);
+                            CHEST_EXPIRY_DEADLINES.remove(key);
+                        }
+                    } else {
+                        CHEST_EXPIRY_DEADLINES.put(key, expiresAt);
+                    }
+                }
+            }
+
+            if (restored > 0) {
+                LOGGER.info("Restored " + restored + " pending loot chest(s) from disk");
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Failed to load persisted loot chest state", e);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Invalid persisted loot chest state, skipping restore", e);
+        }
+    }
+
+    private static synchronized void persistState() {
+        if (persistencePath == null) {
+            return;
+        }
+
+        PersistedLootState state = new PersistedLootState();
+
+        for (Map.Entry<Vector3d, Map<UUID, List<GeneratedLoot>>> entry : CHEST_LOOT.entrySet()) {
+            Vector3d key = entry.getKey();
+            Map<UUID, List<GeneratedLoot>> byPlayer = entry.getValue();
+
+            if (key == null || byPlayer == null || byPlayer.isEmpty()) {
+                continue;
+            }
+
+            PersistedChest chest = new PersistedChest();
+            chest.world = CHEST_WORLD.get(key);
+            chest.x = Math.floor(key.x);
+            chest.y = Math.floor(key.y);
+            chest.z = Math.floor(key.z);
+            chest.expiresAtEpochMs = CHEST_EXPIRY_DEADLINES.get(key);
+
+            for (Map.Entry<UUID, List<GeneratedLoot>> playerEntry : byPlayer.entrySet()) {
+                UUID playerUuid = playerEntry.getKey();
+                List<GeneratedLoot> lootList = playerEntry.getValue();
+                if (playerUuid == null || lootList == null || lootList.isEmpty()) {
+                    continue;
+                }
+
+                PersistedPlayerLoot persistedPlayerLoot = new PersistedPlayerLoot();
+                persistedPlayerLoot.playerUuid = playerUuid.toString();
+
+                for (GeneratedLoot loot : lootList) {
+                    if (loot == null || loot.itemId == null || loot.itemId.isBlank() || loot.amount <= 0) {
+                        continue;
+                    }
+                    PersistedLootItem persistedLootItem = new PersistedLootItem();
+                    persistedLootItem.itemId = loot.itemId;
+                    persistedLootItem.amount = loot.amount;
+                    persistedPlayerLoot.loot.add(persistedLootItem);
+                }
+
+                if (!persistedPlayerLoot.loot.isEmpty()) {
+                    chest.players.add(persistedPlayerLoot);
+                }
+            }
+
+            if (!chest.players.isEmpty()) {
+                state.chests.add(chest);
+            }
+        }
+
+        try {
+            if (state.chests.isEmpty()) {
+                Files.deleteIfExists(persistencePath);
+                return;
+            }
+
+            Path parent = persistencePath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            String json = GSON.toJson(state);
+            Files.writeString(persistencePath, json, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Failed to persist loot chest state", e);
+        }
+    }
+
+    private static void persistStateSafe() {
+        try {
+            persistState();
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Unexpected error while persisting loot chest state", e);
         }
     }
 

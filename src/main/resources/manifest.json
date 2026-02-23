@@ -1,7 +1,7 @@
 {
   "Group": "com.bossarena",
   "Name": "BossArena",
-  "Version": "0.9.2",
+  "Version": "0.9.3",
   "Description": "Boss arena fights with per-player loot chests",
   "Authors": [
     { "Name": "Project42" }

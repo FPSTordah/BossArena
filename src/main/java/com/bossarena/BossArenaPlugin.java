@@ -78,6 +78,7 @@ public final class BossArenaPlugin extends JavaPlugin {
     private Path bossesJsonPath;
     private Path arenasJsonPath;
     private Path lootTablesPath;
+    private Path lootChestStatePath;
     private Path shopJsonPath;
 
     public BossArenaPlugin(JavaPluginInit init) {
@@ -98,6 +99,7 @@ public final class BossArenaPlugin extends JavaPlugin {
         this.bossesJsonPath = modRoot.resolve("bosses.json");
         this.arenasJsonPath = modRoot.resolve("arenas.json");
         this.lootTablesPath = modRoot.resolve("loot_tables.json");
+        this.lootChestStatePath = modRoot.resolve("loot_chests_state.json");
         this.shopJsonPath = modRoot.resolve("shop.json");
 
         // Create tracking system
@@ -629,7 +631,7 @@ public final class BossArenaPlugin extends JavaPlugin {
         Vector3d playerPos = ((TransformComponent) transformObj).getPosition();
 
         // Find chest location near player (within 5 blocks)
-        Vector3d chestLoc = BossLootHandler.getChestLocationNear(playerPos);
+        Vector3d chestLoc = BossLootHandler.getChestLocationNear(world, playerPos);
         if (chestLoc == null) {
             getLogger().atInfo().log("No boss loot chest nearby");
             return;
@@ -759,6 +761,9 @@ public final class BossArenaPlugin extends JavaPlugin {
         try {
             getLogger().atInfo().log("Starting BossArena systems...");
 
+            BossLootHandler.initializePersistence(lootChestStatePath);
+            getLogger().atInfo().log("Loot chest persistence initialized at " + lootChestStatePath);
+
             if (Files.notExists(bossesJsonPath)) {
                 writeDefaultBosses();
             }
@@ -790,6 +795,16 @@ public final class BossArenaPlugin extends JavaPlugin {
 
         } catch (Exception e) {
             getLogger().atSevere().withCause(e).log("Initialization failed for BossArena");
+        }
+    }
+
+    @Override
+    protected void shutdown() {
+        try {
+            BossLootHandler.flushPersistence();
+            getLogger().atInfo().log("Persisted loot chest state during shutdown");
+        } catch (Exception e) {
+            getLogger().atWarning().withCause(e).log("Failed to persist loot chest state during shutdown");
         }
     }
 

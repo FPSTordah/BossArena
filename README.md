@@ -4,7 +4,7 @@ BossArena is a Hytale server mod that adds configurable boss encounters, table-b
 
 ## Version
 
-- Current project version: `0.9.2`
+- Current project version: `0.9.3`
 
 ## Support
 
@@ -165,6 +165,23 @@ Fields per item:
 - `minAmount`
 - `maxAmount`
 
+### `loot_chests_state.json`
+
+Runtime persistence file for active/unclaimed boss loot chests.
+
+Stored per chest:
+
+- `world`
+- `x`, `y`, `z`
+- remaining per-player loot entries
+- optional expiry deadline timestamp
+
+Notes:
+
+- This file is managed automatically by the mod.
+- It is used to restore pending chest loot state after a server restart.
+- It is removed automatically when there are no pending boss loot chests.
+
 ### `shop.json`
 
 Main shop configuration.
@@ -224,6 +241,8 @@ Fields:
 - Loot chest is queued only after the tracked boss and tracked adds are dead.
 - Loot is per-player and claim-based.
 - Chest auto-cleans after claim completion/expiry logic.
+- Unclaimed chest loot persists across server restarts.
+- Expiry countdown state is persisted and resumed after restart when a countdown was active.
 
 ## Build
 
@@ -233,4 +252,4 @@ mvn -q -DskipTests package
 
 Output jar:
 
-- `target/BossArena-0.9.2.jar`
+- `target/BossArena-0.9.3.jar`
