@@ -105,6 +105,29 @@ public final class BossArenaCommand extends AbstractCommand {
     return new Vector3d(0, 0, 0);
   }
 
+  @SuppressWarnings("SpellCheckingInspection")
+  private static Vector3f getPlayerRotation(Player player) {
+    if (player == null) return new Vector3f(0, 0, 0);
+
+    try {
+      Method getPlayerRef = player.getClass().getMethod("getPlayerRef");
+      Object refObj = getPlayerRef.invoke(player);
+      PlayerRef playerRef = refObj instanceof PlayerRef ? (PlayerRef) refObj : null;
+      if (playerRef != null) {
+        Transform transform = playerRef.getTransform();
+        if (transform != null && transform.getRotation() != null) {
+          Vector3f rotation = transform.getRotation();
+          return new Vector3f(rotation.x, rotation.y, rotation.z);
+        }
+      }
+    } catch (Throwable t) {
+      LOGGER.log(Level.FINE, "Failed to get player rotation via reflection", t);
+    }
+
+    LOGGER.fine("Falling back to default rotation (0,0,0)");
+    return new Vector3f(0, 0, 0);
+  }
+
     @Override
     protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
       ctx.sendMessage(Message.raw(
@@ -605,7 +628,23 @@ public final class BossArenaCommand extends AbstractCommand {
     }
 
     Vector3d playerPosition = getPlayerPosition(player);
-    Vector3d spawnPosition = new Vector3d(playerPosition.x, playerPosition.y, playerPosition.z + 2.0d);
+    Vector3f playerRotation = getPlayerRotation(player);
+    float playerYaw = playerRotation.getYaw();
+    if (Float.isNaN(playerYaw)) {
+      playerYaw = 0f;
+    }
+
+    // Spawn exactly 2 blocks forward from the player's facing direction (horizontal plane).
+    Vector3d forward = Transform.getDirection(0f, playerYaw);
+    Vector3d spawnPosition = new Vector3d(
+            playerPosition.x + (forward.x * 2.0d),
+            playerPosition.y,
+            playerPosition.z + (forward.z * 2.0d)
+    );
+
+    // Make the guard face back toward the player.
+    float npcYaw = playerYaw + (float) Math.PI;
+    Vector3f npcRotation = new Vector3f(0f, npcYaw, 0f);
     String shopNpcId = plugin.getShopConfig() != null
             && plugin.getShopConfig().shopNpcId != null
             && !plugin.getShopConfig().shopNpcId.isBlank()
@@ -618,7 +657,7 @@ public final class BossArenaCommand extends AbstractCommand {
               shopNpcId,
               null,
               spawnPosition,
-              new Vector3f(0, 0, 0)
+              npcRotation
       );
 
       if (result == null) {
