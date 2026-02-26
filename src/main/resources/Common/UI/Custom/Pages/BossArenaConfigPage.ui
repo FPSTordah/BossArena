@@ -658,33 +658,33 @@ Group {
       TextButton #ShopEdit8 { Anchor: (Left: 1036, Top: 8, Width: 84, Height: 30); Text: "Edit"; Style: TextButtonStyle(Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); }
     }
 
-    Group #ShopTableEditorOverlay {
+    Group #ShopEditorOverlay {
       Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
       Visible: false;
 
-      Panel #ShopTableEditorBackdrop {
+      Panel #ShopEditorBackdrop {
         Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
         Background: #05090f(0.75);
       }
 
-      Panel #ShopTableEditorWindow {
+      Panel #ShopEditorWindow {
         Anchor: (Left: 124, Top: 74, Width: 952, Height: 512);
         Background: #0f1725;
       }
 
-      Label #ShopTableEditorTitle {
+      Label #ShopEditorTitle {
         Anchor: (Left: 152, Top: 96, Width: 660, Height: 30);
         Text: "Table";
         Style: (FontSize: 22, TextColor: #f3f7ff, RenderBold: true);
       }
 
-      Label #ShopTableEditorHint {
+      Label #ShopEditorHint {
         Anchor: (Left: 152, Top: 128, Width: 760, Height: 22);
         Text: "";
         Style: (FontSize: 13, TextColor: #8ea1bb);
       }
 
-      TextButton #ShopTableEditorCloseButton {
+      TextButton #ShopEditorCloseButton {
         Anchor: (Left: 920, Top: 96, Width: 128, Height: 34);
         Text: "Close";
         Style: TextButtonStyle(
@@ -694,13 +694,13 @@ Group {
         );
       }
 
-      Label #ShopTableEditorArenaLabel {
+      Label #ShopEditorArenaLabel {
         Anchor: (Left: 920, Top: 134, Width: 128, Height: 18);
         Text: "Arena ID";
         Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true);
       }
 
-      TextField #ShopTableEditorArena {
+      TextField #ShopEditorArena {
         Anchor: (Left: 920, Top: 154, Width: 128, Height: 28);
         Value: "";
         Style: (FontSize: 12, TextColor: #e6eefc);
@@ -726,6 +726,52 @@ Group {
         Style: (FontSize: 14, TextColor: #8ea1bb, RenderBold: true);
       }
 
+      TextButton #ShopEditScrollUp {
+        Anchor: (Left: 944, Top: 194, Width: 22, Height: 22);
+        Text: "^";
+        Visible: false;
+        Style: TextButtonStyle(
+          Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #38567b, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Panel #ShopEditScrollTrack {
+        Anchor: (Left: 950, Top: 220, Width: 10, Height: 266);
+        Background: #122036;
+        Visible: false;
+      }
+
+      Panel #ShopEditScrollThumb1 { Anchor: (Left: 950, Top: 220, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb2 { Anchor: (Left: 950, Top: 246, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb3 { Anchor: (Left: 950, Top: 272, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb4 { Anchor: (Left: 950, Top: 298, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb5 { Anchor: (Left: 950, Top: 324, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb6 { Anchor: (Left: 950, Top: 350, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb7 { Anchor: (Left: 950, Top: 376, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb8 { Anchor: (Left: 950, Top: 402, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb9 { Anchor: (Left: 950, Top: 428, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+      Panel #ShopEditScrollThumb10 { Anchor: (Left: 950, Top: 454, Width: 10, Height: 32); Background: #4f79ab; Visible: false; }
+
+      TextButton #ShopEditScrollDown {
+        Anchor: (Left: 944, Top: 488, Width: 22, Height: 22);
+        Text: "v";
+        Visible: false;
+        Style: TextButtonStyle(
+          Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #38567b, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Label #ShopEditScrollPageLabel {
+        Anchor: (Left: 736, Top: 536, Width: 172, Height: 22);
+        Text: "";
+        Visible: false;
+        Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true, VerticalAlignment: Center);
+      }
+
       Panel #ShopEditBossRow1 { Anchor: (Left: 152, Top: 194, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName1 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier1 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle1 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
       Panel #ShopEditBossRow2 { Anchor: (Left: 152, Top: 228, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName2 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier2 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle2 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
       Panel #ShopEditBossRow3 { Anchor: (Left: 152, Top: 262, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName3 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier3 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle3 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
@@ -739,14 +785,14 @@ Group {
       Panel #ShopEditBossRow11 { Anchor: (Left: 152, Top: 534, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName11 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier11 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle11 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
       Panel #ShopEditBossRow12 { Anchor: (Left: 152, Top: 568, Width: 780, Height: 30); Background: #1a2b41; Label #ShopEditBossName12 { Anchor: (Left: 12, Top: 1, Width: 450, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #d8e3f4, VerticalAlignment: Center); } Label #ShopEditBossTier12 { Anchor: (Left: 472, Top: 1, Width: 120, Height: 28); Text: ""; Style: (FontSize: 13, TextColor: #b2c0d2, VerticalAlignment: Center); } TextButton #ShopEditBossToggle12 { Anchor: (Left: 610, Top: 1, Width: 160, Height: 28); Text: "Off"; Style: TextButtonStyle(Default: (Background: #4a1f32, LabelStyle: (FontSize: 12, TextColor: #ffe3ec, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Hovered: (Background: #663048, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)), Pressed: (Background: #7f3d5a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))); } }
 
-      Label #ShopTableEditorOverflowLabel {
-        Anchor: (Left: 152, Top: 600, Width: 620, Height: 22);
+      Label #ShopEditorOverflowLabel {
+        Anchor: (Left: 152, Top: 566, Width: 740, Height: 22);
         Text: "";
         Visible: false;
         Style: (FontSize: 13, TextColor: #ffd88f);
       }
 
-      TextButton #ShopTableEditorSaveButton {
+      TextButton #ShopEditorSaveButton {
         Anchor: (Left: 920, Top: 536, Width: 128, Height: 34);
         Text: "Save";
         Style: TextButtonStyle(

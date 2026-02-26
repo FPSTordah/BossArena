@@ -17,15 +17,15 @@ import com.bossarena.loot.BossLootChestState;
 import com.bossarena.loot.OpenBossChestInteraction;
 import com.bossarena.shop.BossShopConfig;
 import com.bossarena.shop.BossArenaShopPage;
-import com.bossarena.shop.OpenBossShopInteraction;
+import com.bossarena.shop.OpenBossShopNpcInteraction;
 import com.hypixel.hytale.server.core.asset.AssetModule;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.asset.type.item.config.Item;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.event.events.entity.LivingEntityUseBlockEvent;
-import com.hypixel.hytale.server.core.event.events.ecs.BreakBlockEvent;
-import com.hypixel.hytale.server.core.event.events.ecs.UseBlockEvent;
+import com.hypixel.hytale.server.core.event.events.entity.EntityRemoveEvent;
+import com.hypixel.hytale.server.core.event.events.player.PlayerInteractEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.command.system.CommandManager;
@@ -36,6 +36,8 @@ import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.entity.UUIDComponent;
+import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.RootInteraction;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.SimpleInteraction;
@@ -43,6 +45,7 @@ import com.hypixel.hytale.protocol.InteractionType;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockStateModule;
+import com.hypixel.hytale.server.npc.entities.NPCEntity;
 
 import com.google.gson.*;
 import java.io.IOException;
@@ -55,21 +58,16 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public final class BossArenaPlugin extends JavaPlugin {
     private static BossArenaPlugin INSTANCE;
     public static final String ASSET_PACK_ID = "com.bossarena:BossArena";
     public static final String NO_DEATH_DROPS_INTERACTION_ID = "BossArena_NoDeathDrops";
+    public static final String SHOP_OPEN_INTERACTION_ID = "BossArena_OpenShopNpc";
+    public static final String SHOP_NPC_TYPE_ID = "bossarena_shop_guard";
     private static final Path MOD_ROOT = Path.of("mods", "BossArena");
-    private static final String[] SHOP_ICON_NAMES = new String[]{
-            "common1.png", "common2.png", "common3.png", "common4.png",
-            "uncommon1.png", "uncommon2.png", "uncommon3.png", "uncommon4.png",
-            "rare1.png", "rare2.png", "rare3.png", "rare4.png",
-            "epic1.png", "epic2.png", "epic3.png", "epic4.png",
-            "legendary1.png", "legendary2.png", "legendary3.png", "legendary4.png"
-    };
-    private static final List<String> SHOP_TIERS = List.of("Common", "Uncommon", "Rare", "Epic", "Legendary");
 
     private BossTrackingSystem trackingSystem;
     private BossArenaConfig config = new BossArenaConfig();
@@ -118,15 +116,15 @@ public final class BossArenaPlugin extends JavaPlugin {
         );
         getLogger().atInfo().log("Registered chest interaction listener");
         this.getEventRegistry().registerGlobal(
-                UseBlockEvent.Post.class,
-                this::onUseBlock
+                PlayerInteractEvent.class,
+                this::onPlayerInteract
         );
-        getLogger().atInfo().log("Registered block use interaction listener");
+        getLogger().atInfo().log("Registered player interaction listener");
         this.getEventRegistry().registerGlobal(
-                BreakBlockEvent.class,
-                this::onBreakBlock
+                EntityRemoveEvent.class,
+                this::onEntityRemove
         );
-        getLogger().atInfo().log("Registered block break listener");
+        getLogger().atInfo().log("Registered entity removal listener");
 
         config.load();
         shopConfig.load(shopJsonPath);
@@ -183,10 +181,6 @@ public final class BossArenaPlugin extends JavaPlugin {
             RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(rootInteraction));
             getLogger().atInfo().log("Registered RootInteraction: BossArena_OpenChest");
 
-            RootInteraction shopInteraction = new RootInteraction("BossArena_OpenShop", "BossArena_OpenShop");
-            RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(shopInteraction));
-            getLogger().atInfo().log("Registered RootInteraction: BossArena_OpenShop");
-
             RootInteraction noDeathDropsInteraction = new RootInteraction(
                     NO_DEATH_DROPS_INTERACTION_ID,
                     NO_DEATH_DROPS_INTERACTION_ID
@@ -194,12 +188,20 @@ public final class BossArenaPlugin extends JavaPlugin {
             RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(noDeathDropsInteraction));
             getLogger().atInfo().log("Registered RootInteraction: " + NO_DEATH_DROPS_INTERACTION_ID);
 
+            RootInteraction shopOpenInteraction = new RootInteraction(
+                    SHOP_OPEN_INTERACTION_ID,
+                    SHOP_OPEN_INTERACTION_ID
+            );
+            RootInteraction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(shopOpenInteraction));
+            getLogger().atInfo().log("Registered RootInteraction: " + SHOP_OPEN_INTERACTION_ID);
+
             Interaction.getAssetStore().loadAssets(ASSET_PACK_ID, List.of(
                     new OpenBossChestInteraction(),
-                    new OpenBossShopInteraction(),
+                    new OpenBossShopNpcInteraction(),
                     new SimpleInteraction(NO_DEATH_DROPS_INTERACTION_ID)
             ));
-            getLogger().atInfo().log("Registered interaction assets for BossArena_OpenChest, BossArena_OpenShop, and " + NO_DEATH_DROPS_INTERACTION_ID);
+            getLogger().atInfo().log("Registered interaction assets for BossArena_OpenChest, "
+                    + SHOP_OPEN_INTERACTION_ID + ", and " + NO_DEATH_DROPS_INTERACTION_ID);
 
         } catch (Exception e) {
             getLogger().atSevere().withCause(e).log("Failed to register custom interactions");
@@ -225,11 +227,10 @@ public final class BossArenaPlugin extends JavaPlugin {
                     OpenBossChestInteraction.class,
                     OpenBossChestInteraction.CODEC
             );
-
             Interaction.CODEC.register(
-                    "BossArena_OpenShop",
-                    OpenBossShopInteraction.class,
-                    OpenBossShopInteraction.CODEC
+                    SHOP_OPEN_INTERACTION_ID,
+                    OpenBossShopNpcInteraction.class,
+                    OpenBossShopNpcInteraction.CODEC
             );
 
             getLogger().atInfo().log("✅ Successfully registered custom codecs");
@@ -265,19 +266,6 @@ public final class BossArenaPlugin extends JavaPlugin {
                 getLogger().atWarning().log("BossArena custom chest block still missing from asset map");
             }
 
-            BlockType shopBlockType = findBlockType(blockTypeMap, "Boss_Arena_Shop");
-            if (shopBlockType != null) {
-                getLogger().atInfo().log("BossArena shop pedestal block found in asset map");
-            } else {
-                getLogger().atWarning().log("BossArena shop pedestal block still missing from asset map");
-            }
-
-            Item shopItem = findItem("Boss_Arena_Shop");
-            if (shopItem != null) {
-                getLogger().atInfo().log("BossArena shop pedestal item found in asset map");
-            } else {
-                getLogger().atWarning().log("BossArena shop pedestal item still missing from asset map");
-            }
         } catch (Exception e) {
             getLogger().atSevere().withCause(e).log("Failed to register BossArena asset pack");
         }
@@ -301,51 +289,70 @@ public final class BossArenaPlugin extends JavaPlugin {
         copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaShopElementButton.ui");
         copyPackResource(assetsRoot, "Common/UI/Custom/Pages/BossArenaConfigPage.ui");
 
-        copyPackResource(assetsRoot, "Common/Blocks/Boss_Shop.blockymodel");
-        copyPackResource(assetsRoot, "Common/Blocks/boss_arena_shop_texture.png");
         copyPackResource(assetsRoot, "Common/Blocks/Boss_Arena_Chest_Legendary.blockymodel");
         copyPackResource(assetsRoot, "Common/Blocks/Boss_Arena_Chest_Legendary_Texture.png");
-        copyPackResource(assetsRoot, "Blocks/Boss_Shop.blockymodel");
-        copyPackResource(assetsRoot, "Blocks/boss_arena_shop_texture.png");
         copyPackResource(assetsRoot, "Blocks/Boss_Arena_Chest_Legendary.blockymodel");
         copyPackResource(assetsRoot, "Blocks/Boss_Arena_Chest_Legendary_Texture.png");
         copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Chest_Legendary.json");
         copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Chest_Legendary.blockymodel");
-        copyPackResource(assetsRoot, "Server/Item/Items/Boss_Arena_Shop.json");
-        copyPackResource(assetsRoot, "Server/Item/RootInteractions/Block/BossArena_OpenShop.json");
-        copyPackResource(assetsRoot, "Server/Item/Interactions/Block/BossArena_OpenShop_Simple.json");
+        copyPackResource(assetsRoot, "Server/NPC/Roles/bossarena_shop_guard.json");
 
         copyPackResource(assetsRoot, "Server/Textures/Boss_Arena_Chest_Legendary_Texture.png");
-        copyPackResource(assetsRoot, "Server/Textures/boss_arena_shop_texture.png");
 
-        copyPackResource(assetsRoot, "Common/Icons/ItemsGenerated/boss_arena_shop_icon.png");
         copyPackResource(assetsRoot, "Server/Icons/ItemsGenerated/boss_arena_shop_icon.png");
 
         // Shop item icons are intentionally disabled for now.
 
         // Mirror key assets into runtime asset-store directories for compatibility.
-        copyResource("Blocks/Boss_Shop.blockymodel", modelDir.resolve("Boss_Shop.blockymodel"));
         copyResource("Server/Item/Items/Boss_Arena_Chest_Legendary.blockymodel", modelDir.resolve("Boss_Arena_Chest_Legendary.blockymodel"));
-        copyResource("Server/Item/Items/Boss_Arena_Shop.json", itemDir.resolve("Boss_Arena_Shop.json"));
         // Legacy compatibility copies for pre-Update 3 item path assumptions.
-        copyResource("Server/Item/Items/Boss_Arena_Shop.json", assetsRoot.resolve("Server/Items/Boss_Arena_Shop.json"));
         copyResource("Server/Item/Items/Boss_Arena_Chest_Legendary.json", assetsRoot.resolve("Server/Items/Boss_Arena_Chest_Legendary.json"));
 
         // Texture compatibility copies for model lookup differences.
-        copyResource("Blocks/boss_arena_shop_texture.png", modelDir.resolve("boss_arena_shop_texture.png"));
-        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("boss_arena_shop_texture.png"));
-        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("shop_texture.png"));
-        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("Textures/boss_arena_shop_texture.png"));
-        copyResource("Server/Textures/boss_arena_shop_texture.png", assetsRoot.resolve("Blocks/boss_arena_shop_texture.png"));
-        copyResource("Blocks/boss_arena_shop_texture.png", assetsRoot.resolve("Blocks/boss_arena_shop_texture.png"));
-        copyResource("Blocks/Boss_Shop.blockymodel", assetsRoot.resolve("Blocks/Boss_Shop.blockymodel"));
         copyResource("Blocks/Boss_Arena_Chest_Legendary.blockymodel", assetsRoot.resolve("Blocks/Boss_Arena_Chest_Legendary.blockymodel"));
         copyResource("Blocks/Boss_Arena_Chest_Legendary_Texture.png", assetsRoot.resolve("Blocks/Boss_Arena_Chest_Legendary_Texture.png"));
-        copyResource("Server/Textures/boss_arena_shop_texture.png", modelDir.resolve("boss_arena_shop_texture.png"));
         copyResource("Server/Textures/Boss_Arena_Chest_Legendary_Texture.png", modelDir.resolve("Boss_Arena_Chest_Legendary_Texture.png"));
 
         // Clean up legacy pedestal files if they exist from prior versions.
         Files.deleteIfExists(assetsRoot.resolve("Server/Item/Items/boss_arena_shop_pedestal.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Item/Items/Boss_Arena_Shop.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Item/Items/Boss_Pedestal.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Item/RootInteractions/Block/BossArena_OpenShop.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Item/Interactions/Block/BossArena_OpenShop_Simple.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Items/Boss_Arena_Shop.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Items/Boss_Pedestal.json"));
+        Files.deleteIfExists(assetsRoot.resolve("Blocks/Boss_Shop.blockymodel"));
+        Files.deleteIfExists(assetsRoot.resolve("Blocks/boss_arena_shop_texture.png"));
+        Files.deleteIfExists(assetsRoot.resolve("Common/Blocks/Boss_Shop.blockymodel"));
+        Files.deleteIfExists(assetsRoot.resolve("Common/Blocks/boss_arena_shop_texture.png"));
+        Files.deleteIfExists(assetsRoot.resolve("Server/Textures/boss_arena_shop_texture.png"));
+        Files.deleteIfExists(itemDir.resolve("Boss_Arena_Shop.json"));
+        Files.deleteIfExists(itemDir.resolve("Boss_Pedestal.json"));
+        Files.deleteIfExists(modelDir.resolve("Boss_Shop.blockymodel"));
+        Files.deleteIfExists(modelDir.resolve("boss_arena_shop_texture.png"));
+        purgeLegacyShopArtifacts(assetsRoot);
+    }
+
+    private void purgeLegacyShopArtifacts(Path assetsRoot) throws IOException {
+        Files.walkFileTree(assetsRoot, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                String fileName = file.getFileName().toString().toLowerCase(Locale.ROOT);
+                if (isLegacyShopArtifact(fileName)) {
+                    Files.deleteIfExists(file);
+                }
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    private static boolean isLegacyShopArtifact(String fileName) {
+        return fileName.contains("pedestal")
+                || fileName.equals("boss_arena_shop.json")
+                || fileName.equals("bossarena_openshop.json")
+                || fileName.equals("bossarena_openshop_simple.json")
+                || fileName.equals("boss_shop.blockymodel")
+                || fileName.equals("boss_arena_shop_texture.png");
     }
 
     private void copyPackResource(Path assetsRoot, String resourcePath) throws IOException {
@@ -361,111 +368,6 @@ public final class BossArenaPlugin extends JavaPlugin {
             }
             Files.copy(in, destination, StandardCopyOption.REPLACE_EXISTING);
         }
-    }
-
-    private void copyResourceIfMissing(String resourcePath, Path destination) throws IOException {
-        if (Files.exists(destination)) {
-            return;
-        }
-        copyResource(resourcePath, destination);
-    }
-
-    private void syncExternalShopIcons(Path assetsRoot) throws IOException {
-        Path externalDir = getModRootDirectory().resolve("shopicons");
-        Files.createDirectories(externalDir);
-
-        // Seed easy-to-edit icon folder on first run.
-        for (String name : SHOP_ICON_NAMES) {
-            copyResourceIfMissing(
-                    "Common/Icons/Items/ShopItems/" + name,
-                    externalDir.resolve(name)
-            );
-        }
-
-        int copied = 0;
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(externalDir)) {
-            for (Path iconFile : stream) {
-                if (!Files.isRegularFile(iconFile)) {
-                    continue;
-                }
-                String fileName = iconFile.getFileName().toString();
-                if (!fileName.toLowerCase(Locale.ROOT).endsWith(".png")) {
-                    continue;
-                }
-
-                Path commonDest = assetsRoot.resolve("Common/Icons/Items/ShopItems").resolve(fileName);
-                Path serverDest = assetsRoot.resolve("Server/Icons/Items/ShopItems").resolve(fileName);
-                Files.createDirectories(commonDest.getParent());
-                Files.createDirectories(serverDest.getParent());
-                Files.copy(iconFile, commonDest, StandardCopyOption.REPLACE_EXISTING);
-                Files.copy(iconFile, serverDest, StandardCopyOption.REPLACE_EXISTING);
-                copied++;
-            }
-        }
-
-        getLogger().atInfo().log("BossArena shop icon sync: loaded " + copied + " file(s) from " + externalDir);
-    }
-
-    private void generateShopIconItems(Path assetsRoot, Path itemDir) throws IOException {
-        JsonObject template = readJsonObjectResource("Server/Item/Items/Boss_Arena_Shop.json");
-        if (template == null) {
-            getLogger().atWarning().log("Skipping generated Boss_Shop items: missing Boss_Arena_Shop.json template");
-            return;
-        }
-
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-        Path serverItemDir = assetsRoot.resolve("Server/Item/Items");
-        Files.createDirectories(serverItemDir);
-        Files.createDirectories(itemDir);
-
-        for (String tier : SHOP_TIERS) {
-            String lowerTier = tier.toLowerCase(Locale.ROOT);
-            for (int slot = 1; slot <= 4; slot++) {
-                String id = "Boss_Shop_" + tier + "_" + slot;
-                JsonObject itemJson = template.deepCopy();
-
-                JsonObject translation = itemJson.has("TranslationProperties")
-                        && itemJson.get("TranslationProperties").isJsonObject()
-                        ? itemJson.getAsJsonObject("TranslationProperties")
-                        : new JsonObject();
-                itemJson.add("TranslationProperties", translation);
-                translation.addProperty("Name", tier + " Contract " + slot);
-                translation.addProperty("Description", "BossArena tier contract icon.");
-
-                itemJson.addProperty("Icon", "Icons/Items/ShopItems/" + lowerTier + slot + ".png");
-                itemJson.addProperty("Quality", tier);
-                itemJson.addProperty("MaxStack", 1);
-
-                Path generatedPath = serverItemDir.resolve(id + ".json");
-                writeJson(gson, generatedPath, itemJson);
-
-                Path runtimePath = itemDir.resolve(id + ".json");
-                if (!generatedPath.normalize().equals(runtimePath.normalize())) {
-                    writeJson(gson, runtimePath, itemJson);
-                }
-            }
-        }
-    }
-
-    private JsonObject readJsonObjectResource(String resourcePath) throws IOException {
-        try (InputStream in = getClass().getClassLoader().getResourceAsStream(resourcePath)) {
-            if (in == null) {
-                return null;
-            }
-            String raw = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            return JsonParser.parseString(raw).getAsJsonObject();
-        }
-    }
-
-    private void writeJson(Gson gson, Path destination, JsonObject object) throws IOException {
-        Files.createDirectories(destination.getParent());
-        Files.writeString(
-                destination,
-                gson.toJson(object),
-                StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
-        );
     }
 
     private static String safeAssetPath(String path) {
@@ -656,100 +558,214 @@ public final class BossArenaPlugin extends JavaPlugin {
         manuallyOpenChest(playerRef, (BossLootChestState) state, world, x, y, z);
     }
 
-    private void onUseBlock(UseBlockEvent event) {
+    private void onPlayerInteract(PlayerInteractEvent event) {
         if (event == null) {
             return;
         }
 
-        InteractionType type = event.getInteractionType();
-        com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType blockType = event.getBlockType();
-        if (blockType == null) {
+        if (!isShopOpenInteraction(event.getActionType())) {
             return;
         }
 
-        String blockId = blockType.getId();
-        if (blockId == null) {
+        Ref<EntityStore> playerRef = event.getPlayerRef();
+        if (playerRef == null) {
             return;
         }
-
-        if (!isShopBlockId(blockId)) {
-            return;
-        }
-
-        if (!isShopOpenInteraction(type)) {
-            return;
-        }
-        getLogger().atInfo().log("Shop use event (blockId=" + blockId + ", interaction=" + type + ")");
-        var context = event.getContext();
-        if (context == null) {
-            return;
-        }
-        Vector3i targetBlock = event.getTargetBlock();
-        if (targetBlock != null) {
-            recordShopTableLocation(playerRefWorldName(context), targetBlock);
-        }
-        Ref<EntityStore> playerRef = context.getEntity();
         Store<EntityStore> store = playerRef.getStore();
-        Object playerObj = store.getComponent(playerRef, Player.getComponentType());
-        if (playerObj instanceof Player player) {
-            if (targetBlock != null) {
-                BossArenaShopPage.openAtTable(
-                        playerRef,
-                        store,
-                        player,
-                        this,
-                        playerRefWorldName(context),
-                        targetBlock.x,
-                        targetBlock.y,
-                        targetBlock.z
-                );
-            } else {
-                BossArenaShopPage.open(playerRef, store, player, this);
-            }
+        Entity targetEntity = event.getTargetEntity();
+        Ref<EntityStore> targetRef = event.getTargetRef();
+
+        NPCEntity npc = resolveTargetNpc(targetEntity, targetRef, store);
+        UUID targetUuid = resolveTargetUuid(targetEntity, targetRef, store, npc);
+        if (shopConfig == null) {
+            return;
         }
+
+        boolean knownShopNpc = targetUuid != null && shopConfig.isShopNpcUuid(targetUuid.toString());
+        boolean matchesConfiguredType = npc != null
+                && isShopNpcTypeId(npc.getNPCTypeId(), resolveShopNpcId());
+        if (!knownShopNpc && !matchesConfiguredType) {
+            if (targetEntity != null || targetRef != null) {
+                getLogger().atInfo().log(
+                        "Shop interact ignored: action=" + event.getActionType()
+                                + ", targetEntity=" + (targetEntity != null ? targetEntity.getClass().getSimpleName() : "null")
+                                + ", npcType=" + (npc != null ? npc.getNPCTypeId() : "null")
+                                + ", targetUuid=" + (targetUuid != null ? targetUuid : "null")
+                                + ", knownShopNpc=" + knownShopNpc
+                                + ", matchesConfiguredType=" + matchesConfiguredType
+                );
+            }
+            return;
+        }
+        Object playerObj = store.getComponent(playerRef, Player.getComponentType());
+        if (!(playerObj instanceof Player player)) {
+            return;
+        }
+
+        TransformComponent targetTransform = resolveTargetTransform(targetEntity, targetRef, store, npc);
+        if (targetUuid != null && targetTransform != null) {
+            String worldName = player.getWorld() != null ? player.getWorld().getName() : null;
+            if (worldName != null && !worldName.isBlank()) {
+                Vector3d targetPosition = targetTransform.getPosition();
+                recordShopLocation(
+                        worldName,
+                        new Vector3i(
+                                (int) Math.floor(targetPosition.x),
+                                (int) Math.floor(targetPosition.y),
+                                (int) Math.floor(targetPosition.z)
+                        ),
+                        targetUuid
+                );
+            } else if (!knownShopNpc && matchesConfiguredType) {
+                recordShopNpcUuid(targetUuid);
+            }
+        } else if (!knownShopNpc && matchesConfiguredType && targetUuid != null) {
+            recordShopNpcUuid(targetUuid);
+        }
+
+        getLogger().atInfo().log(
+                "Opening shop from interact: action=" + event.getActionType()
+                        + ", npcType=" + (npc != null ? npc.getNPCTypeId() : "null")
+                        + ", targetUuid=" + (targetUuid != null ? targetUuid : "null")
+                        + ", hasTransform=" + (targetTransform != null)
+        );
+        openShopPage(playerRef, store, player, targetTransform);
+        event.setCancelled(true);
     }
 
-    private void onBreakBlock(BreakBlockEvent event) {
+    private void onEntityRemove(EntityRemoveEvent event) {
         if (event == null || shopConfig == null) {
             return;
         }
 
-        Vector3i target = event.getTargetBlock();
-        if (target == null) {
+        Entity entity = event.getEntity();
+        if (entity == null) {
             return;
         }
 
-        String blockId = null;
-        var blockType = event.getBlockType();
-        if (blockType != null) {
-            blockId = blockType.getId();
+        UUID uuid = entity.getUuid();
+        String uuidText = uuid != null ? uuid.toString() : null;
+        boolean trackedShopNpc = uuidText != null && shopConfig.isShopNpcUuid(uuidText);
+
+        boolean matchesConfiguredType = false;
+        if (entity instanceof NPCEntity npc) {
+            matchesConfiguredType = isShopNpcTypeId(npc.getNPCTypeId(), resolveShopNpcId());
         }
 
-        boolean looksLikeShop = blockId != null && isShopBlockId(blockId);
-        if (!looksLikeShop && !shopConfig.hasTableLocationAt(target.x, target.y, target.z)) {
+        if (!trackedShopNpc && !matchesConfiguredType) {
             return;
         }
 
-        int removed = shopConfig.removeTableLocationsByPosition(target.x, target.y, target.z);
-        if (removed <= 0) {
-            return;
+        boolean changed = false;
+        if (uuidText != null) {
+            // EntityRemoveEvent can fire after the ref is invalidated; avoid component reads here.
+            changed = shopConfig.removeShopNpcUuid(uuidText);
         }
 
-        String resolvedBlockId = blockId == null ? "<unknown>" : blockId;
-        getLogger().atInfo().log("Removed " + removed + " saved shop table location(s) at "
-                + target.x + ", " + target.y + ", " + target.z
-                + " after block break (blockId=" + resolvedBlockId + ")");
-        saveShopConfig();
+        if (changed) {
+            saveShopConfig();
+        }
     }
 
     private static boolean isShopOpenInteraction(InteractionType type) {
         return type == InteractionType.Use;
     }
 
-    private static boolean isShopBlockId(String blockId) {
-        String normalized = blockId.toLowerCase(Locale.ROOT);
-        return normalized.contains("boss_arena_shop")
-                || normalized.contains("boss_shop");
+    private static boolean isShopNpcTypeId(String npcTypeId, String configuredId) {
+        if (npcTypeId == null || npcTypeId.isBlank() || configuredId == null || configuredId.isBlank()) {
+            return false;
+        }
+        String normalizedNpcTypeId = npcTypeId.toLowerCase(Locale.ROOT);
+        String normalizedConfiguredId = configuredId.toLowerCase(Locale.ROOT);
+        return normalizedNpcTypeId.equals(normalizedConfiguredId)
+                || normalizedNpcTypeId.endsWith(":" + normalizedConfiguredId)
+                || normalizedNpcTypeId.endsWith("/" + normalizedConfiguredId);
+    }
+
+    private String resolveShopNpcId() {
+        if (shopConfig != null && shopConfig.shopNpcId != null && !shopConfig.shopNpcId.isBlank()) {
+            return shopConfig.shopNpcId.trim();
+        }
+        return SHOP_NPC_TYPE_ID;
+    }
+
+    private static NPCEntity resolveTargetNpc(Entity targetEntity, Ref<EntityStore> targetRef, Store<EntityStore> store) {
+        if (targetRef != null) {
+            Object npcObj = store.getComponent(targetRef, NPCEntity.getComponentType());
+            if (npcObj instanceof NPCEntity npc) {
+                return npc;
+            }
+        }
+        if (targetEntity instanceof NPCEntity npc) {
+            return npc;
+        }
+        return null;
+    }
+
+    private static UUID resolveTargetUuid(Entity targetEntity, Ref<EntityStore> targetRef, Store<EntityStore> store, NPCEntity npc) {
+        if (targetRef != null) {
+            Object uuidObj = store.getComponent(targetRef, UUIDComponent.getComponentType());
+            if (uuidObj instanceof UUIDComponent uuidComponent) {
+                return uuidComponent.getUuid();
+            }
+        }
+        if (targetEntity != null) {
+            return targetEntity.getUuid();
+        }
+        if (npc == null) {
+            return null;
+        }
+        return npc.getUuid();
+    }
+
+    private static TransformComponent resolveTargetTransform(Entity targetEntity, Ref<EntityStore> targetRef, Store<EntityStore> store, NPCEntity npc) {
+        if (npc != null && npc.getTransformComponent() != null) {
+            return npc.getTransformComponent();
+        }
+        if (targetRef != null) {
+            Object transformObj = store.getComponent(targetRef, TransformComponent.getComponentType());
+            if (transformObj instanceof TransformComponent transform) {
+                return transform;
+            }
+        }
+        if (targetEntity != null) {
+            return targetEntity.getTransformComponent();
+        }
+        return null;
+    }
+
+    private void openShopPage(Ref<EntityStore> playerRef,
+                              Store<EntityStore> store,
+                              Player player,
+                              TransformComponent targetTransform) {
+        if (targetTransform == null) {
+            BossArenaShopPage.open(playerRef, store, player, this);
+            return;
+        }
+
+        Vector3d npcPosition = targetTransform.getPosition();
+        Vector3i shopAnchor = new Vector3i(
+                (int) Math.floor(npcPosition.x),
+                (int) Math.floor(npcPosition.y),
+                (int) Math.floor(npcPosition.z)
+        );
+
+        String worldName = player.getWorld() != null ? player.getWorld().getName() : null;
+        if (worldName != null && !worldName.isBlank()) {
+            recordShopLocation(worldName, shopAnchor);
+            BossArenaShopPage.openAtTable(
+                    playerRef,
+                    store,
+                    player,
+                    this,
+                    worldName,
+                    shopAnchor.x,
+                    shopAnchor.y,
+                    shopAnchor.z
+            );
+            return;
+        }
+        BossArenaShopPage.open(playerRef, store, player, this);
     }
 
     private void manuallyOpenChest(Ref<EntityStore> playerRef, BossLootChestState state,
@@ -849,37 +865,38 @@ public final class BossArenaPlugin extends JavaPlugin {
         });
     }
 
-    public void recordShopTableLocation(String worldName, Vector3i position) {
+    public void recordShopLocation(String worldName, Vector3i position) {
+        recordShopLocation(worldName, position, null);
+    }
+
+    public void recordShopLocation(String worldName, Vector3i position, UUID uuid) {
         if (position == null || worldName == null || worldName.isBlank()) {
             return;
         }
         if (shopConfig == null) {
             return;
         }
-        boolean changed = shopConfig.recordTableLocation(worldName, position.x, position.y, position.z);
+        boolean changed = shopConfig.recordShopLocation(
+                uuid != null ? uuid.toString() : "",
+                worldName,
+                position.x,
+                position.y,
+                position.z
+        );
         if (!changed) {
             return;
         }
         saveShopConfig();
     }
 
-    private String playerRefWorldName(com.hypixel.hytale.server.core.entity.InteractionContext context) {
-        if (context == null) {
-            return null;
+    public void recordShopNpcUuid(UUID uuid) {
+        if (uuid == null || shopConfig == null) {
+            return;
         }
-        Ref<EntityStore> playerRef = context.getEntity();
-        if (playerRef == null) {
-            return null;
+        boolean changed = shopConfig.recordShopNpcUuid(uuid.toString());
+        if (changed) {
+            saveShopConfig();
         }
-        Store<EntityStore> store = playerRef.getStore();
-        Object playerObj = store.getComponent(playerRef, Player.getComponentType());
-        if (playerObj instanceof Player player) {
-            World world = player.getWorld();
-            if (world != null) {
-                return world.getName();
-            }
-        }
-        return null;
     }
 
     public static BossArenaPlugin getInstance() {

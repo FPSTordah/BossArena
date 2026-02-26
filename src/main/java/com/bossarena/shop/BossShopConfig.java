@@ -2,36 +2,39 @@ package com.bossarena.shop;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.logging.Logger;
 
 public final class BossShopConfig {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final int DEFAULT_VISIBLE_SLOTS_PER_TIER = 4;
     private static final String DEFAULT_CURRENCY_PROVIDER = "auto";
     private static final String DEFAULT_FALLBACK_ITEM_CURRENCY_ID = "Ingredient_Bar_Iron";
+    private static final String DEFAULT_SHOP_NPC_ID = "bossarena_shop_guard";
 
     public String currencyProvider = DEFAULT_CURRENCY_PROVIDER;
     public String currencyItemId = "";
+    public String shopNpcId = DEFAULT_SHOP_NPC_ID;
     public List<ShopEntry> entries = new ArrayList<>();
-    public List<ShopTableLocation> tableLocations = new ArrayList<>();
-    public Map<String, Integer> visibleSlotsByTier = createDefaultVisibleSlotsByTier();
+    public List<ShopLocation> shops = new ArrayList<>();
 
     public void load(Path path) {
         if (path == null) {
             currencyProvider = DEFAULT_CURRENCY_PROVIDER;
             currencyItemId = "";
+            shopNpcId = DEFAULT_SHOP_NPC_ID;
             entries = createDefaultEntries();
-            visibleSlotsByTier = createDefaultVisibleSlotsByTier();
+            shops = new ArrayList<>();
             return;
         }
 
@@ -44,21 +47,24 @@ public final class BossShopConfig {
             if (Files.notExists(path)) {
                 currencyProvider = DEFAULT_CURRENCY_PROVIDER;
                 currencyItemId = "";
+                shopNpcId = DEFAULT_SHOP_NPC_ID;
                 entries = createDefaultEntries();
-                visibleSlotsByTier = createDefaultVisibleSlotsByTier();
+                shops = new ArrayList<>();
                 save(path);
                 LOGGER.info("Created default shop config at " + path.toAbsolutePath());
                 return;
             }
 
             String raw = Files.readString(path, StandardCharsets.UTF_8);
+            JsonObject rawRoot = parseJsonObject(raw);
             BossShopConfig parsed = GSON.fromJson(raw, BossShopConfig.class);
 
             if (parsed == null) {
                 currencyProvider = DEFAULT_CURRENCY_PROVIDER;
                 currencyItemId = "";
+                shopNpcId = DEFAULT_SHOP_NPC_ID;
                 entries = createDefaultEntries();
-                visibleSlotsByTier = createDefaultVisibleSlotsByTier();
+                shops = new ArrayList<>();
                 save(path);
                 LOGGER.warning("shop.json was empty; regenerated defaults.");
                 return;
@@ -66,21 +72,27 @@ public final class BossShopConfig {
 
             currencyProvider = sanitizeCurrencyProvider(parsed.currencyProvider);
             currencyItemId = sanitizeCurrencyItemId(parsed.currencyItemId);
+            shopNpcId = sanitizeShopNpcId(parsed.shopNpcId);
             entries = sanitizeEntries(parsed.entries);
-            tableLocations = sanitizeTableLocations(parsed.tableLocations);
+            shops = sanitizeShops(parsed.shops);
             if (entries.isEmpty()) {
                 entries = createDefaultEntries();
             } else {
                 ensurePreviewEntriesEnabled(entries);
             }
-            visibleSlotsByTier = sanitizeVisibleSlotsByTier(parsed.visibleSlotsByTier);
+
+            boolean migratedLegacyUuids = applyLegacyNpcUuids(rawRoot, shops);
+            if (migratedLegacyUuids) {
+                save(path);
+                LOGGER.info("Migrated legacy shop fields into shops list.");
+            }
         } catch (Exception e) {
             LOGGER.warning("Failed to load shop config: " + e.getMessage());
             currencyProvider = DEFAULT_CURRENCY_PROVIDER;
             currencyItemId = "";
+            shopNpcId = DEFAULT_SHOP_NPC_ID;
             entries = createDefaultEntries();
-            tableLocations = new ArrayList<>();
-            visibleSlotsByTier = createDefaultVisibleSlotsByTier();
+            shops = new ArrayList<>();
             try {
                 save(path);
             } catch (Exception ignored) {
@@ -98,6 +110,21 @@ public final class BossShopConfig {
             Files.createDirectories(parent);
         }
         Files.writeString(path, GSON.toJson(this), StandardCharsets.UTF_8);
+    }
+
+    private static JsonObject parseJsonObject(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            JsonElement root = JsonParser.parseString(raw);
+            if (root != null && root.isJsonObject()) {
+                return root.getAsJsonObject();
+            }
+        } catch (Exception ignored) {
+            // malformed JSON handled by caller fallback
+        }
+        return null;
     }
 
     private static List<ShopEntry> sanitizeEntries(List<ShopEntry> source) {
@@ -118,33 +145,151 @@ public final class BossShopConfig {
         return out;
     }
 
-    private static List<ShopTableLocation> sanitizeTableLocations(List<ShopTableLocation> source) {
+    private static List<ShopLocation> sanitizeShops(List<ShopLocation> source) {
         if (source == null || source.isEmpty()) {
             return new ArrayList<>();
         }
 
-        List<ShopTableLocation> out = new ArrayList<>();
-        for (ShopTableLocation entry : source) {
+        List<ShopLocation> out = new ArrayList<>();
+        for (ShopLocation entry : source) {
             if (entry == null) {
                 continue;
             }
-            String world = entry.worldName != null ? entry.worldName.trim() : "";
+
+            String world = optional(entry.worldName);
             if (world.isEmpty()) {
                 continue;
             }
-            if (containsLocation(out, world, entry.x, entry.y, entry.z)) {
-                continue;
-            }
-            ShopTableLocation normalized = new ShopTableLocation();
+
+            ShopLocation normalized = new ShopLocation();
+            normalized.uuid = sanitizeUuid(entry.uuid);
+            normalized.name = sanitizeShopName(entry.name);
             normalized.worldName = world;
             normalized.x = entry.x;
             normalized.y = entry.y;
             normalized.z = entry.z;
             normalized.arenaId = sanitizeArenaId(entry.arenaId);
             normalized.enabledBossIds = sanitizeBossIds(entry.enabledBossIds);
+            if (normalized.name.isEmpty()) {
+                normalized.name = defaultShopName(normalized.uuid, normalized.x, normalized.y, normalized.z);
+            }
+
+            ShopLocation existingByUuid = findByUuid(out, normalized.uuid);
+            if (existingByUuid != null) {
+                mergeShopLocation(existingByUuid, normalized);
+                continue;
+            }
+
+            ShopLocation existingByLocation = findByLocation(out, world, normalized.x, normalized.y, normalized.z);
+            if (existingByLocation != null) {
+                mergeShopLocation(existingByLocation, normalized);
+                continue;
+            }
+
             out.add(normalized);
         }
         return out;
+    }
+
+    private static boolean applyLegacyNpcUuids(JsonObject rawRoot, List<ShopLocation> locations) {
+        if (rawRoot == null || locations == null || locations.isEmpty() || !rawRoot.has("shopNpcUuids")) {
+            return false;
+        }
+        JsonElement element = rawRoot.get("shopNpcUuids");
+        if (element == null || !element.isJsonArray()) {
+            return false;
+        }
+
+        List<String> legacyUuids = sanitizeShopNpcUuidsFromJson(element.getAsJsonArray());
+        if (legacyUuids.isEmpty()) {
+            return false;
+        }
+
+        boolean changed = false;
+        int max = Math.min(locations.size(), legacyUuids.size());
+        for (int i = 0; i < max; i++) {
+            ShopLocation location = locations.get(i);
+            if (location == null) {
+                continue;
+            }
+
+            String uuid = legacyUuids.get(i);
+            if (uuid.isEmpty()) {
+                continue;
+            }
+
+            if (optional(location.uuid).isEmpty()) {
+                location.uuid = uuid;
+                changed = true;
+            }
+            if (optional(location.name).isEmpty()) {
+                location.name = defaultShopName(location.uuid, location.x, location.y, location.z);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static List<String> sanitizeShopNpcUuidsFromJson(JsonArray source) {
+        List<String> out = new ArrayList<>();
+        if (source == null || source.isEmpty()) {
+            return out;
+        }
+        for (JsonElement element : source) {
+            if (element == null || element.isJsonNull() || !element.isJsonPrimitive()) {
+                continue;
+            }
+            String uuid = sanitizeUuid(element.getAsString());
+            if (uuid.isEmpty()) {
+                continue;
+            }
+            boolean duplicate = false;
+            for (String existing : out) {
+                if (existing.equalsIgnoreCase(uuid)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                out.add(uuid);
+            }
+        }
+        return out;
+    }
+
+    private static void mergeShopLocation(ShopLocation target, ShopLocation source) {
+        if (target == null || source == null) {
+            return;
+        }
+        if (optional(target.uuid).isEmpty() && !optional(source.uuid).isEmpty()) {
+            target.uuid = source.uuid;
+        }
+        if (optional(target.name).isEmpty() && !optional(source.name).isEmpty()) {
+            target.name = source.name;
+        }
+        if (optional(target.worldName).isEmpty() && !optional(source.worldName).isEmpty()) {
+            target.worldName = source.worldName;
+            target.x = source.x;
+            target.y = source.y;
+            target.z = source.z;
+        }
+        if (optional(target.arenaId).isEmpty() && !optional(source.arenaId).isEmpty()) {
+            target.arenaId = source.arenaId;
+        }
+        if ((target.enabledBossIds == null || target.enabledBossIds.isEmpty())
+                && source.enabledBossIds != null && !source.enabledBossIds.isEmpty()) {
+            target.enabledBossIds = sanitizeBossIds(source.enabledBossIds);
+        }
+
+        if (optional(target.name).isEmpty()) {
+            target.name = defaultShopName(target.uuid, target.x, target.y, target.z);
+        }
+        target.arenaId = sanitizeArenaId(target.arenaId);
+        if (target.enabledBossIds == null) {
+            target.enabledBossIds = new ArrayList<>();
+        } else {
+            target.enabledBossIds = sanitizeBossIds(target.enabledBossIds);
+        }
     }
 
     private static String sanitizeArenaId(String source) {
@@ -178,41 +323,39 @@ public final class BossShopConfig {
         return out;
     }
 
-    private static Map<String, Integer> sanitizeVisibleSlotsByTier(Map<String, Integer> source) {
-        Map<String, Integer> out = createDefaultVisibleSlotsByTier();
-        if (source == null || source.isEmpty()) {
-            return out;
-        }
-
-        for (Map.Entry<String, Integer> entry : source.entrySet()) {
-            if (entry == null || !BossShopItems.isValidTier(entry.getKey()) || entry.getValue() == null) {
-                continue;
-            }
-            out.put(
-                    entry.getKey().toLowerCase(),
-                    clampVisibleSlots(entry.getValue())
-            );
-        }
-        return out;
-    }
-
-    private static Map<String, Integer> createDefaultVisibleSlotsByTier() {
-        Map<String, Integer> out = new LinkedHashMap<>();
-        for (String tier : BossShopItems.TIER_ORDER) {
-            out.put(tier, DEFAULT_VISIBLE_SLOTS_PER_TIER);
-        }
-        return out;
-    }
-
-    private static int clampVisibleSlots(int value) {
-        return Math.max(1, Math.min(value, BossShopItems.SLOTS_PER_TIER));
-    }
-
     private static String sanitizeCurrencyProvider(String value) {
         return ShopCurrencySupport.sanitizeProvider(value);
     }
 
     private static String sanitizeCurrencyItemId(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String sanitizeShopNpcId(String value) {
+        if (value == null || value.isBlank()) {
+            return DEFAULT_SHOP_NPC_ID;
+        }
+        return value.trim();
+    }
+
+    private static String sanitizeUuid(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String sanitizeShopName(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String defaultShopName(String uuid, int x, int y, int z) {
+        String cleanedUuid = optional(uuid);
+        if (!cleanedUuid.isEmpty()) {
+            String shortId = cleanedUuid.length() > 8 ? cleanedUuid.substring(0, 8) : cleanedUuid;
+            return "Shop " + shortId;
+        }
+        return "Shop " + x + "," + y + "," + z;
+    }
+
+    private static String optional(String value) {
         return value == null ? "" : value.trim();
     }
 
@@ -251,23 +394,101 @@ public final class BossShopConfig {
         return changed;
     }
 
+    public boolean recordShopNpcUuid(String uuid) {
+        String normalizedUuid = sanitizeUuid(uuid);
+        if (normalizedUuid.isEmpty() || shops == null || shops.isEmpty()) {
+            return false;
+        }
+
+        for (ShopLocation location : shops) {
+            if (location != null && normalizedUuid.equalsIgnoreCase(optional(location.uuid))) {
+                return false;
+            }
+        }
+
+        for (ShopLocation location : shops) {
+            if (location == null) {
+                continue;
+            }
+            if (optional(location.uuid).isEmpty()) {
+                location.uuid = normalizedUuid;
+                if (optional(location.name).isEmpty()) {
+                    location.name = defaultShopName(location.uuid, location.x, location.y, location.z);
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isShopNpcUuid(String uuid) {
+        String normalizedUuid = sanitizeUuid(uuid);
+        if (normalizedUuid.isEmpty() || shops == null || shops.isEmpty()) {
+            return false;
+        }
+        for (ShopLocation location : shops) {
+            if (location != null && normalizedUuid.equalsIgnoreCase(optional(location.uuid))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean removeShopNpcUuid(String uuid) {
+        String normalizedUuid = sanitizeUuid(uuid);
+        if (normalizedUuid.isEmpty() || shops == null || shops.isEmpty()) {
+            return false;
+        }
+        int before = shops.size();
+        shops.removeIf(location ->
+                location != null
+                        && normalizedUuid.equalsIgnoreCase(optional(location.uuid))
+        );
+        return before != shops.size();
+    }
+
+    public List<String> getShopNpcUuids() {
+        List<String> out = new ArrayList<>();
+        if (shops == null || shops.isEmpty()) {
+            return out;
+        }
+        for (ShopLocation location : shops) {
+            if (location == null) {
+                continue;
+            }
+            String uuid = sanitizeUuid(location.uuid);
+            if (uuid.isEmpty()) {
+                continue;
+            }
+            boolean duplicate = false;
+            for (String existing : out) {
+                if (existing.equalsIgnoreCase(uuid)) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                out.add(uuid);
+            }
+        }
+        return out;
+    }
+
     private static List<ShopEntry> createDefaultEntries() {
         List<ShopEntry> defaults = new ArrayList<>();
 
         for (String tier : BossShopItems.TIER_ORDER) {
-            for (int slot = 1; slot <= BossShopItems.SLOTS_PER_TIER; slot++) {
-                ShopEntry entry = new ShopEntry();
-                entry.tier = tier;
-                entry.slot = slot;
-                entry.enabled = slot <= 2;
-                entry.cost = tierBaseCost(tier) + (slot * 25);
-                entry.displayName = BossShopItems.displayTier(tier) + " Boss Contract " + slot;
-                entry.description = "Configure table arena in /ba config and bossId in mods/BossArena/shop.json. Cost uses copper (100c=1s, 10,000c=1g).";
-                entry.arenaId = "";
-                entry.bossId = "";
-                entry.icon = "Boss_Shop_" + BossShopItems.displayTier(tier) + "_" + Math.min(slot, 4);
-                defaults.add(entry);
-            }
+            ShopEntry entry = new ShopEntry();
+            entry.tier = tier;
+            entry.slot = 1;
+            entry.enabled = true;
+            entry.cost = tierBaseCost(tier) + 25;
+            entry.displayName = BossShopItems.displayTier(tier) + " Boss Contract";
+            entry.description = "Configure shop arena in /ba config and bossId in mods/BossArena/shop.json. Cost uses copper (100c=1s, 10,000c=1g).";
+            entry.arenaId = "";
+            entry.bossId = "";
+            entry.icon = "Boss_Shop_" + BossShopItems.displayTier(tier) + "_1";
+            defaults.add(entry);
         }
 
         return defaults;
@@ -325,73 +546,183 @@ public final class BossShopConfig {
         };
     }
 
-    public boolean recordTableLocation(String worldName, int x, int y, int z) {
-        String world = worldName != null ? worldName.trim() : "";
+    public boolean recordShopLocation(String uuid, String worldName, int x, int y, int z) {
+        return recordShopLocation(uuid, null, worldName, x, y, z);
+    }
+
+    public boolean recordShopLocation(String uuid, String name, String worldName, int x, int y, int z) {
+        String world = optional(worldName);
         if (world.isEmpty()) {
             return false;
         }
-        if (tableLocations == null) {
-            tableLocations = new ArrayList<>();
-        }
-        if (containsLocation(tableLocations, world, x, y, z)) {
-            return false;
+        if (shops == null) {
+            shops = new ArrayList<>();
         }
 
-        ShopTableLocation location = new ShopTableLocation();
-        location.worldName = world;
-        location.x = x;
-        location.y = y;
-        location.z = z;
-        location.arenaId = "";
-        location.enabledBossIds = new ArrayList<>();
-        tableLocations.add(location);
-        return true;
+        String normalizedUuid = sanitizeUuid(uuid);
+        String normalizedName = sanitizeShopName(name);
+        boolean changed = false;
+
+        ShopLocation byUuid = findByUuid(shops, normalizedUuid);
+        ShopLocation byLocation = findByLocation(shops, world, x, y, z);
+
+        ShopLocation target;
+        if (byUuid != null) {
+            target = byUuid;
+            if (byLocation != null && byLocation != byUuid) {
+                mergeShopLocation(target, byLocation);
+                shops.remove(byLocation);
+                changed = true;
+            }
+        } else if (byLocation != null) {
+            target = byLocation;
+        } else {
+            target = new ShopLocation();
+            target.worldName = world;
+            target.x = x;
+            target.y = y;
+            target.z = z;
+            target.arenaId = "";
+            target.enabledBossIds = new ArrayList<>();
+            shops.add(target);
+            changed = true;
+        }
+
+        if (!normalizedUuid.isEmpty() && !normalizedUuid.equalsIgnoreCase(optional(target.uuid))) {
+            target.uuid = normalizedUuid;
+            changed = true;
+        }
+        if (!normalizedName.isEmpty() && !normalizedName.equals(target.name)) {
+            target.name = normalizedName;
+            changed = true;
+        }
+        if (!world.equalsIgnoreCase(optional(target.worldName)) || target.x != x || target.y != y || target.z != z) {
+            target.worldName = world;
+            target.x = x;
+            target.y = y;
+            target.z = z;
+            changed = true;
+        }
+
+        if (optional(target.name).isEmpty()) {
+            String fallback = defaultShopName(target.uuid, target.x, target.y, target.z);
+            if (!fallback.equals(target.name)) {
+                target.name = fallback;
+                changed = true;
+            }
+        }
+        target.arenaId = sanitizeArenaId(target.arenaId);
+        if (target.enabledBossIds == null) {
+            target.enabledBossIds = new ArrayList<>();
+            changed = true;
+        } else {
+            List<String> cleanedBossIds = sanitizeBossIds(target.enabledBossIds);
+            if (!cleanedBossIds.equals(target.enabledBossIds)) {
+                target.enabledBossIds = cleanedBossIds;
+                changed = true;
+            }
+        }
+        return changed;
     }
 
-    public ShopTableLocation getTableLocation(String worldName, int x, int y, int z) {
-        if (tableLocations == null || tableLocations.isEmpty()) {
+    public ShopLocation getShopLocation(String worldName, int x, int y, int z) {
+        if (shops == null || shops.isEmpty()) {
             return null;
         }
-        for (ShopTableLocation location : tableLocations) {
-            if (location == null || location.worldName == null) {
-                continue;
-            }
-            if (location.worldName.equalsIgnoreCase(worldName)
-                    && location.x == x
-                    && location.y == y
-                    && location.z == z) {
-                location.arenaId = sanitizeArenaId(location.arenaId);
-                if (location.enabledBossIds == null) {
-                    location.enabledBossIds = new ArrayList<>();
-                } else {
-                    location.enabledBossIds = sanitizeBossIds(location.enabledBossIds);
-                }
-                return location;
-            }
+        ShopLocation location = findByLocation(shops, worldName, x, y, z);
+        if (location == null) {
+            return null;
         }
-        return null;
+
+        location.uuid = sanitizeUuid(location.uuid);
+        if (optional(location.name).isEmpty()) {
+            location.name = defaultShopName(location.uuid, location.x, location.y, location.z);
+        } else {
+            location.name = sanitizeShopName(location.name);
+        }
+        location.arenaId = sanitizeArenaId(location.arenaId);
+        if (location.enabledBossIds == null) {
+            location.enabledBossIds = new ArrayList<>();
+        } else {
+            location.enabledBossIds = sanitizeBossIds(location.enabledBossIds);
+        }
+        return location;
     }
 
-    public int removeTableLocationsByPosition(int x, int y, int z) {
-        if (tableLocations == null || tableLocations.isEmpty()) {
+    public int removeShopLocationsByPosition(int x, int y, int z) {
+        if (shops == null || shops.isEmpty()) {
             return 0;
         }
 
-        int before = tableLocations.size();
-        tableLocations.removeIf(location ->
+        int before = shops.size();
+        shops.removeIf(location ->
                 location != null
                         && location.x == x
                         && location.y == y
                         && location.z == z
         );
-        return before - tableLocations.size();
+        return before - shops.size();
     }
 
-    public boolean hasTableLocationAt(int x, int y, int z) {
-        if (tableLocations == null || tableLocations.isEmpty()) {
+    public boolean removeShopLocation(String worldName, int x, int y, int z) {
+        if (worldName == null || worldName.isBlank() || shops == null || shops.isEmpty()) {
             return false;
         }
-        for (ShopTableLocation location : tableLocations) {
+        int before = shops.size();
+        shops.removeIf(location ->
+                location != null
+                        && location.worldName != null
+                        && location.worldName.equalsIgnoreCase(worldName)
+                        && location.x == x
+                        && location.y == y
+                        && location.z == z
+        );
+        return before != shops.size();
+    }
+
+    public boolean removeNearestShopLocation(String worldName, int x, int y, int z, int maxDistanceBlocks) {
+        if (worldName == null || worldName.isBlank() || shops == null || shops.isEmpty()) {
+            return false;
+        }
+        if (maxDistanceBlocks < 0) {
+            return false;
+        }
+
+        int nearestIndex = -1;
+        int nearestDistanceSq = Integer.MAX_VALUE;
+        int maxDistanceSq = maxDistanceBlocks * maxDistanceBlocks;
+
+        for (int i = 0; i < shops.size(); i++) {
+            ShopLocation location = shops.get(i);
+            if (location == null || location.worldName == null || !location.worldName.equalsIgnoreCase(worldName)) {
+                continue;
+            }
+
+            int dx = location.x - x;
+            int dy = location.y - y;
+            int dz = location.z - z;
+            int distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
+            if (distanceSq > maxDistanceSq) {
+                continue;
+            }
+            if (distanceSq < nearestDistanceSq) {
+                nearestDistanceSq = distanceSq;
+                nearestIndex = i;
+            }
+        }
+
+        if (nearestIndex < 0) {
+            return false;
+        }
+        shops.remove(nearestIndex);
+        return true;
+    }
+
+    public boolean hasShopLocationAt(int x, int y, int z) {
+        if (shops == null || shops.isEmpty()) {
+            return false;
+        }
+        for (ShopLocation location : shops) {
             if (location == null) {
                 continue;
             }
@@ -402,11 +733,27 @@ public final class BossShopConfig {
         return false;
     }
 
-    private static boolean containsLocation(List<ShopTableLocation> list, String worldName, int x, int y, int z) {
-        if (list == null || list.isEmpty()) {
-            return false;
+    private static ShopLocation findByUuid(List<ShopLocation> list, String uuid) {
+        String normalizedUuid = sanitizeUuid(uuid);
+        if (list == null || list.isEmpty() || normalizedUuid.isEmpty()) {
+            return null;
         }
-        for (ShopTableLocation existing : list) {
+        for (ShopLocation existing : list) {
+            if (existing == null) {
+                continue;
+            }
+            if (normalizedUuid.equalsIgnoreCase(optional(existing.uuid))) {
+                return existing;
+            }
+        }
+        return null;
+    }
+
+    private static ShopLocation findByLocation(List<ShopLocation> list, String worldName, int x, int y, int z) {
+        if (list == null || list.isEmpty() || worldName == null || worldName.isBlank()) {
+            return null;
+        }
+        for (ShopLocation existing : list) {
             if (existing == null || existing.worldName == null) {
                 continue;
             }
@@ -414,13 +761,15 @@ public final class BossShopConfig {
                     && existing.x == x
                     && existing.y == y
                     && existing.z == z) {
-                return true;
+                return existing;
             }
         }
-        return false;
+        return null;
     }
 
-    public static final class ShopTableLocation {
+    public static final class ShopLocation {
+        public String uuid = "";
+        public String name = "";
         public String worldName = "";
         public int x;
         public int y;
@@ -430,6 +779,10 @@ public final class BossShopConfig {
 
         @Override
         public String toString() {
+            String id = optional(uuid);
+            if (!id.isEmpty()) {
+                return id + "@" + worldName + ":" + x + "," + y + "," + z;
+            }
             return worldName + ":" + x + "," + y + "," + z;
         }
     }

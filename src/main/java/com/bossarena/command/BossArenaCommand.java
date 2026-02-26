@@ -6,28 +6,29 @@ import com.bossarena.data.Arena;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
-import com.bossarena.shop.ShopEntry;
-import com.bossarena.shop.ShopRegistry;
 import com.bossarena.shop.BossArenaShopPage;
 import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.command.system.AbstractCommand;
 import com.hypixel.hytale.server.core.command.system.CommandContext;
 import com.hypixel.hytale.server.core.command.system.CommandSender;
 import com.hypixel.hytale.server.core.command.system.arguments.system.RequiredArg;
 import com.hypixel.hytale.server.core.command.system.arguments.types.ArgTypes;
-import com.hypixel.hytale.server.core.asset.type.item.config.Item;
 import com.hypixel.hytale.server.core.entity.entities.Player;
-import com.hypixel.hytale.server.core.inventory.Inventory;
-import com.hypixel.hytale.server.core.inventory.ItemStack;
-import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
-import com.hypixel.hytale.server.core.inventory.transaction.ItemStackTransaction;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.RemoveReason;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import com.hypixel.hytale.server.core.entity.UUIDComponent;
+import com.hypixel.hytale.server.core.entity.Entity;
+import com.hypixel.hytale.server.core.modules.entity.component.Interactable;
+import com.hypixel.hytale.server.core.modules.interaction.Interactions;
+import com.hypixel.hytale.protocol.InteractionType;
+import com.hypixel.hytale.server.npc.NPCPlugin;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -104,13 +105,13 @@ public final class BossArenaCommand extends AbstractCommand {
     return new Vector3d(0, 0, 0);
   }
 
-  @Override
-  protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-    ctx.sendMessage(Message.raw(
-            "Use: /bossarena arena <create|delete|list> OR /bossarena spawn <id> OR /bossarena reload OR /bossarena config"
+    @Override
+    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
+      ctx.sendMessage(Message.raw(
+            "Use: /bossarena arena <create|delete|list> OR /bossarena spawn <bossId> <arenaId|here> OR /bossarena reload OR /bossarena config OR /bossarena shop <open|place|delete>"
     ));
-    return CompletableFuture.completedFuture(null);
-  }
+      return CompletableFuture.completedFuture(null);
+    }
 
   // ============================================================
   // /bossarena arena ...
@@ -439,117 +440,14 @@ public final class BossArenaCommand extends AbstractCommand {
     ShopRoot(BossArenaPlugin plugin) {
       super("shop", "Shop management");
       requireAdminPermission(this);
-      addSubCommand(new ShopAdd(plugin));
-      addSubCommand(new ShopRemove(plugin));
-      addSubCommand(new ShopList(plugin));
       addSubCommand(new ShopOpen(plugin));
       addSubCommand(new ShopPlace(plugin));
-      addSubCommand(new ShopGive(plugin));
+      addSubCommand(new ShopDelete(plugin));
     }
 
     @Override
     protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-      ctx.sendMessage(Message.raw("Use: /bossarena shop <add|remove|list|open>"));
-      return CompletableFuture.completedFuture(null);
-    }
-  }
-
-  private static final class ShopAdd extends AbstractCommand {
-    private final BossArenaPlugin plugin;
-    private final RequiredArg<String> arenaIdArg;
-    private final RequiredArg<String> bossIdArg;
-    private final RequiredArg<Integer> costArg;
-
-    ShopAdd(BossArenaPlugin plugin) {
-      super("add", "Add shop entry: /bossarena shop add <arenaId> <bossId> <cost>");
-      this.plugin = plugin;
-      requireAdminPermission(this);
-      this.arenaIdArg = withRequiredArg("arenaId", "Arena ID", ArgTypes.STRING);
-      this.bossIdArg = withRequiredArg("bossId", "Boss ID", ArgTypes.STRING);
-      this.costArg = withRequiredArg("cost", "Cost in currency", ArgTypes.INTEGER);
-    }
-
-    @Override
-    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-      String arenaId = ctx.get(arenaIdArg);
-      String bossId = ctx.get(bossIdArg);
-      int cost = ctx.get(costArg);
-
-      if (!ArenaRegistry.exists(arenaId)) {
-        ctx.sendMessage(Message.raw("Arena '" + arenaId + "' does not exist!"));
-        return CompletableFuture.completedFuture(null);
-      }
-
-      if (!BossRegistry.exists(bossId)) {
-        ctx.sendMessage(Message.raw("Boss '" + bossId + "' does not exist!"));
-        return CompletableFuture.completedFuture(null);
-      }
-
-      ShopEntry entry = new ShopEntry(arenaId, bossId, cost);
-      ShopRegistry.register(entry);
-
-      //plugin.saveShops().thenRun(() -> {
-      //  ctx.sendMessage(Message.raw("✓ Added shop entry: " + entry.toString()));
-      //});
-
-      return CompletableFuture.completedFuture(null);
-    }
-  }
-
-  private static final class ShopRemove extends AbstractCommand {
-    private final BossArenaPlugin plugin;
-    private final RequiredArg<String> arenaIdArg;
-    private final RequiredArg<String> bossIdArg;
-
-    ShopRemove(BossArenaPlugin plugin) {
-      super("remove", "Remove shop entry: /bossarena shop remove <arenaId> <bossId>");
-      this.plugin = plugin;
-      requireAdminPermission(this);
-      this.arenaIdArg = withRequiredArg("arenaId", "Arena ID", ArgTypes.STRING);
-      this.bossIdArg = withRequiredArg("bossId", "Boss ID", ArgTypes.STRING);
-    }
-
-    @Override
-    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-      String arenaId = ctx.get(arenaIdArg);
-      String bossId = ctx.get(bossIdArg);
-
-      ShopEntry existing = ShopRegistry.find(arenaId, bossId);
-      if (existing == null) {
-        ctx.sendMessage(Message.raw("No shop entry found for " + bossId + " at " + arenaId));
-        return CompletableFuture.completedFuture(null);
-      }
-
-      ShopRegistry.remove(arenaId, bossId);
-
-      //plugin.saveShops().thenRun(() -> {
-      //  ctx.sendMessage(Message.raw("✓ Removed shop entry: " + existing.toString()));
-      //});
-
-      return CompletableFuture.completedFuture(null);
-    }
-  }
-
-  private static final class ShopList extends AbstractCommand {
-    ShopList(BossArenaPlugin plugin) {
-      super("list", "List all shop entries: /bossarena shop list");
-      requireAdminPermission(this);
-    }
-
-    @Override
-    protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-      List<ShopEntry> entries = ShopRegistry.getAll();
-
-      if (entries.isEmpty()) {
-        ctx.sendMessage(Message.raw("No shop entries"));
-        return CompletableFuture.completedFuture(null);
-      }
-
-      ctx.sendMessage(Message.raw("=== Shop Entries (" + entries.size() + ") ==="));
-      for (ShopEntry entry : entries) {
-        ctx.sendMessage(Message.raw("  • " + entry.toString()));
-      }
-
+      ctx.sendMessage(Message.raw("Use: /bossarena shop <open|place|delete>"));
       return CompletableFuture.completedFuture(null);
     }
   }
@@ -598,71 +496,209 @@ public final class BossArenaCommand extends AbstractCommand {
   }
 
   private static final class ShopPlace extends AbstractCommand {
+    private final BossArenaPlugin plugin;
+
     ShopPlace(BossArenaPlugin plugin) {
-      super("place", "Give the shop pedestal item: /bossarena shop place");
+      super("place", "Spawn the shop NPC at your location: /bossarena shop place");
+      this.plugin = plugin;
       requireAdminPermission(this);
     }
 
     @Override
     protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-      return giveShopPedestal(ctx);
+      return spawnShopNpc(ctx, plugin);
     }
   }
 
-  private static final class ShopGive extends AbstractCommand {
-    ShopGive(BossArenaPlugin plugin) {
-      super("give", "Give the shop pedestal item: /bossarena shop give");
-      requireAdminPermission(this);
+  private static final class ShopDelete extends AbstractCommand {
+    private final BossArenaPlugin plugin;
+
+    ShopDelete(BossArenaPlugin plugin) {
+      super("delete", "Delete nearest spawned shop NPC: /bossarena shop delete");
+      this.plugin = plugin;
     }
 
     @Override
     protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
-      return giveShopPedestal(ctx);
+      if (!ctx.isPlayer()) {
+        ctx.sendMessage(Message.raw("Player-only command"));
+        return CompletableFuture.completedFuture(null);
+      }
+
+      Player player = ctx.senderAs(Player.class);
+      World world = player.getWorld();
+      if (world == null) {
+        ctx.sendMessage(Message.raw("Could not resolve player world"));
+        return CompletableFuture.completedFuture(null);
+      }
+
+      Vector3d playerPosition = getPlayerPosition(player);
+      UUID nearest = findNearestShopNpcUuid(plugin, world, playerPosition);
+      if (nearest == null) {
+        boolean removedShopLocation = false;
+        if (plugin.getShopConfig() != null) {
+          int x = (int) Math.floor(playerPosition.x);
+          int y = (int) Math.floor(playerPosition.y);
+          int z = (int) Math.floor(playerPosition.z);
+          removedShopLocation = plugin.getShopConfig().removeNearestShopLocation(world.getName(), x, y, z, 4);
+          if (removedShopLocation) {
+            plugin.saveShopConfig();
+          }
+        }
+        if (removedShopLocation) {
+          ctx.sendMessage(Message.raw("No tracked shop NPC found. Removed nearest saved shop location entry near your position."));
+        } else {
+          ctx.sendMessage(Message.raw("No tracked shop NPC found in this world."));
+        }
+        return CompletableFuture.completedFuture(null);
+      }
+
+      world.execute(() -> {
+        Ref<EntityStore> ref = world.getEntityRef(nearest);
+        if (ref == null) {
+          if (plugin.getShopConfig() != null && plugin.getShopConfig().removeShopNpcUuid(nearest.toString())) {
+            plugin.saveShopConfig();
+          }
+          ctx.sendMessage(Message.raw("Shop NPC entity not found (stale UUID): " + nearest));
+          return;
+        }
+
+        boolean changed = false;
+        Entity entity = world.getEntity(nearest);
+        if (plugin.getShopConfig() != null) {
+          changed |= plugin.getShopConfig().removeShopNpcUuid(nearest.toString());
+          if (entity != null && entity.getTransformComponent() != null) {
+            Vector3d position = entity.getTransformComponent().getPosition();
+            int x = (int) Math.floor(position.x);
+            int y = (int) Math.floor(position.y);
+            int z = (int) Math.floor(position.z);
+            String worldName = world.getName();
+            boolean removedExact = plugin.getShopConfig().removeShopLocation(worldName, x, y, z);
+            changed |= removedExact;
+            if (!removedExact) {
+              changed |= plugin.getShopConfig().removeNearestShopLocation(worldName, x, y, z, 3);
+            }
+          }
+        }
+        if (changed) {
+          plugin.saveShopConfig();
+        }
+
+        world.getEntityStore().getStore().removeEntity(ref, RemoveReason.REMOVE);
+        ctx.sendMessage(Message.raw("Deleted shop NPC: " + nearest));
+      });
+      return CompletableFuture.completedFuture(null);
     }
   }
 
-  private static CompletableFuture<Void> giveShopPedestal(@Nonnull CommandContext ctx) {
+  private static CompletableFuture<Void> spawnShopNpc(@Nonnull CommandContext ctx, BossArenaPlugin plugin) {
     if (!ctx.isPlayer()) {
       ctx.sendMessage(Message.raw("Player-only command"));
       return CompletableFuture.completedFuture(null);
     }
 
     Player player = ctx.senderAs(Player.class);
-    Inventory inventory = player.getInventory();
-    if (inventory == null) {
-      ctx.sendMessage(Message.raw("Could not resolve player inventory"));
+    World world = player.getWorld();
+    if (world == null) {
+      ctx.sendMessage(Message.raw("Could not resolve player world"));
       return CompletableFuture.completedFuture(null);
     }
 
-    ItemContainer container = inventory.getCombinedBackpackStorageHotbar();
-    if (container == null) {
-      ctx.sendMessage(Message.raw("Could not resolve player inventory container"));
-      return CompletableFuture.completedFuture(null);
-    }
+    Vector3d playerPosition = getPlayerPosition(player);
+    Vector3d spawnPosition = new Vector3d(playerPosition.x, playerPosition.y, playerPosition.z + 2.0d);
+    String shopNpcId = plugin.getShopConfig() != null
+            && plugin.getShopConfig().shopNpcId != null
+            && !plugin.getShopConfig().shopNpcId.isBlank()
+            ? plugin.getShopConfig().shopNpcId.trim()
+            : BossArenaPlugin.SHOP_NPC_TYPE_ID;
 
-    String pedestalId = resolveShopPedestalItemId();
-    ItemStack stack = new ItemStack(pedestalId, 1);
-    ItemStackTransaction tx = container.addItemStack(stack);
-    if (tx == null || !tx.succeeded()) {
-      ctx.sendMessage(Message.raw("Inventory full - could not add shop pedestal"));
-      return CompletableFuture.completedFuture(null);
-    }
+    world.execute(() -> {
+      var result = NPCPlugin.get().spawnNPC(
+              world.getEntityStore().getStore(),
+              shopNpcId,
+              null,
+              spawnPosition,
+              new Vector3f(0, 0, 0)
+      );
 
-    player.sendInventory();
-    ctx.sendMessage(Message.raw("Added shop pedestal to your inventory (" + pedestalId + ")"));
+      if (result == null) {
+        ctx.sendMessage(Message.raw("Failed to spawn shop NPC (" + shopNpcId + ")."));
+        return;
+      }
+
+      Store<EntityStore> store = world.getEntityStore().getStore();
+      store.ensureComponent(result.first(), Interactable.getComponentType());
+      Interactions interactions = store.ensureAndGetComponent(result.first(), Interactions.getComponentType());
+      interactions.setInteractionId(InteractionType.Use, BossArenaPlugin.SHOP_OPEN_INTERACTION_ID);
+      interactions.setInteractionHint("open Boss Arena Shop");
+
+      Object uuidCompObj = store.getComponent(result.first(), UUIDComponent.getComponentType());
+      UUID spawnedUuid = null;
+      if (uuidCompObj instanceof UUIDComponent uuidComp) {
+        spawnedUuid = uuidComp.getUuid();
+      }
+
+      int x = (int) Math.floor(spawnPosition.x);
+      int y = (int) Math.floor(spawnPosition.y);
+      int z = (int) Math.floor(spawnPosition.z);
+      plugin.recordShopLocation(
+              world.getName(),
+              new com.hypixel.hytale.math.vector.Vector3i(x, y, z),
+              spawnedUuid
+      );
+      ctx.sendMessage(Message.raw(
+              "Spawned shop NPC (" + shopNpcId + ") at "
+                      + x + ", " + y + ", " + z + " in " + world.getName()
+      ));
+    });
     return CompletableFuture.completedFuture(null);
   }
 
-  private static String resolveShopPedestalItemId() {
-    for (String id : List.of("Boss_Arena_Shop")) {
-      if (Item.getAssetMap().getAsset(id) != null) {
-        return id;
+  private static UUID findNearestShopNpcUuid(BossArenaPlugin plugin, World world, Vector3d origin) {
+    if (plugin == null || plugin.getShopConfig() == null || plugin.getShopConfig().shops == null) {
+      return null;
+    }
+
+    UUID nearest = null;
+    double bestDistSq = Double.MAX_VALUE;
+
+    for (var location : plugin.getShopConfig().shops) {
+      if (location == null || location.uuid == null || location.uuid.isBlank()) {
+        continue;
       }
-      String namespaced = BossArenaPlugin.ASSET_PACK_ID + ":" + id;
-      if (Item.getAssetMap().getAsset(namespaced) != null) {
-        return namespaced;
+      String rawUuid = location.uuid;
+      if (rawUuid == null || rawUuid.isBlank()) {
+        continue;
+      }
+
+      UUID uuid;
+      try {
+        uuid = UUID.fromString(rawUuid.trim());
+      } catch (IllegalArgumentException ignored) {
+        continue;
+      }
+
+      Entity entity = world.getEntity(uuid);
+      if (entity == null) {
+        continue;
+      }
+
+      var transform = entity.getTransformComponent();
+      if (transform == null) {
+        continue;
+      }
+
+      Vector3d pos = transform.getPosition();
+      double dx = pos.x - origin.x;
+      double dy = pos.y - origin.y;
+      double dz = pos.z - origin.z;
+      double distSq = (dx * dx) + (dy * dy) + (dz * dz);
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        nearest = uuid;
       }
     }
-    return "Boss_Arena_Shop";
+
+    return nearest;
   }
 }

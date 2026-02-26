@@ -175,7 +175,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
                 entry = new ShopEntry();
                 entry.enabled = false;
                 entry.displayName = "No Contracts";
-                entry.description = "No bosses are enabled for this table and tier.";
+                entry.description = "No bosses are enabled for this shop and tier.";
                 entry.cost = 0;
                 entry.bossId = "";
                 entry.arenaId = "";
@@ -238,7 +238,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
     private void handlePurchase(Ref<EntityStore> ref, Store<EntityStore> store, int slot) {
         List<ShopEntry> displayed = resolveDisplayedEntriesForTier(selectedTier);
         if (displayed.isEmpty()) {
-            playerRef.sendMessage(Message.raw("No bosses are enabled on this table for this tier."));
+            playerRef.sendMessage(Message.raw("No bosses are enabled for this shop and tier."));
             return;
         }
 
@@ -270,9 +270,9 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         }
 
         if (tableWorldName != null && tableX != null && tableY != null && tableZ != null) {
-            BossShopConfig.ShopTableLocation location = config.getTableLocation(tableWorldName, tableX, tableY, tableZ);
+            BossShopConfig.ShopLocation location = config.getShopLocation(tableWorldName, tableX, tableY, tableZ);
             if (location != null && location.enabledBossIds != null) {
-                String tableArenaId = resolveTableArenaId(location, tableWorldName, tableX, tableY, tableZ);
+                String tableArenaId = resolveShopArenaId(location, tableWorldName, tableX, tableY, tableZ);
                 List<ShopEntry> tableEntries = new ArrayList<>();
                 for (String bossId : location.enabledBossIds) {
                     BossDefinition boss = BossRegistry.get(bossId);
@@ -298,7 +298,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
                     out.description = configured != null && !isBlank(configured.description)
                             ? configured.description
                             : (isBlank(out.arenaId)
-                            ? "Summon " + boss.bossName + ". Configure the table arena in /ba config."
+                            ? "Summon " + boss.bossName + ". Configure the shop arena in /ba config."
                             : "Summon " + boss.bossName + " at " + out.arenaId);
                     out.icon = configured != null ? configured.icon : "";
 
@@ -314,11 +314,11 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         return resolveLegacyEntriesForTier(config, tier);
     }
 
-    private static String resolveTableArenaId(BossShopConfig.ShopTableLocation location,
-                                              String worldName,
-                                              int x,
-                                              int y,
-                                              int z) {
+    private static String resolveShopArenaId(BossShopConfig.ShopLocation location,
+                                             String worldName,
+                                             int x,
+                                             int y,
+                                             int z) {
         String configuredArenaId = optional(location != null ? location.arenaId : null);
         if (!configuredArenaId.isEmpty()) {
             return configuredArenaId;
@@ -416,13 +416,6 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
     }
 
     private static int resolveVisibleSlotsForTier(BossShopConfig config, Map<String, ShopEntry> entries, String tier) {
-        if (config != null && config.visibleSlotsByTier != null) {
-            Integer configured = config.visibleSlotsByTier.get(tier);
-            if (configured != null) {
-                return clampVisibleSlots(configured);
-            }
-        }
-
         int inferred = inferVisibleSlotsFromEntries(entries, tier);
         if (inferred > 0) {
             return clampVisibleSlots(inferred);

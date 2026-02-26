@@ -10,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
 public final class BossArenaShortCommand extends AbstractCommand {
 
   public BossArenaShortCommand(BossArenaPlugin plugin) {
-    super("ba", "Shortcut for /bossarena");  // CHANGED from "bs" to "ba"
+    super("ba", "Shortcut for /bossarena");
     requirePermission(BossArenaCommand.ADMIN_PERMISSION);
 
     // Register all the same subcommands as BossArenaCommand
@@ -24,7 +24,7 @@ public final class BossArenaShortCommand extends AbstractCommand {
   @Override
   protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
     ctx.sendMessage(com.hypixel.hytale.server.core.Message.raw(
-            "Use: /ba arena <create|delete|list> OR /ba spawn <bossId> [arenaId] OR /ba reload OR /ba config"
+            "Use: /ba arena <create|delete|list> OR /ba spawn <bossId> <arenaId|here> OR /ba reload OR /ba config OR /ba shop <open|place|delete>"
     ));
     return CompletableFuture.completedFuture(null);
   }

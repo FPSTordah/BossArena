@@ -9,7 +9,6 @@ import com.bossarena.loot.LootItem;
 import com.bossarena.loot.LootRegistry;
 import com.bossarena.loot.LootTable;
 import com.bossarena.shop.BossShopConfig;
-import com.bossarena.shop.ShopEntry;
 import com.hypixel.hytale.codec.Codec;
 import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
@@ -46,10 +45,12 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
     private static final int MAX_ARENA_ROWS = 8;
     private static final int MAX_SHOP_ROWS = 8;
     private static final int MAX_SHOP_BOSS_ROWS = 12;
+    private static final int MAX_SHOP_BOSS_VISIBLE_ROWS = 10;
     private static final int MAX_BOSS_ROWS = 8;
     private static final int MAX_LOOT_ROWS = 8;
     private static final int MAX_WAVE_ADD_ROWS = 6;
     private static final int BOSS_SCROLL_THUMB_STEPS = 10;
+    private static final int SHOP_EDIT_SCROLL_THUMB_STEPS = 10;
     private static final Pattern ARENA_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]+$");
 
     private final BossArenaPlugin plugin;
@@ -60,13 +61,13 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
     private String bossStatusText = "";
 
     private final List<String> arenaRows = new ArrayList<>();
-    private final List<ShopTableRef> shopRows = new ArrayList<>();
+    private final List<ShopLocationRef> shopRows = new ArrayList<>();
     private final List<String> bossRows = new ArrayList<>();
     private int bossListOffset = 0;
 
     private BossEditorState bossEditorState;
     private boolean bossWavesOverlayOpen;
-    private ShopTableEditorState shopTableEditorState;
+    private ShopLocationEditorState shopLocationEditorState;
 
     private BossArenaConfigPage(PlayerRef playerRef, BossArenaPlugin plugin, String tab) {
         super(playerRef, CustomPageLifetime.CanDismiss, ConfigEventData.CODEC);
@@ -184,35 +185,35 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                               UICommandBuilder cmd,
                               UIEventBuilder events) {
         cmd.set("#ShopStatusLabel.Text", shopStatusText == null ? "" : shopStatusText);
-        List<ShopTableView> tables = snapshotShopTables(ref, store);
+        List<ShopLocationView> shopLocations = snapshotShopLocations(ref, store);
         shopRows.clear();
 
-        cmd.set("#ShopOverflowLabel.Visible", tables.size() > MAX_SHOP_ROWS);
-        if (tables.size() > MAX_SHOP_ROWS) {
-            cmd.set("#ShopOverflowLabel.Text", "+" + (tables.size() - MAX_SHOP_ROWS) + " more shop tables not shown on this page yet.");
+        cmd.set("#ShopOverflowLabel.Visible", shopLocations.size() > MAX_SHOP_ROWS);
+        if (shopLocations.size() > MAX_SHOP_ROWS) {
+            cmd.set("#ShopOverflowLabel.Text", "+" + (shopLocations.size() - MAX_SHOP_ROWS) + " more shop locations not shown on this page yet.");
         } else {
             cmd.set("#ShopOverflowLabel.Text", "");
         }
 
-        cmd.set("#ShopEmptyLabel.Visible", tables.isEmpty());
-        if (tables.isEmpty()) {
-            cmd.set("#ShopEmptyLabel.Text", "No shop tables found for this world.");
+        cmd.set("#ShopEmptyLabel.Visible", shopLocations.isEmpty());
+        if (shopLocations.isEmpty()) {
+            cmd.set("#ShopEmptyLabel.Text", "No shop locations found for this world.");
         }
 
         for (int row = 1; row <= MAX_SHOP_ROWS; row++) {
             String suffix = Integer.toString(row);
-            boolean visible = row <= tables.size();
+            boolean visible = row <= shopLocations.size();
             cmd.set("#ShopRow" + suffix + ".Visible", visible);
             if (!visible) {
                 continue;
             }
 
-            ShopTableView table = tables.get(row - 1);
-            shopRows.add(new ShopTableRef(table.worldName, table.x, table.y, table.z));
-            cmd.set("#ShopArena" + suffix + ".Text", table.arenaLabel);
-            cmd.set("#ShopDistance" + suffix + ".Text", table.distanceLabel);
-            cmd.set("#ShopBosses" + suffix + ".Text", Integer.toString(table.enabledBosses));
-            cmd.set("#ShopEntries" + suffix + ".Text", table.enabledBosses + "/" + table.totalBosses);
+            ShopLocationView shopLocation = shopLocations.get(row - 1);
+            shopRows.add(new ShopLocationRef(shopLocation.worldName, shopLocation.x, shopLocation.y, shopLocation.z));
+            cmd.set("#ShopArena" + suffix + ".Text", shopLocation.arenaLabel);
+            cmd.set("#ShopDistance" + suffix + ".Text", shopLocation.distanceLabel);
+            cmd.set("#ShopBosses" + suffix + ".Text", Integer.toString(shopLocation.enabledBosses));
+            cmd.set("#ShopEntries" + suffix + ".Text", shopLocation.enabledBosses + "/" + shopLocation.totalBosses);
             events.addEventBinding(
                     CustomUIEventBindingType.Activating,
                     "#ShopEdit" + suffix,
@@ -220,13 +221,13 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             );
         }
 
-        cmd.set("#ShopTableEditorOverlay.Visible", shopTableEditorState != null);
-        if (shopTableEditorState != null) {
-            buildShopTableEditorOverlay(cmd, events);
+        cmd.set("#ShopEditorOverlay.Visible", shopLocationEditorState != null);
+        if (shopLocationEditorState != null) {
+            buildShopLocationEditorOverlay(cmd, events);
         }
     }
 
-    private List<ShopTableView> snapshotShopTables(Ref<EntityStore> ref, Store<EntityStore> store) {
+    private List<ShopLocationView> snapshotShopLocations(Ref<EntityStore> ref, Store<EntityStore> store) {
         Player player = store.getComponent(ref, Player.getComponentType());
         String currentWorld = null;
         Vector3d playerPosition = null;
@@ -242,14 +243,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
 
         BossShopConfig shopConfig = plugin.getShopConfig();
-        if (shopConfig == null || shopConfig.tableLocations == null || shopConfig.tableLocations.isEmpty()) {
+        if (shopConfig == null || shopConfig.shops == null || shopConfig.shops.isEmpty()) {
             shopStatusText = "";
             return List.of();
         }
 
         int totalBosses = snapshotBossNames().size();
-        List<ShopTableView> out = new ArrayList<>();
-        for (BossShopConfig.ShopTableLocation location : shopConfig.tableLocations) {
+        List<ShopLocationView> out = new ArrayList<>();
+        for (BossShopConfig.ShopLocation location : shopConfig.shops) {
             if (location == null) {
                 continue;
             }
@@ -263,7 +264,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
             String configuredArenaId = optionalText(location.arenaId);
             Arena nearestArena = configuredArenaId.isEmpty()
-                    ? findNearestArenaForTable(locationWorld, location.x, location.y, location.z)
+                    ? findNearestArenaForShop(locationWorld, location.x, location.y, location.z)
                     : null;
             String resolvedArenaId = configuredArenaId;
             if (resolvedArenaId.isEmpty() && nearestArena != null) {
@@ -279,7 +280,17 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 distance = Math.sqrt((dx * dx) + (dy * dy) + (dz * dz));
             }
 
-            String arenaLabel = "(" + location.x + ", " + location.y + ", " + location.z + ")";
+            String shopName = optionalText(location.name);
+            if (shopName.isEmpty()) {
+                String uuid = optionalText(location.uuid);
+                if (!uuid.isEmpty()) {
+                    shopName = "Shop " + (uuid.length() > 8 ? uuid.substring(0, 8) : uuid);
+                } else {
+                    shopName = "Shop";
+                }
+            }
+
+            String arenaLabel = safeText(shopName) + " | (" + location.x + ", " + location.y + ", " + location.z + ")";
             if (!configuredArenaId.isEmpty()) {
                 arenaLabel = arenaLabel + " | " + safeText(configuredArenaId);
             } else if (!resolvedArenaId.isEmpty()) {
@@ -288,7 +299,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 arenaLabel = arenaLabel + " | [unset]";
             }
             String distanceLabel = distance != null ? formatDouble(distance) + "m" : "--";
-            out.add(new ShopTableView(
+            out.add(new ShopLocationView(
                     arenaLabel,
                     distanceLabel,
                     distance,
@@ -302,14 +313,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
 
         out.sort(Comparator
-                .comparing((ShopTableView row) -> row.distance == null)
+                .comparing((ShopLocationView row) -> row.distance == null)
                 .thenComparing(row -> row.distance == null ? Double.MAX_VALUE : row.distance)
                 .thenComparing(row -> row.arenaLabel.toLowerCase(Locale.ROOT)));
 
         if (currentWorld == null) {
-            shopStatusText = "Could not resolve player world; showing all saved shop tables.";
+            shopStatusText = "Could not resolve player world; showing all saved shop locations.";
         } else {
-            shopStatusText = "Showing saved tables in world '" + currentWorld + "', nearest first.";
+            shopStatusText = "Showing saved shop locations in world '" + currentWorld + "', nearest first.";
         }
 
         return out;
@@ -328,7 +339,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         return out;
     }
 
-    private static Arena findNearestArenaForTable(String worldName, int x, int y, int z) {
+    private static Arena findNearestArenaForShop(String worldName, int x, int y, int z) {
         Arena best = null;
         double bestDistanceSq = Double.MAX_VALUE;
         for (Arena arena : ArenaRegistry.getAll()) {
@@ -365,13 +376,23 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return;
         }
 
+        if ("shop_edit_scroll_up".equals(action)) {
+            scrollShopEditList(-1);
+            return;
+        }
+
+        if ("shop_edit_scroll_down".equals(action)) {
+            scrollShopEditList(1);
+            return;
+        }
+
         if ("shop_edit_save".equals(action)) {
             handleShopEditSave(data);
             return;
         }
 
         if ("shop_edit_close".equals(action)) {
-            shopTableEditorState = null;
+            shopLocationEditorState = null;
             rebuild();
         }
     }
@@ -384,7 +405,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return;
         }
 
-        ShopTableRef table = shopRows.get(row - 1);
+        ShopLocationRef shopLocation = shopRows.get(row - 1);
         BossShopConfig shopConfig = plugin.getShopConfig();
         if (shopConfig == null) {
             shopStatusText = "Shop config is unavailable.";
@@ -392,9 +413,9 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return;
         }
 
-        BossShopConfig.ShopTableLocation location = shopConfig.getTableLocation(table.worldName, table.x, table.y, table.z);
+        BossShopConfig.ShopLocation location = shopConfig.getShopLocation(shopLocation.worldName, shopLocation.x, shopLocation.y, shopLocation.z);
         if (location == null) {
-            shopStatusText = "Selected shop table no longer exists in config.";
+            shopStatusText = "Selected shop location no longer exists in config.";
             rebuild();
             return;
         }
@@ -413,34 +434,55 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             }
         }
 
-        shopTableEditorState = new ShopTableEditorState(table, orderedBosses, enabled, optionalText(location.arenaId));
+        shopLocationEditorState = new ShopLocationEditorState(shopLocation, orderedBosses, enabled, optionalText(location.arenaId));
         shopStatusText = "";
         rebuild();
     }
 
     private void handleShopEditToggle(String rowToken) {
-        if (shopTableEditorState == null) {
+        if (shopLocationEditorState == null) {
             return;
         }
 
         int row = parseRow(rowToken);
-        if (row < 1 || row > shopTableEditorState.orderedBossNames.size()) {
+        if (row < 1 || row > MAX_SHOP_BOSS_VISIBLE_ROWS) {
             shopStatusText = "Invalid boss toggle row.";
             rebuild();
             return;
         }
 
-        String bossName = shopTableEditorState.orderedBossNames.get(row - 1);
-        if (shopTableEditorState.enabledBossNames.contains(bossName)) {
-            shopTableEditorState.enabledBossNames.remove(bossName);
+        int bossIndex = shopLocationEditorState.bossListOffset + row - 1;
+        if (bossIndex < 0 || bossIndex >= shopLocationEditorState.orderedBossNames.size()) {
+            shopStatusText = "Invalid boss toggle row.";
+            rebuild();
+            return;
+        }
+
+        String bossName = shopLocationEditorState.orderedBossNames.get(bossIndex);
+        if (shopLocationEditorState.enabledBossNames.contains(bossName)) {
+            shopLocationEditorState.enabledBossNames.remove(bossName);
         } else {
-            shopTableEditorState.enabledBossNames.add(bossName);
+            shopLocationEditorState.enabledBossNames.add(bossName);
         }
         rebuild();
     }
 
+    private void scrollShopEditList(int delta) {
+        if (delta == 0 || shopLocationEditorState == null) {
+            return;
+        }
+        int totalBosses = shopLocationEditorState.orderedBossNames.size();
+        int maxOffset = Math.max(0, totalBosses - MAX_SHOP_BOSS_VISIBLE_ROWS);
+        int nextOffset = Math.max(0, Math.min(maxOffset, shopLocationEditorState.bossListOffset + delta));
+        if (nextOffset == shopLocationEditorState.bossListOffset) {
+            return;
+        }
+        shopLocationEditorState.bossListOffset = nextOffset;
+        rebuild();
+    }
+
     private void handleShopEditSave(ConfigEventData data) {
-        if (shopTableEditorState == null) {
+        if (shopLocationEditorState == null) {
             return;
         }
 
@@ -451,74 +493,102 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return;
         }
 
-        ShopTableRef table = shopTableEditorState.table;
-        BossShopConfig.ShopTableLocation location = shopConfig.getTableLocation(table.worldName, table.x, table.y, table.z);
+        ShopLocationRef shopLocation = shopLocationEditorState.shopLocation;
+        BossShopConfig.ShopLocation location = shopConfig.getShopLocation(shopLocation.worldName, shopLocation.x, shopLocation.y, shopLocation.z);
         if (location == null) {
-            shopStatusText = "Selected shop table no longer exists in config.";
+            shopStatusText = "Selected shop location no longer exists in config.";
             rebuild();
             return;
         }
 
         List<String> savedBossIds = new ArrayList<>();
-        for (String bossName : shopTableEditorState.orderedBossNames) {
-            if (shopTableEditorState.enabledBossNames.contains(bossName)) {
+        for (String bossName : shopLocationEditorState.orderedBossNames) {
+            if (shopLocationEditorState.enabledBossNames.contains(bossName)) {
                 savedBossIds.add(bossName);
             }
         }
         String configuredArenaId = resolvedOrFallback(
                 data != null ? data.shopEditArenaId : null,
-                shopTableEditorState.arenaId
+                shopLocationEditorState.arenaId
         );
-        shopTableEditorState.arenaId = configuredArenaId;
+        shopLocationEditorState.arenaId = configuredArenaId;
         location.arenaId = configuredArenaId;
         location.enabledBossIds = savedBossIds;
 
         plugin.saveShopConfig();
         String arenaText = configuredArenaId.isEmpty() ? "nearest arena (auto)" : configuredArenaId;
-        shopStatusText = "Saved table (" + table.x + ", " + table.y + ", " + table.z + ") with arena '" + arenaText + "'.";
-        shopTableEditorState = null;
+        shopStatusText = "Saved shop location (" + shopLocation.x + ", " + shopLocation.y + ", " + shopLocation.z + ") with arena '" + arenaText + "'.";
+        shopLocationEditorState = null;
         rebuild();
     }
 
-    private void buildShopTableEditorOverlay(UICommandBuilder cmd, UIEventBuilder events) {
-        ShopTableEditorState state = shopTableEditorState;
+    private void buildShopLocationEditorOverlay(UICommandBuilder cmd, UIEventBuilder events) {
+        ShopLocationEditorState state = shopLocationEditorState;
         if (state == null) {
             return;
         }
 
-        ShopTableRef table = state.table;
+        ShopLocationRef shopLocation = state.shopLocation;
         cmd.set(
-                "#ShopTableEditorTitle.Text",
-                "Table (" + table.x + ", " + table.y + ", " + table.z + ")  [" + safeText(table.worldName) + "]"
+                "#ShopEditorTitle.Text",
+                "Shop (" + shopLocation.x + ", " + shopLocation.y + ", " + shopLocation.z + ")  [" + safeText(shopLocation.worldName) + "]"
         );
         cmd.set(
-                "#ShopTableEditorHint.Text",
-                "Set the table arena and toggle bosses. Enabled bosses are the only contracts shown there."
+                "#ShopEditorHint.Text",
+                "Set the shop arena and toggle bosses. Enabled bosses are the only contracts shown there."
         );
-        cmd.set("#ShopTableEditorArena.Value", optionalText(state.arenaId));
+        cmd.set("#ShopEditorArena.Value", optionalText(state.arenaId));
 
         cmd.set(
-                "#ShopTableEditorOverflowLabel.Visible",
-                state.orderedBossNames.size() > MAX_SHOP_BOSS_ROWS
+                "#ShopEditorOverflowLabel.Visible",
+                state.orderedBossNames.size() > MAX_SHOP_BOSS_VISIBLE_ROWS
         );
-        if (state.orderedBossNames.size() > MAX_SHOP_BOSS_ROWS) {
+        if (state.orderedBossNames.size() > MAX_SHOP_BOSS_VISIBLE_ROWS) {
             cmd.set(
-                    "#ShopTableEditorOverflowLabel.Text",
-                    "+" + (state.orderedBossNames.size() - MAX_SHOP_BOSS_ROWS) + " more bosses not shown."
+                    "#ShopEditorOverflowLabel.Text",
+                    "Use scroll to view all bosses."
             );
         } else {
-            cmd.set("#ShopTableEditorOverflowLabel.Text", "");
+            cmd.set("#ShopEditorOverflowLabel.Text", "");
         }
+
+        int totalBosses = state.orderedBossNames.size();
+        int maxOffset = Math.max(0, totalBosses - MAX_SHOP_BOSS_VISIBLE_ROWS);
+        state.bossListOffset = Math.max(0, Math.min(state.bossListOffset, maxOffset));
+        boolean scrollable = totalBosses > MAX_SHOP_BOSS_VISIBLE_ROWS;
+        boolean canScrollUp = scrollable && state.bossListOffset > 0;
+        boolean canScrollDown = scrollable && state.bossListOffset < maxOffset;
+
+        cmd.set("#ShopEditScrollUp.Visible", canScrollUp);
+        cmd.set("#ShopEditScrollDown.Visible", canScrollDown);
+        cmd.set("#ShopEditScrollTrack.Visible", scrollable);
+        cmd.set("#ShopEditScrollPageLabel.Visible", scrollable);
+
+        int scrollThumbStep = resolveShopEditScrollThumbStep(state.bossListOffset, maxOffset);
+        for (int step = 1; step <= SHOP_EDIT_SCROLL_THUMB_STEPS; step++) {
+            cmd.set("#ShopEditScrollThumb" + step + ".Visible", scrollable && step == scrollThumbStep);
+        }
+        if (scrollable) {
+            int start = state.bossListOffset + 1;
+            int end = Math.min(totalBosses, state.bossListOffset + MAX_SHOP_BOSS_VISIBLE_ROWS);
+            cmd.set("#ShopEditScrollPageLabel.Text", start + "-" + end + " / " + totalBosses);
+        } else {
+            cmd.set("#ShopEditScrollPageLabel.Text", "");
+        }
+
+        events.addEventBinding(CustomUIEventBindingType.Activating, "#ShopEditScrollUp", EventData.of("Action", "shop_edit_scroll_up"));
+        events.addEventBinding(CustomUIEventBindingType.Activating, "#ShopEditScrollDown", EventData.of("Action", "shop_edit_scroll_down"));
 
         for (int row = 1; row <= MAX_SHOP_BOSS_ROWS; row++) {
             String suffix = Integer.toString(row);
-            boolean visible = row <= state.orderedBossNames.size();
+            int bossIndex = state.bossListOffset + row - 1;
+            boolean visible = row <= MAX_SHOP_BOSS_VISIBLE_ROWS && bossIndex < totalBosses;
             cmd.set("#ShopEditBossRow" + suffix + ".Visible", visible);
             if (!visible) {
                 continue;
             }
 
-            String bossName = state.orderedBossNames.get(row - 1);
+            String bossName = state.orderedBossNames.get(bossIndex);
             BossDefinition boss = BossRegistry.get(bossName);
             String tierText = boss != null ? normalizeTier(boss.tier) : "uncommon";
             boolean enabled = state.enabledBossNames.contains(bossName);
@@ -536,12 +606,21 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
         events.addEventBinding(
                 CustomUIEventBindingType.Activating,
-                "#ShopTableEditorSaveButton",
+                "#ShopEditorSaveButton",
                 new EventData()
                         .append("Action", "shop_edit_save")
-                        .append("@ShopEditArenaId", "#ShopTableEditorArena.Value")
+                        .append("@ShopEditArenaId", "#ShopEditorArena.Value")
         );
-        events.addEventBinding(CustomUIEventBindingType.Activating, "#ShopTableEditorCloseButton", EventData.of("Action", "shop_edit_close"));
+        events.addEventBinding(CustomUIEventBindingType.Activating, "#ShopEditorCloseButton", EventData.of("Action", "shop_edit_close"));
+    }
+
+    private static int resolveShopEditScrollThumbStep(int offset, int maxOffset) {
+        if (maxOffset <= 0) {
+            return 1;
+        }
+        double normalized = Math.max(0.0d, Math.min(1.0d, (double) offset / (double) maxOffset));
+        int index = (int) Math.round(normalized * (SHOP_EDIT_SCROLL_THUMB_STEPS - 1));
+        return Math.max(1, Math.min(SHOP_EDIT_SCROLL_THUMB_STEPS, index + 1));
     }
 
     private static String resolveBossNameCaseInsensitive(List<String> bossNames, String input) {
@@ -2034,13 +2113,13 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         return TAB_BOSSES;
     }
 
-    private static final class ShopTableRef {
+    private static final class ShopLocationRef {
         private final String worldName;
         private final int x;
         private final int y;
         private final int z;
 
-        private ShopTableRef(String worldName, int x, int y, int z) {
+        private ShopLocationRef(String worldName, int x, int y, int z) {
             this.worldName = worldName;
             this.x = x;
             this.y = y;
@@ -2048,24 +2127,26 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
     }
 
-    private static final class ShopTableEditorState {
-        private final ShopTableRef table;
+    private static final class ShopLocationEditorState {
+        private final ShopLocationRef shopLocation;
         private final List<String> orderedBossNames;
         private final Set<String> enabledBossNames;
         private String arenaId;
+        private int bossListOffset;
 
-        private ShopTableEditorState(ShopTableRef table,
-                                     List<String> orderedBossNames,
-                                     Set<String> enabledBossNames,
-                                     String arenaId) {
-            this.table = table;
+        private ShopLocationEditorState(ShopLocationRef shopLocation,
+                                        List<String> orderedBossNames,
+                                        Set<String> enabledBossNames,
+                                        String arenaId) {
+            this.shopLocation = shopLocation;
             this.orderedBossNames = orderedBossNames;
             this.enabledBossNames = enabledBossNames;
             this.arenaId = arenaId;
+            this.bossListOffset = 0;
         }
     }
 
-    private static final class ShopTableView {
+    private static final class ShopLocationView {
         private final String arenaLabel;
         private final String distanceLabel;
         private final Double distance;
@@ -2076,7 +2157,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         private final int enabledBosses;
         private final int totalBosses;
 
-        private ShopTableView(String arenaLabel,
+        private ShopLocationView(String arenaLabel,
                               String distanceLabel,
                               Double distance,
                               String worldName,

@@ -1,0 +1,12 @@
+{
+  "Type": "Variant",
+  "Reference": "Template_Temple",
+  "Modify": {
+    "Appearance": "Temple_Mithril_Guard",
+    "GreetRange": 3,
+    "GreetAnimation": "Alerted",
+    "PlayerGreetTimeout": 60,
+    "GeneralGreetTimeout": [ 60, 60 ],
+    "MotionStatic": true
+  }
+}
