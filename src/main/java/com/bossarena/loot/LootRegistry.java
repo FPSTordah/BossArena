@@ -127,17 +127,18 @@ public class LootRegistry {
 
         // Example Boss loot table
         LootTable exampleBossLoot = new LootTable("Example Boss", 40.0);
-        exampleBossLoot.addItem(new LootItem("Diamond", 1.0, 3, 7));        // 100% chance, 3-7 diamonds
-        exampleBossLoot.addItem(new LootItem("Gold_Ingot", 0.8, 5, 10));    // 80% chance, 5-10 gold
-        exampleBossLoot.addItem(new LootItem("Emerald", 0.5, 1, 3));        // 50% chance, 1-3 emeralds
-        exampleBossLoot.addItem(new LootItem("Iron_Ingot", 1.0, 10, 20));   // 100% chance, 10-20 iron
+        exampleBossLoot.addItem(new LootItem("Ingredient_Fibre", 1.0, 4, 10));
+        exampleBossLoot.addItem(new LootItem("Ingredient_Stick", 0.85, 2, 6));
+        exampleBossLoot.addItem(new LootItem("Ore_Copper", 0.70, 1, 4));
+        exampleBossLoot.addItem(new LootItem("Plant_Fruit_Berries_Red", 0.60, 2, 5));
         register(exampleBossLoot);
 
         // My_Boss loot table
         LootTable myBossLoot = new LootTable("My_Boss", 40.0);
-        myBossLoot.addItem(new LootItem("Diamond", 1.0, 5, 10));           // 100% chance, 5-10 diamonds
-        myBossLoot.addItem(new LootItem("Netherite_Ingot", 0.3, 1, 2));    // 30% chance, 1-2 netherite
-        myBossLoot.addItem(new LootItem("Enchanted_Golden_Apple", 0.5, 1, 3)); // 50% chance, 1-3 god apples
+        myBossLoot.addItem(new LootItem("Ingredient_Fibre", 1.0, 5, 12));
+        myBossLoot.addItem(new LootItem("Ingredient_Hide_Light", 0.80, 1, 4));
+        myBossLoot.addItem(new LootItem("Ore_Copper", 0.75, 1, 5));
+        myBossLoot.addItem(new LootItem("Plant_Fruit_Apple", 0.55, 2, 4));
         register(myBossLoot);
 
         LOGGER.info("Created " + size() + " default loot tables");

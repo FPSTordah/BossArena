@@ -166,7 +166,9 @@ public class BossLootHandler {
             LOGGER.info("Generated loot for " + playerUuid + ": " + loot.size() + " items");
         }
 
-        Vector3d chestCopy = new Vector3d(chestLocation.x, chestLocation.y, chestLocation.z);
+        Vector3d chestCopy = normalizeChestKey(chestLocation);
+        chestCopy = applySnowZOffset(world, chestCopy);
+        LOGGER.info("Using boss event center block for chest spawn: " + chestCopy + " (requested: " + chestLocation + ")");
 
         // Store the loot at this location
         storeLootAtChest(world, chestCopy, allPlayerLoot);
@@ -424,6 +426,112 @@ public class BossLootHandler {
                 LOGGER.log(Level.SEVERE, "Error spawning boss chest", e);
             }
         });
+    }
+
+    private static Vector3d resolveChestSpawnLocation(World world, Vector3d desiredLocation) {
+        if (world == null || desiredLocation == null) {
+            return desiredLocation;
+        }
+
+        int x = (int) Math.floor(desiredLocation.x);
+        int z = (int) Math.floor(desiredLocation.z);
+        int baseY = (int) Math.floor(desiredLocation.y);
+        int maxOffset = 24;
+
+        // Choose the nearest valid surface to the requested Y, preferring at/below first.
+        for (int offset = 0; offset <= maxOffset; offset++) {
+            int supportYBelow = baseY - offset;
+            if (supportYBelow >= 1 && isValidChestSupport(world, x, supportYBelow, z)) {
+                return new Vector3d(x, supportYBelow + 1, z);
+            }
+
+            if (offset == 0) {
+                continue;
+            }
+            int supportYAbove = baseY + offset;
+            if (isValidChestSupport(world, x, supportYAbove, z)) {
+                return new Vector3d(x, supportYAbove + 1, z);
+            }
+        }
+
+        int fallbackY = Math.max(1, baseY);
+        for (int attempt = 0; attempt < 8; attempt++) {
+            if (isReplaceableBlock(world.getBlockType(x, fallbackY, z))) {
+                break;
+            }
+            fallbackY++;
+        }
+        return new Vector3d(x, fallbackY, z);
+    }
+
+    private static Vector3d applySnowZOffset(World world, Vector3d chestLocation) {
+        if (world == null || chestLocation == null) {
+            return chestLocation;
+        }
+
+        int x = (int) Math.floor(chestLocation.x);
+        int y = (int) Math.floor(chestLocation.y);
+        int z = (int) Math.floor(chestLocation.z);
+
+        BlockType at = world.getBlockType(x, y, z);
+        BlockType below = world.getBlockType(x, y - 1, z);
+        if (!isSnowBlock(at) && !isSnowBlock(below)) {
+            return chestLocation;
+        }
+
+        Vector3d shifted = new Vector3d(x, y, z + 1);
+        LOGGER.info("Snow detected at chest location, applying +1 Z offset: " + chestLocation + " -> " + shifted);
+        return shifted;
+    }
+
+    private static boolean isSnowBlock(BlockType type) {
+        if (type == null || type.getId() == null) {
+            return false;
+        }
+        return type.getId().toLowerCase(Locale.ROOT).contains("snow");
+    }
+
+    private static boolean isValidChestSupport(World world, int x, int supportY, int z) {
+        if (!isSolidSupportBlock(world.getBlockType(x, supportY, z))) {
+            return false;
+        }
+        if (!isReplaceableBlock(world.getBlockType(x, supportY + 1, z))) {
+            return false;
+        }
+        // Most chest prefabs need headroom; avoid clipping into overhead blocks.
+        return isReplaceableBlock(world.getBlockType(x, supportY + 2, z));
+    }
+
+    private static boolean isSolidSupportBlock(BlockType type) {
+        if (type == null) {
+            return false;
+        }
+        return !isReplaceableBlock(type);
+    }
+
+    private static boolean isReplaceableBlock(BlockType type) {
+        if (type == null) {
+            return true;
+        }
+
+        String id = type.getId();
+        if (id == null || id.isBlank()) {
+            return true;
+        }
+
+        String normalized = id.toLowerCase(Locale.ROOT);
+        return normalized.contains("air")
+                || normalized.contains("snow_layer")
+                || normalized.contains("tallgrass")
+                || normalized.contains("tall_grass")
+                || normalized.contains("short_grass")
+                || normalized.contains("grass_plant")
+                || normalized.contains("flower")
+                || normalized.contains("fern")
+                || normalized.contains("leaf")
+                || normalized.contains("vine")
+                || normalized.contains("water")
+                || normalized.contains("lava");
     }
 
     // New method to replace the chest's state

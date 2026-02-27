@@ -26,7 +26,13 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.modules.entity.component.EntityScaleComponent;
 import com.hypixel.hytale.protocol.InteractionType;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -35,9 +41,13 @@ import java.util.logging.Logger;
 
 public final class BossSpawnService {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
-    private static final String HEALTH_MODIFIER_KEY = "BossArena.HealthMultiplier";
+    public static final String HEALTH_MODIFIER_KEY = "BossArena.HealthMultiplier";
+    public static final UUID DEFERRED_SPAWN_UUID = new UUID(0L, 2L);
     private static final double GOLDEN_ANGLE_RADIANS = 2.399963229728653d;
     private static final double BOSS_SPAWN_SPACING_BLOCKS = 2.75d;
+    private static final long DEFAULT_REPEAT_INTERVAL_MS = 1_000L;
+    private static final long HP_TRIGGER_POLL_INTERVAL_MS = 250L;
+    private static final double HP_TRIGGER_EPSILON = 0.01d;
     private static final ScheduledExecutorService EXTRA_WAVE_SCHEDULER =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "BossArena-ExtraWaves");
@@ -87,10 +97,70 @@ public final class BossSpawnService {
 
         LOGGER.info("Boss modifiers calculated - HP: " + mods.hpMultiplier() + ", Damage: " + mods.damageMultiplier() + ", Size: " + mods.scaleMultiplier());
 
-        UUID primaryBossUuid = null;
-        UUID bossEventId = null;
         int countdownMinutes = config != null ? config.getBossTierCountdownMinutes(def.tier) : 30;
         long countdownDurationMs = TimeUnit.MINUTES.toMillis(Math.max(1, countdownMinutes));
+        List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWavesBuffer = List.of();
+        List<UUID> pendingPreBossAdds = Collections.synchronizedList(new ArrayList<>());
+        AtomicInteger nextWaveNumber = new AtomicInteger(1);
+
+        if (def.extraMobs != null) {
+            def.extraMobs.sanitize();
+            resolvedWavesBuffer = def.extraMobs.getResolvedScheduledWaves();
+        }
+        final List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves = resolvedWavesBuffer;
+
+        long preBossDelayMs = scheduleBeforeBossWaveTimeline(
+                world,
+                def,
+                spawnPos,
+                resolvedWaves,
+                nextWaveNumber,
+                pendingPreBossAdds
+        );
+        if (preBossDelayMs > 0L) {
+            LOGGER.info("Delaying boss spawn for '" + def.bossName + "' by " + preBossDelayMs + "ms due to before_boss schedule.");
+            EXTRA_WAVE_SCHEDULER.schedule(
+                    () -> world.execute(() -> spawnBossNow(
+                            world,
+                            def,
+                            spawnPos,
+                            arenaId,
+                            mods,
+                            countdownDurationMs,
+                            resolvedWaves,
+                            pendingPreBossAdds,
+                            nextWaveNumber
+                    )),
+                    preBossDelayMs,
+                    TimeUnit.MILLISECONDS
+            );
+            return DEFERRED_SPAWN_UUID;
+        }
+
+        return spawnBossNow(
+                world,
+                def,
+                spawnPos,
+                arenaId,
+                mods,
+                countdownDurationMs,
+                resolvedWaves,
+                pendingPreBossAdds,
+                nextWaveNumber
+        );
+    }
+
+    private UUID spawnBossNow(World world,
+                              BossDefinition def,
+                              Vector3d spawnPos,
+                              String arenaId,
+                              BossModifiers mods,
+                              long countdownDurationMs,
+                              List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves,
+                              List<UUID> pendingPreBossAdds,
+                              AtomicInteger nextWaveNumber) {
+        UUID primaryBossUuid = null;
+        UUID bossEventId = null;
 
         // Spawn the boss(es)
         for (int i = 0; i < def.amount; i++) {
@@ -133,7 +203,11 @@ public final class BossSpawnService {
             }
         }
 
-        // Schedule extra mobs if configured
+        if (primaryBossUuid != null && def.extraMobs != null && def.extraMobs.hasConfiguredAdds()) {
+            attachPreBossAddsToEvent(world, primaryBossUuid, pendingPreBossAdds);
+            scheduleConfiguredWaves(world, def, spawnPos, primaryBossUuid, resolvedWaves, nextWaveNumber);
+        }
+
         if (primaryBossUuid != null) {
             BossTrackingSystem.BossData bossData = tracking.getBossData(primaryBossUuid);
             if (bossData != null) {
@@ -147,10 +221,6 @@ public final class BossSpawnService {
                         tracking.getRemainingCountdownMillis(primaryBossUuid)
                 );
             }
-        }
-
-        if (primaryBossUuid != null && def.extraMobs != null && def.extraMobs.hasConfiguredAdds()) {
-            scheduleExtraMobWaves(world, def, spawnPos, primaryBossUuid);
         }
 
         return primaryBossUuid;
@@ -220,121 +290,566 @@ public final class BossSpawnService {
         }
     }
 
-    private void scheduleExtraMobWaves(World world, BossDefinition def, Vector3d spawnPos, UUID bossUuid) {
-        BossDefinition.ExtraMobs extra = def.extraMobs;
-        if (extra == null) {
-            return;
-        }
-        extra.sanitize();
-
-        if (extra.waves == 0) {
-            LOGGER.info("Extra mob waves disabled (waves=0) for boss '" + def.bossName + "'.");
-            return;
-        }
-        if (!extra.hasConfiguredAdds()) {
-            LOGGER.info("No configured add entries for boss '" + def.bossName + "'.");
-            return;
+    private long scheduleBeforeBossWaveTimeline(World world,
+                                                BossDefinition def,
+                                                Vector3d spawnPos,
+                                                List<BossDefinition.ExtraMobs.ScheduledWave> schedules,
+                                                AtomicInteger nextWaveNumber,
+                                                List<UUID> pendingPreBossAdds) {
+        List<BossDefinition.ExtraMobs.ScheduledWave> beforeBoss = filterSchedulesByTrigger(
+                schedules,
+                BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS
+        );
+        if (beforeBoss.isEmpty()) {
+            return 0L;
         }
 
-        long intervalMs = Math.max(1L, extra.timeLimitMs);
-        int maxWaves = extra.waves; // -1 = infinite
+        List<PreBossExecution> executions = new ArrayList<>();
+        int scheduleIndex = 0;
+        long bossSpawnIntervalMs = DEFAULT_REPEAT_INTERVAL_MS;
+        for (BossDefinition.ExtraMobs.ScheduledWave scheduledWave : beforeBoss) {
+            scheduleIndex++;
+            int repeatCount = Math.max(1, scheduledWave.repeatCount);
+            if (scheduledWave.repeatCount < 0) {
+                LOGGER.info("before_boss trigger requested infinite repeats; limiting to 1 execution for '" + def.bossName + "'.");
+                repeatCount = 1;
+            }
+            long firstDelayMs = toMillisOrDefault(scheduledWave.triggerValue, 0L);
+            long repeatStepMs = toMillisOrDefault(scheduledWave.repeatEverySeconds, DEFAULT_REPEAT_INTERVAL_MS);
+            long scheduleBossIntervalMs = repeatStepMs;
+            if (scheduledWave.repeatEverySeconds <= 0.0d && scheduledWave.triggerValue > 0.0d) {
+                scheduleBossIntervalMs = toMillisOrDefault(scheduledWave.triggerValue, DEFAULT_REPEAT_INTERVAL_MS);
+            }
+            bossSpawnIntervalMs = Math.max(bossSpawnIntervalMs, scheduleBossIntervalMs);
 
-        if (maxWaves < 0) {
-            LOGGER.info("Scheduling infinite extra mob waves every " + intervalMs + "ms for boss '" + def.bossName + "'.");
-        } else {
-            LOGGER.info("Scheduling " + maxWaves + " extra mob waves every " + intervalMs + "ms for boss '" + def.bossName + "'.");
+            for (int execution = 1; execution <= repeatCount; execution++) {
+                long triggerDelayMs = firstDelayMs + ((long) (execution - 1) * repeatStepMs);
+                executions.add(new PreBossExecution(triggerDelayMs, execution, scheduleIndex, scheduledWave));
+            }
         }
 
-        scheduleWave(world, def, spawnPos, bossUuid, 1, maxWaves, intervalMs);
+        if (executions.isEmpty()) {
+            return 0L;
+        }
+
+        long bossDelayMs = 0L;
+        for (PreBossExecution execution : executions) {
+            bossDelayMs = Math.max(bossDelayMs, execution.triggerDelayMs);
+        }
+        bossDelayMs += Math.max(1L, bossSpawnIntervalMs);
+
+        executions.sort(Comparator
+                .comparingLong((PreBossExecution execution) -> execution.triggerDelayMs)
+                .thenComparingInt(execution -> execution.scheduleIndex)
+                .thenComparingInt(execution -> execution.executionNumber));
+
+        LOGGER.info("Scheduling " + executions.size() + " pre-boss wave execution(s) over " + bossDelayMs
+                + "ms for boss '" + def.bossName + "' (boss interval=" + bossSpawnIntervalMs + "ms).");
+
+        for (PreBossExecution execution : executions) {
+            long delayMs = Math.max(0L, execution.triggerDelayMs);
+            Runnable runExecution = () -> {
+                int waveNumber = nextWaveNumber.getAndIncrement();
+                List<UUID> spawned = spawnConfiguredWave(
+                        world,
+                        def,
+                        spawnPos,
+                        waveNumber,
+                        null,
+                        execution.wave.adds,
+                        "before_boss@+" + formatSeconds(execution.triggerDelayMs / 1000.0d) + "s#" + execution.executionNumber
+                );
+                if (!spawned.isEmpty()) {
+                    synchronized (pendingPreBossAdds) {
+                        pendingPreBossAdds.addAll(spawned);
+                    }
+                }
+            };
+
+            if (delayMs <= 0L) {
+                runExecution.run();
+                continue;
+            }
+
+            LOGGER.info("Scheduled before_boss wave execution " + execution.executionNumber
+                    + " in " + delayMs + "ms (schedule row " + execution.scheduleIndex + ").");
+            EXTRA_WAVE_SCHEDULER.schedule(() -> world.execute(runExecution), delayMs, TimeUnit.MILLISECONDS);
+        }
+
+        return bossDelayMs;
     }
 
-    private void scheduleWave(World world,
-                              BossDefinition def,
-                              Vector3d spawnPos,
-                              UUID bossUuid,
-                              int waveNumber,
-                              int maxWaves,
-                              long intervalMs) {
-        if (maxWaves > 0 && waveNumber > maxWaves) {
+    private void scheduleConfiguredWaves(World world,
+                                         BossDefinition def,
+                                         Vector3d spawnPos,
+                                         UUID bossUuid,
+                                         List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves,
+                                         AtomicInteger nextWaveNumber) {
+        if (resolvedWaves == null || resolvedWaves.isEmpty()) {
+            LOGGER.info("No resolved wave schedule for boss '" + def.bossName + "'.");
             return;
         }
 
+        List<BossDefinition.ExtraMobs.ScheduledWave> onSpawn = filterSchedulesByTrigger(
+                resolvedWaves,
+                BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN
+        );
+        List<BossDefinition.ExtraMobs.ScheduledWave> afterSpawn = filterSchedulesByTrigger(
+                resolvedWaves,
+                BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS
+        );
+        List<BossDefinition.ExtraMobs.ScheduledWave> sinceLastWave = filterSchedulesByTrigger(
+                resolvedWaves,
+                BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE
+        );
+        List<BossDefinition.ExtraMobs.ScheduledWave> hpThreshold = filterSchedulesByTrigger(
+                resolvedWaves,
+                BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT
+        );
+        afterSpawn.sort(Comparator.comparingDouble(wave -> wave.triggerValue));
+        hpThreshold.sort(Comparator.comparingDouble(BossSpawnService::reverseHealthThresholdOrder));
+
+        LOGGER.info("Resolved wave schedule for '" + def.bossName + "': onSpawn=" + onSpawn.size()
+                + ", afterSpawn=" + afterSpawn.size()
+                + ", sinceLastWave=" + sinceLastWave.size()
+                + ", hpThreshold=" + hpThreshold.size());
+
+        boolean hasSinceLastAnchor = false;
+        long lastScheduledWaveDelayMs = 0L;
+
+        for (BossDefinition.ExtraMobs.ScheduledWave scheduledWave : onSpawn) {
+            int waveNumber = nextWaveNumber.getAndIncrement();
+            spawnConfiguredWave(
+                    world,
+                    def,
+                    spawnPos,
+                    waveNumber,
+                    bossUuid,
+                    scheduledWave.adds,
+                    "on_spawn"
+            );
+            hasSinceLastAnchor = true;
+            lastScheduledWaveDelayMs = Math.max(lastScheduledWaveDelayMs, 0L);
+
+            if (scheduledWave.repeatCount < 0 || scheduledWave.repeatCount > 1) {
+                long repeatDelayMs = toMillisOrDefault(scheduledWave.repeatEverySeconds, DEFAULT_REPEAT_INTERVAL_MS);
+                scheduleTimedWaveExecution(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        scheduledWave.adds,
+                        nextWaveNumber,
+                        "on_spawn_repeat",
+                        2,
+                        scheduledWave.repeatCount,
+                        repeatDelayMs,
+                        repeatDelayMs
+                );
+
+                if (scheduledWave.repeatCount > 1) {
+                    long lastRepeatDelayMs = repeatDelayMs * (scheduledWave.repeatCount - 1L);
+                    lastScheduledWaveDelayMs = Math.max(lastScheduledWaveDelayMs, lastRepeatDelayMs);
+                }
+            }
+        }
+
+        for (BossDefinition.ExtraMobs.ScheduledWave scheduledWave : afterSpawn) {
+            long firstDelayMs = toMillisOrDefault(scheduledWave.triggerValue, 0L);
+            long repeatDelayMs = toMillisOrDefault(scheduledWave.repeatEverySeconds, DEFAULT_REPEAT_INTERVAL_MS);
+            hasSinceLastAnchor = true;
+            lastScheduledWaveDelayMs = Math.max(lastScheduledWaveDelayMs, firstDelayMs);
+            scheduleTimedWaveExecution(
+                    world,
+                    def,
+                    spawnPos,
+                    bossUuid,
+                    scheduledWave.adds,
+                    nextWaveNumber,
+                    "after_spawn@" + formatSeconds(scheduledWave.triggerValue) + "s",
+                    1,
+                    scheduledWave.repeatCount,
+                    firstDelayMs,
+                    repeatDelayMs
+            );
+
+            if (scheduledWave.repeatCount > 1) {
+                long lastRepeatDelayMs = firstDelayMs + (repeatDelayMs * (scheduledWave.repeatCount - 1L));
+                lastScheduledWaveDelayMs = Math.max(lastScheduledWaveDelayMs, lastRepeatDelayMs);
+            }
+        }
+
+        if (!sinceLastWave.isEmpty() && !hasSinceLastAnchor) {
+            LOGGER.info("Skipping since_last_wave schedules for '" + def.bossName
+                    + "' because no prior wave trigger is configured. Boss spawn is not treated as a wave.");
+        } else {
+            long sinceLastCumulativeDelayMs = lastScheduledWaveDelayMs;
+            for (BossDefinition.ExtraMobs.ScheduledWave scheduledWave : sinceLastWave) {
+                long stepDelayMs = toMillisOrDefault(scheduledWave.triggerValue, 0L);
+                sinceLastCumulativeDelayMs += stepDelayMs;
+                long repeatDelayMs = toMillisOrDefault(scheduledWave.repeatEverySeconds, DEFAULT_REPEAT_INTERVAL_MS);
+                scheduleTimedWaveExecution(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        scheduledWave.adds,
+                        nextWaveNumber,
+                        "since_last_wave@" + formatSeconds(scheduledWave.triggerValue) + "s",
+                        1,
+                        scheduledWave.repeatCount,
+                        sinceLastCumulativeDelayMs,
+                        repeatDelayMs
+                );
+
+                if (scheduledWave.repeatCount < 0) {
+                    LOGGER.info("since_last_wave schedule for '" + def.bossName
+                            + "' has infinite repeats; remaining since_last_wave rows will be ignored.");
+                    break;
+                }
+                if (scheduledWave.repeatCount > 1) {
+                    sinceLastCumulativeDelayMs += repeatDelayMs * (scheduledWave.repeatCount - 1L);
+                }
+            }
+        }
+
+        for (BossDefinition.ExtraMobs.ScheduledWave scheduledWave : hpThreshold) {
+            scheduleHpThresholdWave(
+                    world,
+                    def,
+                    spawnPos,
+                    bossUuid,
+                    scheduledWave,
+                    nextWaveNumber
+            );
+        }
+    }
+
+    private void attachPreBossAddsToEvent(World world, UUID bossUuid, List<UUID> preBossAdds) {
+        if (bossUuid == null || preBossAdds == null || preBossAdds.isEmpty()) {
+            return;
+        }
+
+        int attached = 0;
+        for (UUID addUuid : preBossAdds) {
+            if (!isEntityAlive(world, addUuid)) {
+                continue;
+            }
+            tracking.trackAdd(bossUuid, addUuid);
+            attached++;
+        }
+        if (attached > 0) {
+            LOGGER.info("Attached " + attached + " pre-boss add(s) to boss event " + bossUuid + ".");
+        }
+    }
+
+    private void scheduleTimedWaveExecution(World world,
+                                            BossDefinition def,
+                                            Vector3d spawnPos,
+                                            UUID bossUuid,
+                                            List<BossDefinition.ExtraMobs.WaveAdd> adds,
+                                            AtomicInteger nextWaveNumber,
+                                            String triggerLabel,
+                                            int executionNumber,
+                                            int repeatCount,
+                                            long delayMs,
+                                            long repeatDelayMs) {
+        if (repeatCount > 0 && executionNumber > repeatCount) {
+            return;
+        }
+
+        long safeDelayMs = Math.max(0L, delayMs);
+        long safeRepeatDelayMs = Math.max(1L, repeatDelayMs);
+        LOGGER.info("Scheduled wave trigger '" + triggerLabel + "' execution " + executionNumber
+                + " in " + safeDelayMs + "ms for boss " + bossUuid + ".");
+
         EXTRA_WAVE_SCHEDULER.schedule(() -> world.execute(() -> {
-            if (!isBossAlive(world, bossUuid, waveNumber)) {
+            if (!isBossAlive(world, bossUuid, triggerLabel + "#" + executionNumber)) {
                 return;
             }
 
-            spawnExtraMobWave(world, def, spawnPos, waveNumber, bossUuid);
+            int waveNumber = nextWaveNumber.getAndIncrement();
+            spawnConfiguredWave(world, def, spawnPos, waveNumber, bossUuid, adds, triggerLabel + "#" + executionNumber);
 
-            if (maxWaves < 0 || waveNumber < maxWaves) {
-                scheduleWave(world, def, spawnPos, bossUuid, waveNumber + 1, maxWaves, intervalMs);
+            if (repeatCount < 0 || executionNumber < repeatCount) {
+                scheduleTimedWaveExecution(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        adds,
+                        nextWaveNumber,
+                        triggerLabel,
+                        executionNumber + 1,
+                        repeatCount,
+                        safeRepeatDelayMs,
+                        safeRepeatDelayMs
+                );
             }
-        }), intervalMs, TimeUnit.MILLISECONDS);
-
-        LOGGER.info("Scheduled wave " + waveNumber + " to spawn in " + intervalMs + "ms");
+        }), safeDelayMs, TimeUnit.MILLISECONDS);
     }
 
-    private boolean isBossAlive(World world, UUID bossUuid, int waveNumber) {
-        LOGGER.info("Wave " + waveNumber + " timer triggered");
+    private void scheduleHpThresholdWave(World world,
+                                         BossDefinition def,
+                                         Vector3d spawnPos,
+                                         UUID bossUuid,
+                                         BossDefinition.ExtraMobs.ScheduledWave scheduledWave,
+                                         AtomicInteger nextWaveNumber) {
+        double threshold = Math.max(0d, Math.min(100d, scheduledWave.triggerValue));
+        long repeatDelayMs = toMillisOrDefault(scheduledWave.repeatEverySeconds, DEFAULT_REPEAT_INTERVAL_MS);
+        int remainingRepeatsAfterThreshold = scheduledWave.repeatCount < 0
+                ? -1
+                : Math.max(0, scheduledWave.repeatCount - 1);
+        AtomicBoolean thresholdTriggered = new AtomicBoolean(false);
+        LOGGER.info("Scheduled HP-trigger wave at <= " + formatSeconds(threshold) + "% for boss " + bossUuid + ".");
 
-        // Check if boss is still tracked
-        boolean bossTracked = tracking.isTracked(bossUuid);
+        scheduleHpThresholdPoll(
+                world,
+                def,
+                spawnPos,
+                bossUuid,
+                threshold,
+                scheduledWave.adds,
+                nextWaveNumber,
+                remainingRepeatsAfterThreshold,
+                repeatDelayMs,
+                thresholdTriggered
+        );
+    }
 
-        if (!bossTracked) {
-            LOGGER.info("Boss not in tracking system - CANCELLING wave " + waveNumber);
+    private void scheduleHpThresholdPoll(World world,
+                                         BossDefinition def,
+                                         Vector3d spawnPos,
+                                         UUID bossUuid,
+                                         double thresholdPercent,
+                                         List<BossDefinition.ExtraMobs.WaveAdd> adds,
+                                         AtomicInteger nextWaveNumber,
+                                         int remainingRepeatsAfterThreshold,
+                                         long repeatDelayMs,
+                                         AtomicBoolean thresholdTriggered) {
+        EXTRA_WAVE_SCHEDULER.schedule(() -> world.execute(() -> {
+            if (!isBossAlive(world, bossUuid, "boss_hp_percent<=" + formatSeconds(thresholdPercent))) {
+                return;
+            }
+            if (thresholdTriggered.get()) {
+                return;
+            }
+
+            double currentHpPercent = getBossHealthPercent(world, bossUuid);
+            if (currentHpPercent < 0d) {
+                scheduleHpThresholdPoll(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        thresholdPercent,
+                        adds,
+                        nextWaveNumber,
+                        remainingRepeatsAfterThreshold,
+                        repeatDelayMs,
+                        thresholdTriggered
+                );
+                return;
+            }
+
+            if (currentHpPercent > thresholdPercent + HP_TRIGGER_EPSILON) {
+                scheduleHpThresholdPoll(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        thresholdPercent,
+                        adds,
+                        nextWaveNumber,
+                        remainingRepeatsAfterThreshold,
+                        repeatDelayMs,
+                        thresholdTriggered
+                );
+                return;
+            }
+            if (!thresholdTriggered.compareAndSet(false, true)) {
+                return;
+            }
+
+            int waveNumber = nextWaveNumber.getAndIncrement();
+            LOGGER.info("HP trigger reached for boss " + bossUuid + ": current=" + formatSeconds(currentHpPercent)
+                    + "% threshold=" + formatSeconds(thresholdPercent) + "%.");
+            spawnConfiguredWave(
+                    world,
+                    def,
+                    spawnPos,
+                    waveNumber,
+                    bossUuid,
+                    adds,
+                    "boss_hp_percent<=" + formatSeconds(thresholdPercent)
+            );
+
+            if (remainingRepeatsAfterThreshold != 0) {
+                LOGGER.info("Scheduling HP follow-up waves for boss " + bossUuid + ": remaining="
+                        + (remainingRepeatsAfterThreshold < 0 ? "infinite" : remainingRepeatsAfterThreshold)
+                        + ", every=" + repeatDelayMs + "ms.");
+                scheduleHpFollowupWave(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        thresholdPercent,
+                        adds,
+                        nextWaveNumber,
+                        remainingRepeatsAfterThreshold,
+                        repeatDelayMs
+                );
+            }
+        }), HP_TRIGGER_POLL_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private void scheduleHpFollowupWave(World world,
+                                        BossDefinition def,
+                                        Vector3d spawnPos,
+                                        UUID bossUuid,
+                                        double thresholdPercent,
+                                        List<BossDefinition.ExtraMobs.WaveAdd> adds,
+                                        AtomicInteger nextWaveNumber,
+                                        int remainingRepeats,
+                                        long repeatDelayMs) {
+        long safeDelayMs = Math.max(1L, repeatDelayMs);
+        EXTRA_WAVE_SCHEDULER.schedule(() -> world.execute(() -> {
+            if (!isBossAlive(world, bossUuid, "boss_hp_percent_repeat<=" + formatSeconds(thresholdPercent))) {
+                return;
+            }
+
+            int waveNumber = nextWaveNumber.getAndIncrement();
+            spawnConfiguredWave(
+                    world,
+                    def,
+                    spawnPos,
+                    waveNumber,
+                    bossUuid,
+                    adds,
+                    "boss_hp_percent_repeat<=" + formatSeconds(thresholdPercent)
+            );
+
+            if (remainingRepeats < 0) {
+                scheduleHpFollowupWave(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        thresholdPercent,
+                        adds,
+                        nextWaveNumber,
+                        -1,
+                        safeDelayMs
+                );
+            } else if (remainingRepeats > 1) {
+                scheduleHpFollowupWave(
+                        world,
+                        def,
+                        spawnPos,
+                        bossUuid,
+                        thresholdPercent,
+                        adds,
+                        nextWaveNumber,
+                        remainingRepeats - 1,
+                        safeDelayMs
+                );
+            }
+        }), safeDelayMs, TimeUnit.MILLISECONDS);
+    }
+
+    private boolean isBossAlive(World world, UUID bossUuid, String triggerLabel) {
+        if (bossUuid == null) {
+            LOGGER.info("Skipping wave trigger '" + triggerLabel + "' because boss UUID is null.");
             return false;
         }
 
-        // Also check if boss entity still exists and is alive
+        if (!tracking.isTracked(bossUuid)) {
+            LOGGER.info("Skipping wave trigger '" + triggerLabel + "' because boss is no longer tracked: " + bossUuid);
+            return false;
+        }
+
+        return isEntityAlive(world, bossUuid);
+    }
+
+    private boolean isEntityAlive(World world, UUID entityUuid) {
+        if (world == null || entityUuid == null) {
+            return false;
+        }
         try {
-            var entityRef = world.getEntityRef(bossUuid);
+            var entityRef = world.getEntityRef(entityUuid);
             if (entityRef == null || !entityRef.isValid()) {
-                LOGGER.info("Boss entity no longer exists - CANCELLING wave " + waveNumber);
                 return false;
             }
 
             var store = world.getEntityStore().getStore();
-            var assetMap = EntityStatType.getAssetMap();
-            int healthIndex = assetMap.getIndex("Health");
-
             Object statMapObj = store.getComponent(entityRef, EntityStatMap.getComponentType());
-            if (statMapObj instanceof EntityStatMap statMap) {
-                var healthValue = statMap.get(healthIndex);
-                if (healthValue != null && healthValue.get() <= 0) {
-                    LOGGER.info("Boss is dead (HP <= 0) - CANCELLING wave " + waveNumber);
-                    return false;
-                }
+            if (!(statMapObj instanceof EntityStatMap statMap)) {
+                return true;
             }
+
+            int healthIndex = EntityStatType.getAssetMap().getIndex("Health");
+            if (healthIndex < 0) {
+                return true;
+            }
+            var healthValue = statMap.get(healthIndex);
+            return healthValue == null || healthValue.get() > 0f;
         } catch (Exception e) {
-            LOGGER.warning("Error checking boss status: " + e.getMessage());
+            LOGGER.fine("Failed to check entity alive state: " + entityUuid + " -> " + e.getMessage());
             return false;
         }
-
-        return true;
     }
 
-    private void spawnExtraMobWave(World world,
-                                   BossDefinition def,
-                                   Vector3d spawnPos,
-                                   int waveNumber,
-                                   UUID bossUuid) {
-        if (def.extraMobs == null) {
-            return;
+    private double getBossHealthPercent(World world, UUID bossUuid) {
+        if (world == null || bossUuid == null) {
+            return -1d;
         }
-        var adds = def.extraMobs.getConfiguredAdds();
-        if (adds.isEmpty()) {
-            return;
-        }
-
-        LOGGER.info("Boss is alive - SPAWNING wave " + waveNumber);
-
-        int spawnedThisWave = 0;
-        for (BossDefinition.ExtraMobs.WaveAdd add : adds) {
-            int everyWave = Math.max(1, add.everyWave);
-            if (waveNumber % everyWave != 0) {
-                continue;
+        try {
+            var entityRef = world.getEntityRef(bossUuid);
+            if (entityRef == null || !entityRef.isValid()) {
+                return -1d;
             }
 
+            var store = world.getEntityStore().getStore();
+            Object statMapObj = store.getComponent(entityRef, EntityStatMap.getComponentType());
+            if (!(statMapObj instanceof EntityStatMap statMap)) {
+                return -1d;
+            }
+
+            int healthIndex = EntityStatType.getAssetMap().getIndex("Health");
+            if (healthIndex < 0) {
+                return -1d;
+            }
+            var healthValue = statMap.get(healthIndex);
+            if (healthValue == null || healthValue.getMax() <= 0f) {
+                return -1d;
+            }
+
+            return (healthValue.get() / healthValue.getMax()) * 100.0d;
+        } catch (Exception e) {
+            LOGGER.fine("Failed to evaluate boss HP percent for " + bossUuid + ": " + e.getMessage());
+            return -1d;
+        }
+    }
+
+    private List<UUID> spawnConfiguredWave(World world,
+                                           BossDefinition def,
+                                           Vector3d spawnPos,
+                                           int waveNumber,
+                                           UUID bossUuid,
+                                           List<BossDefinition.ExtraMobs.WaveAdd> adds,
+                                           String triggerLabel) {
+        if (adds == null || adds.isEmpty()) {
+            return List.of();
+        }
+
+        LOGGER.info("Executing wave " + waveNumber + " for '" + def.bossName + "' via trigger '" + triggerLabel + "'.");
+
+        int trackedAddsSpawned = 0;
+        List<UUID> spawnedAddUuids = new ArrayList<>();
+        for (BossDefinition.ExtraMobs.WaveAdd add : adds) {
+            if (add == null || add.npcId == null || add.npcId.isBlank()) {
+                continue;
+            }
             int mobCount = Math.max(1, add.mobsPerWave);
             for (int i = 0; i < mobCount; i++) {
                 Vector3d mobPos = spawnPos.add(
@@ -350,33 +865,48 @@ public final class BossSpawnService {
                         mobPos,
                         new Vector3f(0, 0, 0)
                 );
-
-                if (result != null) {
-                    Ref<EntityStore> addRef = result.first();
-                    BossModifiers addMods = new BossModifiers(
-                            Math.max(0.01f, add.hp),
-                            Math.max(0.01f, add.damage),
-                            1.0f,
-                            Math.max(0.01f, add.size)
-                    );
-                    applyModifiers(world.getEntityStore().getStore(), addRef, addMods);
-                    disableDefaultEntityLoot(world.getEntityStore().getStore(), addRef, add.npcId);
-
-                    Object addUuidObj = world.getEntityStore().getStore().getComponent(addRef, UUIDComponent.getComponentType());
-                    if (addUuidObj instanceof UUIDComponent addUuidComp) {
-                        tracking.trackAdd(bossUuid, addUuidComp.getUuid());
-                        spawnedThisWave++;
-                    }
-                    LOGGER.info("Spawned add '" + add.npcId + "' " + (i + 1) + "/" + mobCount
-                            + " (wave " + waveNumber + ", every " + everyWave
-                            + ", hp=" + addMods.hpMultiplier()
-                            + ", dmg=" + addMods.damageMultiplier()
-                            + ", size=" + addMods.scaleMultiplier() + ")");
+                if (result == null) {
+                    LOGGER.warning("Failed to spawn add '" + add.npcId + "' for wave " + waveNumber + ".");
+                    continue;
                 }
+
+                Ref<EntityStore> addRef = result.first();
+                BossModifiers addMods = new BossModifiers(
+                        Math.max(0.01f, add.hp),
+                        Math.max(0.01f, add.damage),
+                        1.0f,
+                        Math.max(0.01f, add.size)
+                );
+                applyModifiers(world.getEntityStore().getStore(), addRef, addMods);
+                disableDefaultEntityLoot(world.getEntityStore().getStore(), addRef, add.npcId);
+
+                Object addUuidObj = world.getEntityStore().getStore().getComponent(addRef, UUIDComponent.getComponentType());
+                if (addUuidObj instanceof UUIDComponent addUuidComp) {
+                    UUID addUuid = addUuidComp.getUuid();
+                    spawnedAddUuids.add(addUuid);
+                    if (bossUuid != null) {
+                        tracking.trackAdd(bossUuid, addUuid);
+                        trackedAddsSpawned++;
+                    }
+                }
+
+                LOGGER.info("Spawned add '" + add.npcId + "' " + (i + 1) + "/" + mobCount
+                        + " (wave " + waveNumber
+                        + ", hp=" + addMods.hpMultiplier()
+                        + ", dmg=" + addMods.damageMultiplier()
+                        + ", size=" + addMods.scaleMultiplier() + ")");
             }
         }
 
-        if (spawnedThisWave > 0) {
+        if (bossUuid == null) {
+            if (!spawnedAddUuids.isEmpty()) {
+                LOGGER.info("Wave " + waveNumber + " spawned " + spawnedAddUuids.size()
+                        + " pre-boss add(s). They will be linked after the boss spawns.");
+            }
+            return spawnedAddUuids;
+        }
+
+        if (trackedAddsSpawned > 0) {
             BossTrackingSystem.BossData bossData = tracking.getBossData(bossUuid);
             if (bossData != null) {
                 BossWaveNotificationService.notifyWaveSpawn(
@@ -384,11 +914,67 @@ public final class BossSpawnService {
                         bossData.spawnLocation,
                         bossData.bossName,
                         waveNumber,
-                        spawnedThisWave,
+                        trackedAddsSpawned,
                         tracking.getActiveAddCountForEvent(bossUuid),
                         tracking.getRemainingCountdownMillis(bossUuid)
                 );
             }
+        }
+
+        return spawnedAddUuids;
+    }
+
+    private static List<BossDefinition.ExtraMobs.ScheduledWave> filterSchedulesByTrigger(
+            List<BossDefinition.ExtraMobs.ScheduledWave> schedules,
+            String trigger
+    ) {
+        if (schedules == null || schedules.isEmpty()) {
+            return List.of();
+        }
+        List<BossDefinition.ExtraMobs.ScheduledWave> out = new ArrayList<>();
+        for (BossDefinition.ExtraMobs.ScheduledWave wave : schedules) {
+            if (wave != null && trigger.equals(wave.trigger)) {
+                out.add(wave);
+            }
+        }
+        return out;
+    }
+
+    private static double reverseHealthThresholdOrder(BossDefinition.ExtraMobs.ScheduledWave wave) {
+        if (wave == null) {
+            return Double.MAX_VALUE;
+        }
+        return -wave.triggerValue;
+    }
+
+    private static long toMillisOrDefault(double seconds, long defaultMs) {
+        if (!Double.isFinite(seconds)) {
+            return Math.max(0L, defaultMs);
+        }
+        if (seconds <= 0.0d) {
+            return Math.max(0L, defaultMs);
+        }
+        return Math.max(0L, Math.round(seconds * 1000.0d));
+    }
+
+    private static String formatSeconds(double value) {
+        return String.format("%.2f", value);
+    }
+
+    private static final class PreBossExecution {
+        private final long triggerDelayMs;
+        private final int executionNumber;
+        private final int scheduleIndex;
+        private final BossDefinition.ExtraMobs.ScheduledWave wave;
+
+        private PreBossExecution(long triggerDelayMs,
+                                 int executionNumber,
+                                 int scheduleIndex,
+                                 BossDefinition.ExtraMobs.ScheduledWave wave) {
+            this.triggerDelayMs = Math.max(0L, triggerDelayMs);
+            this.executionNumber = executionNumber;
+            this.scheduleIndex = Math.max(0, scheduleIndex);
+            this.wave = wave;
         }
     }
 

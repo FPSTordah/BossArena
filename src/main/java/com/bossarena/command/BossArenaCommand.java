@@ -6,6 +6,7 @@ import com.bossarena.data.Arena;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
+import com.bossarena.spawn.BossSpawnService;
 import com.bossarena.shop.BossArenaShopPage;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3f;
@@ -329,21 +330,23 @@ public final class BossArenaCommand extends AbstractCommand {
       final Vector3d finalSpawnPos = spawnPos;
       final String arenaId = finalArenaId;
 
-      world.execute(() -> {
-        UUID uuid = plugin.getBossSpawnService().spawnBossFromJson(
-                player,
-                bossId,
-                world,
-                finalSpawnPos,
-                arenaId
-        );
+        world.execute(() -> {
+          UUID uuid = plugin.getBossSpawnService().spawnBossFromJson(
+                  player,
+                  bossId,
+                  world,
+                  finalSpawnPos,
+                  arenaId
+          );
 
-        if (uuid == null) {
-          ctx.sendMessage(Message.raw("§cSpawn failed for '" + bossId + "'."));
-        } else {
-          ctx.sendMessage(Message.raw("§aSpawned boss: " + bossId + " (UUID: " + uuid + ")"));
-        }
-      });
+          if (uuid == null) {
+            ctx.sendMessage(Message.raw("§cSpawn failed for '" + bossId + "'."));
+          } else if (BossSpawnService.DEFERRED_SPAWN_UUID.equals(uuid)) {
+            ctx.sendMessage(Message.raw("§aSpawn sequence started for '" + bossId + "'. Boss will spawn after pre-boss waves."));
+          } else {
+            ctx.sendMessage(Message.raw("§aSpawned boss: " + bossId + " (UUID: " + uuid + ")"));
+          }
+        });
 
       ctx.sendMessage(Message.raw("Spawning boss: " + bossId + "..."));
       return CompletableFuture.completedFuture(null);

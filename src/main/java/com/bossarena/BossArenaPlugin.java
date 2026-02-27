@@ -11,6 +11,7 @@ import com.bossarena.system.BossTrackingSystem;
 import com.bossarena.system.BossDeathSystem;
 import com.bossarena.system.BossEventNotificationSystem;
 import com.bossarena.system.LootSpawnSystem;
+import com.bossarena.system.RPGLevelingBossScaleCompatSystem;
 import com.bossarena.loot.LootRegistry;
 import com.bossarena.loot.BossLootHandler;
 import com.bossarena.loot.BossLootChestState;
@@ -18,6 +19,7 @@ import com.bossarena.loot.OpenBossChestInteraction;
 import com.bossarena.shop.BossShopConfig;
 import com.bossarena.shop.BossArenaShopPage;
 import com.bossarena.shop.OpenBossShopNpcInteraction;
+import com.hypixel.hytale.common.plugin.PluginIdentifier;
 import com.hypixel.hytale.server.core.asset.AssetModule;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
@@ -72,6 +74,7 @@ public final class BossArenaPlugin extends JavaPlugin {
     public static final String NO_DEATH_DROPS_INTERACTION_ID = "BossArena_NoDeathDrops";
     public static final String SHOP_OPEN_INTERACTION_ID = "BossArena_OpenShopNpc";
     public static final String SHOP_NPC_TYPE_ID = "bossarena_shop_guard";
+    public static final PluginIdentifier RPG_LEVELING_PLUGIN_ID = new PluginIdentifier("Zuxaw", "RPGLeveling");
     private static final Path MOD_ROOT = Path.of("mods", "BossArena");
     private static final ScheduledExecutorService SHOP_REBIND_EXECUTOR =
             Executors.newSingleThreadScheduledExecutor(r -> {
@@ -118,6 +121,9 @@ public final class BossArenaPlugin extends JavaPlugin {
         this.getEntityStoreRegistry().registerSystem(new LootSpawnSystem());
         this.getEntityStoreRegistry().registerSystem(new BossDeathSystem(trackingSystem));
         this.getEntityStoreRegistry().registerSystem(new BossEventNotificationSystem(trackingSystem));
+        this.getEntityStoreRegistry().registerSystem(new RPGLevelingBossScaleCompatSystem(trackingSystem));
+        getLogger().atInfo().log("Registered BossArena HP scale compatibility system "
+                + "(activates only when RPGLeveling is loaded)");
         getLogger().atInfo().log("Successfully registered boss systems");
 
         // Register chest interaction event

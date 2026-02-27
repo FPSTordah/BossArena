@@ -6,6 +6,7 @@ import com.bossarena.data.Arena;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
+import com.bossarena.spawn.BossSpawnService;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.Message;
@@ -93,6 +94,8 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
 
             if (uuid == null) {
                 player.sendMessage(Message.raw("Failed to spawn boss: " + bossId));
+            } else if (BossSpawnService.DEFERRED_SPAWN_UUID.equals(uuid)) {
+                player.sendMessage(Message.raw("Spawn sequence started for boss: " + bossId + ". Boss will spawn after pre-boss waves."));
             } else {
                 player.sendMessage(Message.raw("Spawned boss: " + bossId));
             }

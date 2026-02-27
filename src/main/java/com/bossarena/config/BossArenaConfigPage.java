@@ -1007,8 +1007,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         if (boss.extraMobs != null) {
             boss.extraMobs.sanitize();
         }
-        int waveCount = boss.extraMobs != null ? Math.max(-1, boss.extraMobs.waves) : 0;
-        cmd.set("#BossEditWaves.Value", Integer.toString(waveCount));
         BossWavesSummary summary = buildBossWavesSummary(boss.extraMobs);
         cmd.set("#BossWavesAdd1.Text", summary.addLine1);
         cmd.set("#BossWavesAdd2.Text", summary.addLine2);
@@ -1061,10 +1059,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         if (bossWavesOverlayOpen) {
             BossDefinition.ExtraMobs extra = boss.extraMobs != null ? boss.extraMobs : new BossDefinition.ExtraMobs();
             extra.sanitize();
-            cmd.set("#BossWavesTimeSec.Value", formatSecondsFromMillis(Math.max(0L, extra.timeLimitMs)));
-
-            List<BossDefinition.ExtraMobs.WaveAdd> waveAdds = extra.getConfiguredAdds();
-            int visibleWaveRows = Math.max(1, Math.min(MAX_WAVE_ADD_ROWS, waveAdds.size() + 1));
+            List<WaveScheduleRow> scheduleRows = flattenScheduleRows(extra);
+            boolean usingWaveDefaults = scheduleRows.isEmpty();
+            int visibleWaveRows;
+            if (usingWaveDefaults) {
+                visibleWaveRows = Math.min(MAX_WAVE_ADD_ROWS, 2);
+            } else {
+                visibleWaveRows = Math.max(1, Math.min(MAX_WAVE_ADD_ROWS, scheduleRows.size() + 1));
+            }
 
             for (int row = 1; row <= MAX_WAVE_ADD_ROWS; row++) {
                 String suffix = Integer.toString(row);
@@ -1075,24 +1077,31 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                     continue;
                 }
 
-                BossDefinition.ExtraMobs.WaveAdd add = row <= waveAdds.size() ? waveAdds.get(row - 1) : null;
-                if (add == null) {
-                    cmd.set("#BossWaveNpc" + suffix + ".Value", "");
+                WaveScheduleRow scheduleRow = row <= scheduleRows.size() ? scheduleRows.get(row - 1) : null;
+                if (scheduleRow == null) {
+                    cmd.set("#BossWaveEvery" + suffix + ".Value", defaultWaveTriggerInput(row, usingWaveDefaults));
+                    cmd.set("#BossWaveValue" + suffix + ".Value", Integer.toString(defaultWaveValueSeconds(row, usingWaveDefaults)));
+                    cmd.set("#BossWaveRepeatCount" + suffix + ".Value", "1");
+                    cmd.set("#BossWaveRepeatSec" + suffix + ".Value", "0");
+                    cmd.set("#BossWaveNpc" + suffix + ".Value", defaultWaveNpcId(row, usingWaveDefaults));
                     cmd.set("#BossWaveAmount" + suffix + ".Value", "1");
-                    cmd.set("#BossWaveEvery" + suffix + ".Value", "1");
                     cmd.set("#BossWaveHp" + suffix + ".Value", "1.00");
                     cmd.set("#BossWaveDamage" + suffix + ".Value", "1.00");
                     cmd.set("#BossWaveSize" + suffix + ".Value", "1.00");
                 } else {
-                    cmd.set("#BossWaveNpc" + suffix + ".Value", safeText(add.npcId));
-                    cmd.set("#BossWaveAmount" + suffix + ".Value", Integer.toString(Math.max(1, add.mobsPerWave)));
-                    cmd.set("#BossWaveEvery" + suffix + ".Value", Integer.toString(Math.max(1, add.everyWave)));
-                    cmd.set("#BossWaveHp" + suffix + ".Value", formatFloat(add.hp > 0f ? add.hp : 1.0f));
-                    cmd.set("#BossWaveDamage" + suffix + ".Value", formatFloat(add.damage > 0f ? add.damage : 1.0f));
-                    cmd.set("#BossWaveSize" + suffix + ".Value", formatFloat(add.size > 0f ? add.size : 1.0f));
+                    BossDefinition.ExtraMobs.WaveAdd add = scheduleRow.add;
+                    cmd.set("#BossWaveEvery" + suffix + ".Value", toWaveTriggerDisplayName(scheduleRow.trigger));
+                    cmd.set("#BossWaveValue" + suffix + ".Value", formatWaveNumber(scheduleRow.triggerValue));
+                    cmd.set("#BossWaveRepeatCount" + suffix + ".Value", Integer.toString(scheduleRow.repeatCount));
+                    cmd.set("#BossWaveRepeatSec" + suffix + ".Value", formatWaveNumber(scheduleRow.repeatEverySeconds));
+                    cmd.set("#BossWaveNpc" + suffix + ".Value", safeText(add != null ? add.npcId : ""));
+                    cmd.set("#BossWaveAmount" + suffix + ".Value", Integer.toString(Math.max(1, add != null ? add.mobsPerWave : 1)));
+                    cmd.set("#BossWaveHp" + suffix + ".Value", formatFloat(add != null && add.hp > 0f ? add.hp : 1.0f));
+                    cmd.set("#BossWaveDamage" + suffix + ".Value", formatFloat(add != null && add.damage > 0f ? add.damage : 1.0f));
+                    cmd.set("#BossWaveSize" + suffix + ".Value", formatFloat(add != null && add.size > 0f ? add.size : 1.0f));
                 }
 
-                boolean populated = row <= waveAdds.size();
+                boolean populated = row <= scheduleRows.size();
                 cmd.set("#BossWaveAction" + suffix + ".Text", populated ? "-" : "+");
                 events.addEventBinding(
                         CustomUIEventBindingType.Activating,
@@ -1112,6 +1121,45 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
     }
 
+    private static String defaultWaveTriggerInput(int row, boolean useExamples) {
+        if (!useExamples) {
+            return "After Spawn";
+        }
+        if (row == 1) {
+            return "3";
+        }
+        if (row == 2) {
+            return "After Spawn";
+        }
+        return "After Spawn";
+    }
+
+    private static int defaultWaveValueSeconds(int row, boolean useExamples) {
+        if (!useExamples) {
+            return 30;
+        }
+        if (row == 1) {
+            return 15;
+        }
+        if (row == 2) {
+            return 30;
+        }
+        return 30;
+    }
+
+    private static String defaultWaveNpcId(int row, boolean useExamples) {
+        if (!useExamples) {
+            return "";
+        }
+        if (row == 1) {
+            return "Bat";
+        }
+        if (row == 2) {
+            return "Spider";
+        }
+        return "";
+    }
+
     private EventData buildBossEditorSnapshotEvent(String action) {
         EventData snapshot = new EventData()
                 .append("Action", action)
@@ -1125,7 +1173,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append("@BossEditPpHp", "#BossEditPpHp.Value")
                 .append("@BossEditPpDamage", "#BossEditPpDamage.Value")
                 .append("@BossEditPpSize", "#BossEditPpSize.Value")
-                .append("@BossEditWaves", "#BossEditWaves.Value")
                 .append("@BossEditLootRadius", "#BossEditLootRadius.Value");
 
         for (int row = 1; row <= MAX_LOOT_ROWS; row++) {
@@ -1142,14 +1189,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
     private EventData buildBossWavesSnapshotEvent(String action) {
         EventData snapshot = new EventData()
-                .append("Action", action)
-                .append("@BossWaveTimeSec", "#BossWavesTimeSec.Value")
-                // Preserve boss-level waves while editing popup rows.
-                .append("@BossEditWaves", "#BossEditWaves.Value");
+                .append("Action", action);
 
         for (int row = 1; row <= MAX_WAVE_ADD_ROWS; row++) {
             String suffix = Integer.toString(row);
             snapshot
+                    .append("@BossWaveValue" + suffix, "#BossWaveValue" + suffix + ".Value")
+                    .append("@BossWaveRepeatCount" + suffix, "#BossWaveRepeatCount" + suffix + ".Value")
+                    .append("@BossWaveRepeatSec" + suffix, "#BossWaveRepeatSec" + suffix + ".Value")
                     .append("@BossWaveNpc" + suffix, "#BossWaveNpc" + suffix + ".Value")
                     .append("@BossWaveAmount" + suffix, "#BossWaveAmount" + suffix + ".Value")
                     .append("@BossWaveEvery" + suffix, "#BossWaveEvery" + suffix + ".Value")
@@ -1173,6 +1220,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         boss.extraMobs = new BossDefinition.ExtraMobs();
 
         LootTable loot = new LootTable(boss.bossName, 40.0d);
+        loot.items = buildDefaultEarlyZoneLootItems();
 
         bossEditorState = new BossEditorState(null, boss, loot);
         bossWavesOverlayOpen = false;
@@ -1308,7 +1356,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
             String bossNameText = resolvedOrFallback(data.bossEditName, outBoss.bossName);
             String npcIdText = resolvedOrFallback(data.bossEditNpcId, outBoss.npcId);
-            outBoss.bossName = requireNonBlank(bossNameText, "Boss name cannot be empty.");
+            outBoss.bossName = requireNonBlank(bossNameText, "BossID cannot be empty.");
             outBoss.npcId = requireNonBlank(npcIdText, "NPC ID cannot be empty.");
             outBoss.tier = normalizeTier(resolvedOrFallback(data.bossEditTier, outBoss.tier));
 
@@ -1541,17 +1589,8 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 bossEditorState.boss.extraMobs = new BossDefinition.ExtraMobs();
             }
             BossDefinition.ExtraMobs extra = bossEditorState.boss.extraMobs;
-
-            String timeLimitSec = resolvedOrFallback(
-                    data.bossWaveTimeSec,
-                    formatSecondsFromMillis(Math.max(0L, extra.timeLimitMs))
-            );
-            extra.timeLimitMs = parseRequiredSecondsToMillis(
-                    timeLimitSec,
-                    "Boss Waves time must be a number of seconds."
-            );
-
-            extra.adds = snapshotWaveAddsFromData(data);
+            List<WaveScheduleRow> rows = snapshotWaveScheduleRowsFromData(data);
+            applyScheduleRowsToExtra(extra, rows);
             extra.sanitize();
             bossWavesOverlayOpen = false;
             bossStatusText = "Boss Waves updated. Click Save to persist changes.";
@@ -1580,13 +1619,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             if (bossEditorState.boss.extraMobs == null) {
                 bossEditorState.boss.extraMobs = new BossDefinition.ExtraMobs();
             }
-            List<BossDefinition.ExtraMobs.WaveAdd> rows = snapshotWaveAddsFromData(data);
+            List<WaveScheduleRow> rows = snapshotWaveScheduleRowsFromData(data);
             if (rows.size() >= MAX_WAVE_ADD_ROWS) {
                 bossStatusText = "Maximum wave add rows reached.";
                 rebuild();
                 return;
             }
-            bossEditorState.boss.extraMobs.adds = rows;
+            rows.add(defaultWaveScheduleRow());
+            applyScheduleRowsToExtra(bossEditorState.boss.extraMobs, rows);
             bossEditorState.boss.extraMobs.sanitize();
             bossStatusText = "";
             rebuild();
@@ -1614,14 +1654,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             if (bossEditorState.boss.extraMobs == null) {
                 bossEditorState.boss.extraMobs = new BossDefinition.ExtraMobs();
             }
-            List<BossDefinition.ExtraMobs.WaveAdd> rows = snapshotWaveAddsFromData(data);
+            List<WaveScheduleRow> rows = snapshotWaveScheduleRowsFromData(data);
             if (row > rows.size()) {
                 bossStatusText = "Invalid wave add row selection.";
                 rebuild();
                 return;
             }
             rows.remove(row - 1);
-            bossEditorState.boss.extraMobs.adds = rows;
+            applyScheduleRowsToExtra(bossEditorState.boss.extraMobs, rows);
             bossEditorState.boss.extraMobs.sanitize();
             bossStatusText = "";
             rebuild();
@@ -1631,39 +1671,38 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
     }
 
-    private List<BossDefinition.ExtraMobs.WaveAdd> snapshotWaveAddsFromData(ConfigEventData data) {
-        List<BossDefinition.ExtraMobs.WaveAdd> rows = new ArrayList<>();
-        List<BossDefinition.ExtraMobs.WaveAdd> fallbackRows = List.of();
+    private List<WaveScheduleRow> snapshotWaveScheduleRowsFromData(ConfigEventData data) {
+        List<WaveScheduleRow> rows = new ArrayList<>();
+        List<WaveScheduleRow> fallbackRows = List.of();
         if (bossEditorState != null
                 && bossEditorState.boss != null
                 && bossEditorState.boss.extraMobs != null) {
-            fallbackRows = bossEditorState.boss.extraMobs.getConfiguredAdds();
+            fallbackRows = flattenScheduleRows(bossEditorState.boss.extraMobs);
         }
 
         for (int row = 1; row <= MAX_WAVE_ADD_ROWS; row++) {
-            BossDefinition.ExtraMobs.WaveAdd fallback = row <= fallbackRows.size() ? fallbackRows.get(row - 1) : null;
+            WaveScheduleRow fallback = row <= fallbackRows.size() ? fallbackRows.get(row - 1) : null;
+            String triggerText = optionalText(data.getBossWaveEvery(row));
+            String triggerValueText = optionalText(data.getBossWaveValue(row));
+            String repeatCountText = optionalText(data.getBossWaveRepeatCount(row));
+            String repeatSecText = optionalText(data.getBossWaveRepeatSec(row));
             String npcId = optionalText(data.getBossWaveNpc(row));
             String amountText = optionalText(data.getBossWaveAmount(row));
-            String everyText = optionalText(data.getBossWaveEvery(row));
             String hpText = optionalText(data.getBossWaveHp(row));
             String damageText = optionalText(data.getBossWaveDamage(row));
             String sizeText = optionalText(data.getBossWaveSize(row));
 
-            if (looksLikeUiBindingExpression(npcId)
+            if (looksLikeUiBindingExpression(triggerText)
+                    || looksLikeUiBindingExpression(triggerValueText)
+                    || looksLikeUiBindingExpression(repeatCountText)
+                    || looksLikeUiBindingExpression(repeatSecText)
+                    || looksLikeUiBindingExpression(npcId)
                     || looksLikeUiBindingExpression(amountText)
-                    || looksLikeUiBindingExpression(everyText)
                     || looksLikeUiBindingExpression(hpText)
                     || looksLikeUiBindingExpression(damageText)
                     || looksLikeUiBindingExpression(sizeText)) {
-                if (fallback != null && fallback.npcId != null && !fallback.npcId.isBlank()) {
-                    BossDefinition.ExtraMobs.WaveAdd copy = new BossDefinition.ExtraMobs.WaveAdd();
-                    copy.npcId = fallback.npcId;
-                    copy.mobsPerWave = Math.max(1, fallback.mobsPerWave);
-                    copy.everyWave = Math.max(1, fallback.everyWave);
-                    copy.hp = fallback.hp > 0f ? fallback.hp : 1.0f;
-                    copy.damage = fallback.damage > 0f ? fallback.damage : 1.0f;
-                    copy.size = fallback.size > 0f ? fallback.size : 1.0f;
-                    rows.add(copy);
+                if (fallback != null && fallback.add != null && fallback.add.npcId != null && !fallback.add.npcId.isBlank()) {
+                    rows.add(copyWaveScheduleRow(fallback));
                 }
                 continue;
             }
@@ -1672,11 +1711,65 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 continue;
             }
 
+            String resolvedTrigger = triggerText.isEmpty()
+                    ? (fallback != null ? fallback.trigger : BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS)
+                    : triggerText;
+            String trigger = normalizeWaveTriggerInput(resolvedTrigger);
+            if (trigger == null) {
+                throw new IllegalArgumentException(
+                        "Wave trigger is invalid on row " + row + ". Use 1-5, Before Boss, On Spawn, After Spawn, Since Last Wave, or Boss HP%."
+                );
+            }
+
+            String defaultValue = fallback != null
+                    ? formatDouble(fallback.triggerValue)
+                    : (BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT.equals(trigger) ? "50" : "0");
+            double triggerValue;
+            if (BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN.equals(trigger)) {
+                triggerValue = 0.0d;
+            } else if (BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT.equals(trigger)) {
+                triggerValue = parseRequiredDouble(
+                        resolvedOrFallback(triggerValueText, defaultValue),
+                        "Wave trigger value must be 0-100 on row " + row + ".",
+                        0.0d,
+                        100.0d
+                );
+            } else {
+                triggerValue = parseRequiredDouble(
+                        resolvedOrFallback(triggerValueText, defaultValue),
+                        "Wave trigger value must be >= 0 on row " + row + ".",
+                        0.0d,
+                        Double.MAX_VALUE
+                );
+            }
+
+            int repeatCount = parseRequiredInt(
+                    resolvedOrFallback(repeatCountText, fallback != null ? Integer.toString(fallback.repeatCount) : "1"),
+                    "Wave repeat count must be -1 or >= 1 on row " + row + ".",
+                    -1,
+                    Integer.MAX_VALUE
+            );
+            double repeatSec = parseRequiredDouble(
+                    resolvedOrFallback(repeatSecText, fallback != null ? formatDouble(fallback.repeatEverySeconds) : "0"),
+                    "Wave repeat seconds must be >= 0 on row " + row + ".",
+                    0.0d,
+                    Double.MAX_VALUE
+            );
+
+            if (repeatCount == 1) {
+                repeatSec = 0.0d;
+            } else if (repeatSec <= 0.0d) {
+                if (BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT.equals(trigger)) {
+                    repeatSec = 1.0d;
+                } else {
+                    repeatSec = triggerValue > 0.0d ? triggerValue : 1.0d;
+                }
+            }
+
             int amount = parseRequiredInt(amountText, "Wave add amount must be an integer on row " + row + ".", 1, Integer.MAX_VALUE);
-            int every = parseRequiredInt(everyText, "Wave add spawn interval must be >= 1 on row " + row + ".", 1, Integer.MAX_VALUE);
-            String resolvedHp = !hpText.isEmpty() ? hpText : (fallback != null ? formatFloat(fallback.hp > 0f ? fallback.hp : 1.0f) : "1.00");
-            String resolvedDamage = !damageText.isEmpty() ? damageText : (fallback != null ? formatFloat(fallback.damage > 0f ? fallback.damage : 1.0f) : "1.00");
-            String resolvedSize = !sizeText.isEmpty() ? sizeText : (fallback != null ? formatFloat(fallback.size > 0f ? fallback.size : 1.0f) : "1.00");
+            String resolvedHp = !hpText.isEmpty() ? hpText : (fallback != null ? formatFloat(fallback.add.hp > 0f ? fallback.add.hp : 1.0f) : "1.00");
+            String resolvedDamage = !damageText.isEmpty() ? damageText : (fallback != null ? formatFloat(fallback.add.damage > 0f ? fallback.add.damage : 1.0f) : "1.00");
+            String resolvedSize = !sizeText.isEmpty() ? sizeText : (fallback != null ? formatFloat(fallback.add.size > 0f ? fallback.add.size : 1.00f) : "1.00");
             float hp = parseRequiredFloat(
                     resolvedHp,
                     "Wave add HP mult must be > 0 on row " + row + ".",
@@ -1699,14 +1792,195 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             BossDefinition.ExtraMobs.WaveAdd add = new BossDefinition.ExtraMobs.WaveAdd();
             add.npcId = npcId;
             add.mobsPerWave = amount;
-            add.everyWave = every;
+            add.everyWave = 1;
             add.hp = hp;
             add.damage = damage;
             add.size = size;
-            rows.add(add);
+            rows.add(new WaveScheduleRow(trigger, triggerValue, repeatCount, repeatSec, add));
         }
 
         return rows;
+    }
+
+    private static String normalizeWaveTriggerInput(String input) {
+        String cleaned = optionalText(input)
+                .toLowerCase(Locale.ROOT)
+                .replace('_', ' ')
+                .replace('-', ' ')
+                .replace("(", " ")
+                .replace(")", " ")
+                .replace("%", " percent ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return switch (cleaned) {
+            case "1", "before boss", "before", "pre", "pre boss", "bb" -> BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS;
+            case "2", "on spawn", "spawn", "at spawn", "on boss spawn", "with boss", "os" -> BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN;
+            case "after spawn seconds", "after spawn", "after", "seconds", "time", "timer", "after spawn second" ->
+                    BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS;
+            case "3", "as", "after s" -> BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS;
+            case "since last wave", "since last wave second", "since last wave seconds", "since wave", "last wave", "wave delay", "since previous wave", "since last" ->
+                    BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE;
+            case "4", "slw", "since" -> BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE;
+            case "boss hp percent", "boss health percent", "hp percent", "health percent", "boss hp", "boss health", "hp" ->
+                    BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT;
+            case "5", "hpp", "health" -> BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT;
+            default -> null;
+        };
+    }
+
+    private static String toWaveTriggerDisplayName(String trigger) {
+        String normalized = normalizeWaveTriggerInput(trigger);
+        if (BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS.equals(normalized)) {
+            return "Before Boss";
+        }
+        if (BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN.equals(normalized)) {
+            return "On Spawn";
+        }
+        if (BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE.equals(normalized)) {
+            return "Since Last Wave";
+        }
+        if (BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT.equals(normalized)) {
+            return "Boss HP%";
+        }
+        return "After Spawn";
+    }
+
+    private static WaveScheduleRow copyWaveScheduleRow(WaveScheduleRow source) {
+        if (source == null || source.add == null) {
+            return null;
+        }
+        BossDefinition.ExtraMobs.WaveAdd copy = new BossDefinition.ExtraMobs.WaveAdd();
+        copy.npcId = source.add.npcId;
+        copy.mobsPerWave = source.add.mobsPerWave;
+        copy.everyWave = 1;
+        copy.hp = source.add.hp;
+        copy.damage = source.add.damage;
+        copy.size = source.add.size;
+        return new WaveScheduleRow(
+                source.trigger,
+                source.triggerValue,
+                source.repeatCount,
+                source.repeatEverySeconds,
+                copy
+        );
+    }
+
+    private static WaveScheduleRow defaultWaveScheduleRow() {
+        BossDefinition.ExtraMobs.WaveAdd add = new BossDefinition.ExtraMobs.WaveAdd();
+        add.npcId = "";
+        add.mobsPerWave = 1;
+        add.everyWave = 1;
+        add.hp = 1.0f;
+        add.damage = 1.0f;
+        add.size = 1.0f;
+        return new WaveScheduleRow(
+                BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS,
+                30.0d,
+                1,
+                0.0d,
+                add
+        );
+    }
+
+    private static List<WaveScheduleRow> flattenScheduleRows(BossDefinition.ExtraMobs extra) {
+        if (extra == null) {
+            return List.of();
+        }
+        extra.sanitize();
+        List<WaveScheduleRow> out = new ArrayList<>();
+        for (BossDefinition.ExtraMobs.ScheduledWave wave : extra.getResolvedScheduledWaves()) {
+            if (wave == null || wave.adds == null) {
+                continue;
+            }
+            for (BossDefinition.ExtraMobs.WaveAdd add : wave.adds) {
+                if (add == null || add.npcId == null || add.npcId.isBlank()) {
+                    continue;
+                }
+                BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
+                addCopy.npcId = add.npcId;
+                addCopy.mobsPerWave = Math.max(1, add.mobsPerWave);
+                addCopy.everyWave = 1;
+                addCopy.hp = add.hp > 0f ? add.hp : 1.0f;
+                addCopy.damage = add.damage > 0f ? add.damage : 1.0f;
+                addCopy.size = add.size > 0f ? add.size : 1.0f;
+                out.add(new WaveScheduleRow(
+                        optionalText(wave.trigger),
+                        wave.triggerValue,
+                        wave.repeatCount,
+                        wave.repeatEverySeconds,
+                        addCopy
+                ));
+                if (out.size() >= MAX_WAVE_ADD_ROWS) {
+                    return out;
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void applyScheduleRowsToExtra(BossDefinition.ExtraMobs extra, List<WaveScheduleRow> rows) {
+        if (extra == null) {
+            return;
+        }
+
+        extra.npcId = "";
+        extra.timeLimitMs = 0L;
+        extra.waves = 0;
+        extra.mobsPerWave = 1;
+        extra.adds = new ArrayList<>();
+        extra.scheduledWaves = new ArrayList<>();
+
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+
+        for (WaveScheduleRow row : rows) {
+            if (row == null || row.add == null || row.add.npcId == null || row.add.npcId.isBlank()) {
+                continue;
+            }
+
+            BossDefinition.ExtraMobs.ScheduledWave target = null;
+            for (BossDefinition.ExtraMobs.ScheduledWave existing : extra.scheduledWaves) {
+                if (sameScheduleKey(existing, row)) {
+                    target = existing;
+                    break;
+                }
+            }
+            if (target == null) {
+                target = new BossDefinition.ExtraMobs.ScheduledWave();
+                target.trigger = row.trigger;
+                target.triggerValue = row.triggerValue;
+                target.repeatCount = row.repeatCount;
+                target.repeatEverySeconds = row.repeatEverySeconds;
+                target.adds = new ArrayList<>();
+                extra.scheduledWaves.add(target);
+            }
+
+            BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
+            addCopy.npcId = row.add.npcId;
+            addCopy.mobsPerWave = Math.max(1, row.add.mobsPerWave);
+            addCopy.everyWave = 1;
+            addCopy.hp = row.add.hp > 0f ? row.add.hp : 1.0f;
+            addCopy.damage = row.add.damage > 0f ? row.add.damage : 1.0f;
+            addCopy.size = row.add.size > 0f ? row.add.size : 1.0f;
+            target.adds.add(addCopy);
+        }
+    }
+
+    private static boolean sameScheduleKey(BossDefinition.ExtraMobs.ScheduledWave existing, WaveScheduleRow row) {
+        if (existing == null || row == null) {
+            return false;
+        }
+        if (!optionalText(existing.trigger).equals(optionalText(row.trigger))) {
+            return false;
+        }
+        if (Math.abs(existing.triggerValue - row.triggerValue) > 0.0001d) {
+            return false;
+        }
+        if (existing.repeatCount != row.repeatCount) {
+            return false;
+        }
+        return Math.abs(existing.repeatEverySeconds - row.repeatEverySeconds) <= 0.0001d;
     }
 
     private List<LootItem> snapshotLootFromData(ConfigEventData data) {
@@ -2039,6 +2313,36 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                     out.extraMobs.adds.add(copy);
                 }
             }
+            out.extraMobs.scheduledWaves = new ArrayList<>();
+            if (source.extraMobs.scheduledWaves != null) {
+                for (BossDefinition.ExtraMobs.ScheduledWave wave : source.extraMobs.scheduledWaves) {
+                    if (wave == null) {
+                        continue;
+                    }
+                    BossDefinition.ExtraMobs.ScheduledWave waveCopy = new BossDefinition.ExtraMobs.ScheduledWave();
+                    waveCopy.trigger = wave.trigger;
+                    waveCopy.triggerValue = wave.triggerValue;
+                    waveCopy.repeatCount = wave.repeatCount;
+                    waveCopy.repeatEverySeconds = wave.repeatEverySeconds;
+                    waveCopy.adds = new ArrayList<>();
+                    if (wave.adds != null) {
+                        for (BossDefinition.ExtraMobs.WaveAdd add : wave.adds) {
+                            if (add == null) {
+                                continue;
+                            }
+                            BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
+                            addCopy.npcId = add.npcId;
+                            addCopy.mobsPerWave = add.mobsPerWave;
+                            addCopy.everyWave = add.everyWave;
+                            addCopy.hp = add.hp;
+                            addCopy.damage = add.damage;
+                            addCopy.size = add.size;
+                            waveCopy.adds.add(addCopy);
+                        }
+                    }
+                    out.extraMobs.scheduledWaves.add(waveCopy);
+                }
+            }
         }
         out.extraMobs.sanitize();
 
@@ -2047,24 +2351,34 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
     private static BossWavesSummary buildBossWavesSummary(BossDefinition.ExtraMobs extra) {
         if (extra == null) {
-            return new BossWavesSummary("Adds: None", "", "Time: 0s | Waves: 0");
+            return new BossWavesSummary("No wave schedule configured.", "Press Edit Schedule to add waves.", "Rows: 0");
         }
         extra.sanitize();
 
-        List<BossDefinition.ExtraMobs.WaveAdd> adds = extra.getConfiguredAdds();
-        String addLine1 = "Adds: None";
+        List<WaveScheduleRow> rows = flattenScheduleRows(extra);
+        String addLine1 = "No wave schedule configured.";
         String addLine2 = "";
-        if (!adds.isEmpty()) {
-            addLine1 = "Adds: " + formatWaveAdd(adds.get(0));
-            if (adds.size() >= 2) {
-                addLine2 = formatWaveAdd(adds.get(1));
-                if (adds.size() > 2) {
-                    addLine2 = addLine2 + " | +" + (adds.size() - 2) + " more";
+        if (!rows.isEmpty()) {
+            WaveScheduleRow first = rows.get(0);
+            addLine1 = "Row 1: " + toWaveTriggerDisplayName(first.trigger) + " @ " + formatWaveNumber(first.triggerValue)
+                    + " | " + formatWaveAdd(first.add);
+            if (rows.size() >= 2) {
+                WaveScheduleRow second = rows.get(1);
+                addLine2 = "Row 2: " + toWaveTriggerDisplayName(second.trigger) + " @ " + formatWaveNumber(second.triggerValue)
+                        + " | " + formatWaveAdd(second.add);
+                if (rows.size() > 2) {
+                    addLine2 = addLine2 + " | +" + (rows.size() - 2) + " more rows";
                 }
             }
         }
 
-        return new BossWavesSummary(addLine1, addLine2, "");
+        List<BossDefinition.ExtraMobs.ScheduledWave> schedule = extra.getResolvedScheduledWaves();
+        String meta = "Rows: " + rows.size();
+        if (!schedule.isEmpty()) {
+            meta = "Triggers: " + schedule.size() + " | Rows: " + rows.size();
+        }
+
+        return new BossWavesSummary(addLine1, addLine2, meta);
     }
 
     private static String formatWaveAdd(BossDefinition.ExtraMobs.WaveAdd add) {
@@ -2072,8 +2386,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return "";
         }
         String summary = safeText(add.npcId)
-                + " x" + Math.max(1, add.mobsPerWave)
-                + " /" + Math.max(1, add.everyWave) + "w";
+                + " x" + Math.max(1, add.mobsPerWave);
         float hp = add.hp > 0f ? add.hp : 1.0f;
         float damage = add.damage > 0f ? add.damage : 1.0f;
         float size = add.size > 0f ? add.size : 1.0f;
@@ -2081,6 +2394,26 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             summary += " [" + formatFloat(hp) + "/" + formatFloat(damage) + "/" + formatFloat(size) + "]";
         }
         return summary;
+    }
+
+    private static String formatWaveNumber(double value) {
+        if (!Double.isFinite(value)) {
+            return "0";
+        }
+        double rounded = Math.rint(value);
+        if (Math.abs(value - rounded) <= 0.0001d) {
+            return Long.toString((long) rounded);
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    private static List<LootItem> buildDefaultEarlyZoneLootItems() {
+        List<LootItem> out = new ArrayList<>();
+        out.add(new LootItem("Ingredient_Fibre", 1.0d, 4, 10));
+        out.add(new LootItem("Ingredient_Stick", 0.85d, 2, 6));
+        out.add(new LootItem("Ore_Copper", 0.70d, 1, 4));
+        out.add(new LootItem("Plant_Fruit_Berries_Red", 0.60d, 2, 5));
+        return out;
     }
 
     private static LootTable cloneLoot(LootTable source, String fallbackBossName) {
@@ -2202,6 +2535,26 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
     }
 
+    private static final class WaveScheduleRow {
+        private final String trigger;
+        private final double triggerValue;
+        private final int repeatCount;
+        private final double repeatEverySeconds;
+        private final BossDefinition.ExtraMobs.WaveAdd add;
+
+        private WaveScheduleRow(String trigger,
+                                double triggerValue,
+                                int repeatCount,
+                                double repeatEverySeconds,
+                                BossDefinition.ExtraMobs.WaveAdd add) {
+            this.trigger = trigger;
+            this.triggerValue = triggerValue;
+            this.repeatCount = repeatCount;
+            this.repeatEverySeconds = repeatEverySeconds;
+            this.add = add;
+        }
+    }
+
     public static final class ConfigEventData {
         public String action;
 
@@ -2265,6 +2618,24 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String bossWaveHp6;
         public String bossWaveDamage6;
         public String bossWaveSize6;
+        public String bossWaveValue1;
+        public String bossWaveRepeatCount1;
+        public String bossWaveRepeatSec1;
+        public String bossWaveValue2;
+        public String bossWaveRepeatCount2;
+        public String bossWaveRepeatSec2;
+        public String bossWaveValue3;
+        public String bossWaveRepeatCount3;
+        public String bossWaveRepeatSec3;
+        public String bossWaveValue4;
+        public String bossWaveRepeatCount4;
+        public String bossWaveRepeatSec4;
+        public String bossWaveValue5;
+        public String bossWaveRepeatCount5;
+        public String bossWaveRepeatSec5;
+        public String bossWaveValue6;
+        public String bossWaveRepeatCount6;
+        public String bossWaveRepeatSec6;
 
         public String bossLootName1;
         public String bossLootMin1;
@@ -2398,6 +2769,42 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             };
         }
 
+        public String getBossWaveValue(int row) {
+            return switch (row) {
+                case 1 -> bossWaveValue1;
+                case 2 -> bossWaveValue2;
+                case 3 -> bossWaveValue3;
+                case 4 -> bossWaveValue4;
+                case 5 -> bossWaveValue5;
+                case 6 -> bossWaveValue6;
+                default -> "";
+            };
+        }
+
+        public String getBossWaveRepeatCount(int row) {
+            return switch (row) {
+                case 1 -> bossWaveRepeatCount1;
+                case 2 -> bossWaveRepeatCount2;
+                case 3 -> bossWaveRepeatCount3;
+                case 4 -> bossWaveRepeatCount4;
+                case 5 -> bossWaveRepeatCount5;
+                case 6 -> bossWaveRepeatCount6;
+                default -> "";
+            };
+        }
+
+        public String getBossWaveRepeatSec(int row) {
+            return switch (row) {
+                case 1 -> bossWaveRepeatSec1;
+                case 2 -> bossWaveRepeatSec2;
+                case 3 -> bossWaveRepeatSec3;
+                case 4 -> bossWaveRepeatSec4;
+                case 5 -> bossWaveRepeatSec5;
+                case 6 -> bossWaveRepeatSec6;
+                default -> "";
+            };
+        }
+
         public String getBossWaveHp(int row) {
             return switch (row) {
                 case 1 -> bossWaveHp1;
@@ -2500,6 +2907,24 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append(new KeyedCodec<>("@BossWaveHp6", Codec.STRING), (d, v) -> d.bossWaveHp6 = v, d -> d.bossWaveHp6).add()
                 .append(new KeyedCodec<>("@BossWaveDamage6", Codec.STRING), (d, v) -> d.bossWaveDamage6 = v, d -> d.bossWaveDamage6).add()
                 .append(new KeyedCodec<>("@BossWaveSize6", Codec.STRING), (d, v) -> d.bossWaveSize6 = v, d -> d.bossWaveSize6).add()
+                .append(new KeyedCodec<>("@BossWaveValue1", Codec.STRING), (d, v) -> d.bossWaveValue1 = v, d -> d.bossWaveValue1).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount1", Codec.STRING), (d, v) -> d.bossWaveRepeatCount1 = v, d -> d.bossWaveRepeatCount1).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec1", Codec.STRING), (d, v) -> d.bossWaveRepeatSec1 = v, d -> d.bossWaveRepeatSec1).add()
+                .append(new KeyedCodec<>("@BossWaveValue2", Codec.STRING), (d, v) -> d.bossWaveValue2 = v, d -> d.bossWaveValue2).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount2", Codec.STRING), (d, v) -> d.bossWaveRepeatCount2 = v, d -> d.bossWaveRepeatCount2).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec2", Codec.STRING), (d, v) -> d.bossWaveRepeatSec2 = v, d -> d.bossWaveRepeatSec2).add()
+                .append(new KeyedCodec<>("@BossWaveValue3", Codec.STRING), (d, v) -> d.bossWaveValue3 = v, d -> d.bossWaveValue3).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount3", Codec.STRING), (d, v) -> d.bossWaveRepeatCount3 = v, d -> d.bossWaveRepeatCount3).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec3", Codec.STRING), (d, v) -> d.bossWaveRepeatSec3 = v, d -> d.bossWaveRepeatSec3).add()
+                .append(new KeyedCodec<>("@BossWaveValue4", Codec.STRING), (d, v) -> d.bossWaveValue4 = v, d -> d.bossWaveValue4).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount4", Codec.STRING), (d, v) -> d.bossWaveRepeatCount4 = v, d -> d.bossWaveRepeatCount4).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec4", Codec.STRING), (d, v) -> d.bossWaveRepeatSec4 = v, d -> d.bossWaveRepeatSec4).add()
+                .append(new KeyedCodec<>("@BossWaveValue5", Codec.STRING), (d, v) -> d.bossWaveValue5 = v, d -> d.bossWaveValue5).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount5", Codec.STRING), (d, v) -> d.bossWaveRepeatCount5 = v, d -> d.bossWaveRepeatCount5).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec5", Codec.STRING), (d, v) -> d.bossWaveRepeatSec5 = v, d -> d.bossWaveRepeatSec5).add()
+                .append(new KeyedCodec<>("@BossWaveValue6", Codec.STRING), (d, v) -> d.bossWaveValue6 = v, d -> d.bossWaveValue6).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount6", Codec.STRING), (d, v) -> d.bossWaveRepeatCount6 = v, d -> d.bossWaveRepeatCount6).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec6", Codec.STRING), (d, v) -> d.bossWaveRepeatSec6 = v, d -> d.bossWaveRepeatSec6).add()
 
                 .append(new KeyedCodec<>("@BossLootName1", Codec.STRING), (d, v) -> d.bossLootName1 = v, d -> d.bossLootName1).add()
                 .append(new KeyedCodec<>("@BossLootMin1", Codec.STRING), (d, v) -> d.bossLootMin1 = v, d -> d.bossLootMin1).add()
