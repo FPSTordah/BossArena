@@ -4,7 +4,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `1.0.1`
+- Current project version: `1.1.0`
 
 ## Support
 
@@ -236,4 +236,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-1.0.1.jar`
+- `target/BossArena-1.1.0.jar`

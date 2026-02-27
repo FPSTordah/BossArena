@@ -24,7 +24,7 @@ import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.asset.type.item.config.Item;
 import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.event.events.entity.LivingEntityUseBlockEvent;
-import com.hypixel.hytale.server.core.event.events.entity.EntityRemoveEvent;
+import com.hypixel.hytale.server.core.event.events.player.AddPlayerToWorldEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerInteractEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
@@ -38,6 +38,8 @@ import com.hypixel.hytale.server.core.modules.entity.component.TransformComponen
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.entity.Entity;
+import com.hypixel.hytale.server.core.modules.entity.component.Interactable;
+import com.hypixel.hytale.server.core.modules.interaction.Interactions;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.Interaction;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.RootInteraction;
 import com.hypixel.hytale.server.core.modules.interaction.interaction.config.SimpleInteraction;
@@ -60,6 +62,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public final class BossArenaPlugin extends JavaPlugin {
     private static BossArenaPlugin INSTANCE;
@@ -68,6 +73,12 @@ public final class BossArenaPlugin extends JavaPlugin {
     public static final String SHOP_OPEN_INTERACTION_ID = "BossArena_OpenShopNpc";
     public static final String SHOP_NPC_TYPE_ID = "bossarena_shop_guard";
     private static final Path MOD_ROOT = Path.of("mods", "BossArena");
+    private static final ScheduledExecutorService SHOP_REBIND_EXECUTOR =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "BossArena-ShopRebind");
+                t.setDaemon(true);
+                return t;
+            });
 
     private BossTrackingSystem trackingSystem;
     private BossArenaConfig config = new BossArenaConfig();
@@ -121,10 +132,10 @@ public final class BossArenaPlugin extends JavaPlugin {
         );
         getLogger().atInfo().log("Registered player interaction listener");
         this.getEventRegistry().registerGlobal(
-                EntityRemoveEvent.class,
-                this::onEntityRemove
+                AddPlayerToWorldEvent.class,
+                this::onAddPlayerToWorld
         );
-        getLogger().atInfo().log("Registered entity removal listener");
+        getLogger().atInfo().log("Registered world-entry listener");
 
         config.load();
         shopConfig.load(shopJsonPath);
@@ -633,38 +644,163 @@ public final class BossArenaPlugin extends JavaPlugin {
         event.setCancelled(true);
     }
 
-    private void onEntityRemove(EntityRemoveEvent event) {
+    private void onAddPlayerToWorld(AddPlayerToWorldEvent event) {
         if (event == null || shopConfig == null) {
             return;
         }
+        World world = event.getWorld();
+        if (world == null) {
+            return;
+        }
+        scheduleShopRebind(world, 0);
+    }
 
-        Entity entity = event.getEntity();
-        if (entity == null) {
+    private void scheduleShopRebind(World world, int attempt) {
+        if (world == null || !world.isAlive() || shopConfig == null || shopConfig.shops == null || shopConfig.shops.isEmpty()) {
             return;
         }
 
-        UUID uuid = entity.getUuid();
-        String uuidText = uuid != null ? uuid.toString() : null;
-        boolean trackedShopNpc = uuidText != null && shopConfig.isShopNpcUuid(uuidText);
+        long delayMs = switch (attempt) {
+            case 0 -> 0L;
+            case 1 -> 750L;
+            case 2 -> 2000L;
+            default -> 5000L;
+        };
 
-        boolean matchesConfiguredType = false;
-        if (entity instanceof NPCEntity npc) {
-            matchesConfiguredType = isShopNpcTypeId(npc.getNPCTypeId(), resolveShopNpcId());
+        SHOP_REBIND_EXECUTOR.schedule(() -> {
+            if (!world.isAlive()) {
+                return;
+            }
+            world.execute(() -> {
+                int rebound = rebindShopInteractions(world);
+                if (rebound == 0 && attempt < 3) {
+                    scheduleShopRebind(world, attempt + 1);
+                }
+            });
+        }, delayMs, TimeUnit.MILLISECONDS);
+    }
+
+    private int rebindShopInteractions(World world) {
+        if (world == null || shopConfig == null || shopConfig.shops == null || shopConfig.shops.isEmpty()) {
+            return 0;
         }
 
-        if (!trackedShopNpc && !matchesConfiguredType) {
-            return;
+        Store<EntityStore> store = world.getEntityStore() != null ? world.getEntityStore().getStore() : null;
+        if (store == null) {
+            return 0;
         }
 
+        String worldName = world.getName();
+        int rebound = 0;
         boolean changed = false;
-        if (uuidText != null) {
-            // EntityRemoveEvent can fire after the ref is invalidated; avoid component reads here.
-            changed = shopConfig.removeShopNpcUuid(uuidText);
+        for (BossShopConfig.ShopLocation location : new ArrayList<>(shopConfig.shops)) {
+            if (location == null || location.worldName == null || !location.worldName.equalsIgnoreCase(worldName)) {
+                continue;
+            }
+
+            String uuidText = location.uuid != null ? location.uuid.trim() : "";
+            Ref<EntityStore> ref = null;
+            if (!uuidText.isEmpty()) {
+                try {
+                    UUID uuid = UUID.fromString(uuidText);
+                    ref = world.getEntityRef(uuid);
+                } catch (IllegalArgumentException ignored) {
+                    // malformed uuid; fall back to location lookup
+                }
+            }
+
+            if (ref == null) {
+                ref = findShopNpcRefNearLocation(store, location, resolveShopNpcId());
+            }
+            if (ref == null) {
+                continue;
+            }
+
+            if (bindShopNpcInteractionInternal(store, ref)) {
+                rebound++;
+            }
+
+            Object uuidObj = store.getComponent(ref, UUIDComponent.getComponentType());
+            if (uuidObj instanceof UUIDComponent uuidComponent) {
+                String resolvedUuid = uuidComponent.getUuid() != null ? uuidComponent.getUuid().toString() : "";
+                if (!resolvedUuid.isEmpty() && !resolvedUuid.equalsIgnoreCase(uuidText)) {
+                    location.uuid = resolvedUuid;
+                    changed = true;
+                }
+            }
         }
 
         if (changed) {
             saveShopConfig();
         }
+
+        if (rebound > 0) {
+            getLogger().atInfo().log("Rebound shop interaction for " + rebound + " guard(s) in world " + worldName);
+        }
+        return rebound;
+    }
+
+    private Ref<EntityStore> findShopNpcRefNearLocation(Store<EntityStore> store,
+                                                        BossShopConfig.ShopLocation location,
+                                                        String configuredShopNpcId) {
+        if (store == null || location == null) {
+            return null;
+        }
+
+        final Ref<EntityStore>[] nearestRef = new Ref[]{null};
+        final double[] nearestDistanceSq = new double[]{Double.MAX_VALUE};
+
+        store.forEachChunk(
+                com.hypixel.hytale.component.query.Query.and(
+                        TransformComponent.getComponentType(),
+                        NPCEntity.getComponentType()
+                ),
+                (chunk, ignored) -> {
+                    for (int i = 0; i < chunk.size(); i++) {
+                        NPCEntity npc = chunk.getComponent(i, NPCEntity.getComponentType());
+                        if (npc == null || !isShopNpcTypeId(npc.getNPCTypeId(), configuredShopNpcId)) {
+                            continue;
+                        }
+
+                        TransformComponent transform = chunk.getComponent(i, TransformComponent.getComponentType());
+                        if (transform == null) {
+                            continue;
+                        }
+                        Vector3d pos = transform.getPosition();
+                        double dx = pos.x - location.x;
+                        double dy = pos.y - location.y;
+                        double dz = pos.z - location.z;
+                        double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
+                        if (distanceSq > 16.0d || distanceSq >= nearestDistanceSq[0]) {
+                            continue;
+                        }
+                        nearestDistanceSq[0] = distanceSq;
+                        nearestRef[0] = chunk.getReferenceTo(i);
+                    }
+                }
+        );
+        return nearestRef[0];
+    }
+
+    public void bindShopNpcInteraction(Store<EntityStore> store, Ref<EntityStore> entityRef) {
+        bindShopNpcInteractionInternal(store, entityRef);
+    }
+
+    private boolean bindShopNpcInteractionInternal(Store<EntityStore> store, Ref<EntityStore> entityRef) {
+        if (store == null || entityRef == null) {
+            return false;
+        }
+
+        Object npcObj = store.getComponent(entityRef, NPCEntity.getComponentType());
+        if (npcObj instanceof NPCEntity npc && !isShopNpcTypeId(npc.getNPCTypeId(), resolveShopNpcId())) {
+            return false;
+        }
+
+        store.ensureComponent(entityRef, Interactable.getComponentType());
+        Interactions interactions = store.ensureAndGetComponent(entityRef, Interactions.getComponentType());
+        interactions.setInteractionId(InteractionType.Use, SHOP_OPEN_INTERACTION_ID);
+        interactions.setInteractionHint("open Boss Arena Shop");
+        return true;
     }
 
     private static boolean isShopOpenInteraction(InteractionType type) {
@@ -817,6 +953,7 @@ public final class BossArenaPlugin extends JavaPlugin {
     @Override
     protected void shutdown() {
         try {
+            SHOP_REBIND_EXECUTOR.shutdownNow();
             BossLootHandler.flushPersistence();
             getLogger().atInfo().log("Persisted loot chest state during shutdown");
         } catch (Exception e) {

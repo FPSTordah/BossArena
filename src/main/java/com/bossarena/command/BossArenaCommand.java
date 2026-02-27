@@ -25,9 +25,6 @@ import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.entity.Entity;
-import com.hypixel.hytale.server.core.modules.entity.component.Interactable;
-import com.hypixel.hytale.server.core.modules.interaction.Interactions;
-import com.hypixel.hytale.protocol.InteractionType;
 import com.hypixel.hytale.server.npc.NPCPlugin;
 
 import javax.annotation.Nonnull;
@@ -666,10 +663,7 @@ public final class BossArenaCommand extends AbstractCommand {
       }
 
       Store<EntityStore> store = world.getEntityStore().getStore();
-      store.ensureComponent(result.first(), Interactable.getComponentType());
-      Interactions interactions = store.ensureAndGetComponent(result.first(), Interactions.getComponentType());
-      interactions.setInteractionId(InteractionType.Use, BossArenaPlugin.SHOP_OPEN_INTERACTION_ID);
-      interactions.setInteractionHint("open Boss Arena Shop");
+      plugin.bindShopNpcInteraction(store, result.first());
 
       Object uuidCompObj = store.getComponent(result.first(), UUIDComponent.getComponentType());
       UUID spawnedUuid = null;
