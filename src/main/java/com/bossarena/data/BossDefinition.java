@@ -9,6 +9,8 @@ public class BossDefinition {
     public String npcId;
     public String tier = "uncommon";
     public int amount;
+    // 0 = default RPGLeveling behavior, >=1 forces a specific spawn level.
+    public int levelOverride = 0;
 
     public Modifiers modifiers = new Modifiers();
     public PerPlayerIncrease perPlayerIncrease = new PerPlayerIncrease();
@@ -17,13 +19,27 @@ public class BossDefinition {
     public static class Modifiers {
         public float hp = 1.0f;
         public float damage = 1.0f;
+        public float movementSpeed = 1.0f;
         public float size = 1.0f;
+        public float attackRate = 1.0f;
+        public float abilityCooldown = 1.0f;
+        public float knockbackGiven = 1.0f;
+        public float knockbackTaken = 1.0f;
+        public float turnRate = 1.0f;
+        public float regen = 1.0f;
     }
 
     public static class PerPlayerIncrease {
         public float hp = 0.0f;
         public float damage = 0.0f;
+        public float movementSpeed = 0.0f;
         public float size = 0.0f;
+        public float attackRate = 0.0f;
+        public float abilityCooldown = 0.0f;
+        public float knockbackGiven = 0.0f;
+        public float knockbackTaken = 0.0f;
+        public float turnRate = 0.0f;
+        public float regen = 0.0f;
     }
 
     public static class ExtraMobs {
@@ -37,6 +53,8 @@ public class BossDefinition {
         public long timeLimitMs;
         public int waves;
         public int mobsPerWave = 3;
+        public boolean useRandomSpawnLocations = true;
+        public double randomSpawnRadius = 15.0d;
         // New format: multiple add definitions with per-wave cadence.
         public List<WaveAdd> adds = new ArrayList<>();
         // Trigger-based wave schedule. If empty, legacy fields are auto-migrated.
@@ -73,6 +91,7 @@ public class BossDefinition {
             if (mobsPerWave < 1) {
                 mobsPerWave = 3;
             }
+            randomSpawnRadius = sanitizeWaveRandomSpawnRadius(randomSpawnRadius);
 
             if (adds == null) {
                 adds = new ArrayList<>();
@@ -183,6 +202,18 @@ public class BossDefinition {
             }
 
             sanitize();
+        }
+
+        public double getWaveRandomSpawnRadius() {
+            sanitize();
+            return randomSpawnRadius;
+        }
+
+        private static double sanitizeWaveRandomSpawnRadius(double radius) {
+            if (!Double.isFinite(radius) || radius < 0.0d) {
+                return 15.0d;
+            }
+            return radius;
         }
 
         private static WaveAdd sanitizeWaveAdd(WaveAdd add, boolean requireNpcId) {

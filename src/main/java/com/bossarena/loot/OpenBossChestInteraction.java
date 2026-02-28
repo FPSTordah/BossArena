@@ -85,6 +85,7 @@ public class OpenBossChestInteraction extends SimpleBlockInteraction {
 
         UUID playerUuid = uuidComponent.getUuid();
         WorldChunk chunk = world.getChunk(ChunkUtil.indexChunkFromBlock(pos.x, pos.z));
+        Vector3d chestPosition = new Vector3d(pos.x, pos.y, pos.z);
 
         // Create the window for this player
         ContainerBlockWindow window = new ContainerBlockWindow(
@@ -97,6 +98,7 @@ public class OpenBossChestInteraction extends SimpleBlockInteraction {
         Map<UUID, ContainerBlockWindow> windows = chestState.getWindows();
 
         if (windows.putIfAbsent(playerUuid, window) == null) {
+            BossLootHandler.pauseChestExpiry(world, chestPosition);
             if (playerComponent.getPageManager().setPageWithWindows(ref, store, Page.Bench, true, new Window[]{window})) {
 
                 // Register close event
@@ -104,9 +106,10 @@ public class OpenBossChestInteraction extends SimpleBlockInteraction {
                     windows.remove(playerUuid, window);
                     BlockType currentBlockType = world.getBlockType(pos);
 
-                    BossLootHandler.cleanupChestIfEmpty(world, new Vector3d(pos.x, pos.y, pos.z));
+                    BossLootHandler.cleanupChestIfEmpty(world, chestPosition);
                     if (windows.isEmpty()) {
                         world.setBlockInteractionState(pos, currentBlockType, "CloseWindow");
+                        BossLootHandler.scheduleChestExpiry(world, chestPosition);
                     }
 
                     playSound(world, pos, currentBlockType, "CloseWindow", chunk, blockType, ref, commandBuffer);
@@ -120,6 +123,9 @@ public class OpenBossChestInteraction extends SimpleBlockInteraction {
                 playSound(world, pos, blockType, "OpenWindow", chunk, blockType, ref, commandBuffer);
             } else {
                 windows.remove(playerUuid, window);
+                if (windows.isEmpty()) {
+                    BossLootHandler.scheduleChestExpiry(world, chestPosition);
+                }
             }
         }
 

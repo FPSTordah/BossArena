@@ -371,6 +371,7 @@ public final class BossArenaCommand extends AbstractCommand {
         var config = plugin.getConfigHandle();
         config.save();
         config.load();
+        plugin.refreshTimedBossSpawns();
         plugin.reloadShopConfig();
         ctx.sendMessage(Message.raw("✓ Config reloaded"));
       } catch (Exception err) {

@@ -122,6 +122,16 @@ Group {
       );
     }
 
+    TextButton #BossTimedButton {
+      Anchor: (Left: 866, Top: 24, Width: 166, Height: 36);
+      Text: "Timed Spawns";
+      Style: TextButtonStyle(
+        Default: (Background: #2a3d58, LabelStyle: (FontSize: 15, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Hovered: (Background: #38567b, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+        Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 15, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+      );
+    }
+
     Label #BossHeaderName {
       Anchor: (Left: 44, Top: 68, Width: 420, Height: 24);
       Text: "BossID";
@@ -412,15 +422,32 @@ Group {
       Label #BossWavesLabel { Anchor: (Left: 792, Top: 92, Width: 220, Height: 22); Text: "Waves"; Style: (FontSize: 16, TextColor: #f3f7ff, RenderBold: true); }
       Label #BossWavesAdd1 { Anchor: (Left: 792, Top: 124, Width: 266, Height: 16); Text: ""; Style: (FontSize: 12, TextColor: #b2c0d2); }
       Label #BossWavesAdd2 { Anchor: (Left: 792, Top: 140, Width: 266, Height: 16); Text: ""; Style: (FontSize: 12, TextColor: #b2c0d2); }
-      Label #BossWavesMeta { Anchor: (Left: 928, Top: 202, Width: 130, Height: 20); Text: ""; Style: (FontSize: 12, TextColor: #8ea1bb); }
+      Label #BossWavesMeta { Anchor: (Left: 792, Top: 228, Width: 266, Height: 14); Text: ""; Visible: false; Style: (FontSize: 10, TextColor: #8ea1bb, HorizontalAlignment: Center); }
       TextButton #BossEditWavesButton {
-        Anchor: (Left: 792, Top: 196, Width: 132, Height: 28);
-        Text: "Edit Schedule";
+        Anchor: (Left: 792, Top: 196, Width: 120, Height: 28);
+        Text: "Edit Waves";
         Style: TextButtonStyle(
           Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
           Hovered: (Background: #38567b, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
           Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
         );
+      }
+
+      TextButton #BossEditScalersButton {
+        Anchor: (Left: 936, Top: 196, Width: 122, Height: 28);
+        Text: "Boss Scalers";
+        Style: TextButtonStyle(
+          Default: (Background: #254064, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #335a8f, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4475b8, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Label #BossScalersButtonHint {
+        Anchor: (Left: 936, Top: 244, Width: 122, Height: 14);
+        Text: "";
+        Visible: false;
+        Style: (FontSize: 10, TextColor: #8ea1bb, HorizontalAlignment: Center);
       }
 
       Label #BossLootLabel { Anchor: (Left: 118, Top: 238, Width: 220, Height: 24); Text: "Loot"; Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true); }
@@ -461,6 +488,89 @@ Group {
         );
       }
 
+      Panel #BossScalersOverlay {
+        Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+        Visible: false;
+
+        Panel #BossScalersBackdrop {
+          Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+          Background: #05090f(0.78);
+        }
+
+        Panel #BossScalersWindow {
+          Anchor: (Left: 250, Top: 126, Width: 700, Height: 384);
+          Background: #0f1725;
+        }
+
+        Label #BossScalersTitle {
+          Anchor: (Left: 278, Top: 154, Width: 420, Height: 28);
+          Text: "Advanced Boss Scalers";
+          Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+        }
+
+        TextButton #BossScalersCloseButton {
+          Anchor: (Left: 800, Top: 152, Width: 120, Height: 34);
+          Text: "Close";
+          Style: TextButtonStyle(
+            Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+          );
+        }
+
+        Label #BossScalersHint {
+          Anchor: (Left: 278, Top: 186, Width: 344, Height: 18);
+          Text: "Base multiplier and Per Player increase. Final value is clamped to stay above zero.";
+          Style: (FontSize: 12, TextColor: #8ea1bb);
+        }
+
+        Label #BossEditLevelOverrideLabel { Anchor: (Left: 286, Top: 442, Width: 106, Height: 20); Text: "Level Override"; Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true); }
+        TextField #BossEditLevelOverride { Anchor: (Left: 398, Top: 440, Width: 64, Height: 24); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        Label #BossEditLevelOverrideHint { Anchor: (Left: 470, Top: 442, Width: 110, Height: 20); Text: "0 or blank = default"; Style: (FontSize: 11, TextColor: #8ea1bb); }
+
+        Label #BossScalersHeaderName { Anchor: (Left: 286, Top: 214, Width: 260, Height: 20); Text: "Scaler"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossScalersHeaderBase { Anchor: (Left: 560, Top: 214, Width: 120, Height: 20); Text: "Base"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+        Label #BossScalersHeaderPP { Anchor: (Left: 684, Top: 214, Width: 170, Height: 20); Text: "Per Player"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+
+        Label #BossScaleSpeedLabel { Anchor: (Left: 286, Top: 238, Width: 260, Height: 22); Text: "Movement Speed"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditSpeed { Anchor: (Left: 560, Top: 236, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpSpeed { Anchor: (Left: 684, Top: 236, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        Label #BossScaleAttackRateLabel { Anchor: (Left: 286, Top: 266, Width: 260, Height: 22); Text: "Attack Rate"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditAttackRate { Anchor: (Left: 560, Top: 264, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpAttackRate { Anchor: (Left: 684, Top: 264, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        Label #BossScaleCooldownLabel { Anchor: (Left: 286, Top: 294, Width: 260, Height: 22); Text: "Ability Cooldown"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditAbilityCooldown { Anchor: (Left: 560, Top: 292, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpAbilityCooldown { Anchor: (Left: 684, Top: 292, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        Label #BossScaleKbGivenLabel { Anchor: (Left: 286, Top: 322, Width: 260, Height: 22); Text: "Knockback Given"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditKnockbackGiven { Anchor: (Left: 560, Top: 320, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpKnockbackGiven { Anchor: (Left: 684, Top: 320, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        Label #BossScaleKbTakenLabel { Anchor: (Left: 286, Top: 350, Width: 260, Height: 22); Text: "Knockback Taken"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditKnockbackTaken { Anchor: (Left: 560, Top: 348, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpKnockbackTaken { Anchor: (Left: 684, Top: 348, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        Label #BossScaleTurnRateLabel { Anchor: (Left: 286, Top: 378, Width: 260, Height: 22); Text: "Turn Rate"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditTurnRate { Anchor: (Left: 560, Top: 376, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpTurnRate { Anchor: (Left: 684, Top: 376, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        Label #BossScaleRegenLabel { Anchor: (Left: 286, Top: 406, Width: 260, Height: 22); Text: "Regen"; Style: (FontSize: 13, TextColor: #d8e3f4); }
+        TextField #BossEditRegen { Anchor: (Left: 560, Top: 404, Width: 110, Height: 24); Value: "1.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        TextField #BossEditPpRegen { Anchor: (Left: 684, Top: 404, Width: 110, Height: 24); Value: "0.00"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+        TextButton #BossScalersSaveButton {
+          Anchor: (Left: 800, Top: 450, Width: 120, Height: 34);
+          Text: "Save";
+          Style: TextButtonStyle(
+            Default: (Background: #1f7d4b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+            Pressed: (Background: #17633c, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+          );
+        }
+      }
+
       Panel #BossWavesOverlay {
         Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
         Visible: false;
@@ -493,6 +603,10 @@ Group {
 
         Label #BossWavesHint1 { Anchor: (Left: 138, Top: 172, Width: 900, Height: 18); Text: "Trigger: 1 Before Boss, 2 On Spawn, 3 After Spawn, 4 Since Last Wave, 5 Boss HP%"; Style: (FontSize: 12, TextColor: #8ea1bb); }
         Label #BossWavesHint2 { Anchor: (Left: 138, Top: 190, Width: 900, Height: 18); Text: "At = seconds or HP%. Count: -1 infinite. Every(s) is used only when Count is not 1."; Style: (FontSize: 12, TextColor: #8ea1bb); }
+        Label #BossWaveRandomLabel { Anchor: (Left: 146, Top: 210, Width: 180, Height: 20); Text: "Random Locations"; Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true); }
+        TextField #BossWaveRandomLocations { Anchor: (Left: 274, Top: 210, Width: 86, Height: 24); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+        Label #BossWaveRandomRadiusLabel { Anchor: (Left: 376, Top: 210, Width: 140, Height: 20); Text: "Radius (blocks)"; Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true); }
+        TextField #BossWaveRandomRadius { Anchor: (Left: 476, Top: 210, Width: 76, Height: 24); Value: "15"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
 
         Label #BossWavesHeaderTrigger { Anchor: (Left: 146, Top: 236, Width: 150, Height: 20); Text: "Trigger"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
         Label #BossWavesHeaderValue { Anchor: (Left: 304, Top: 236, Width: 68, Height: 20); Text: "At"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
@@ -520,6 +634,81 @@ Group {
             Pressed: (Background: #17633c, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
           );
         }
+      }
+    }
+
+    Panel #BossTimedOverlay {
+      Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+      Visible: false;
+
+      Panel #BossTimedBackdrop {
+        Anchor: (Left: 0, Top: 0, Width: 1200, Height: 660);
+        Background: #05090f(0.78);
+      }
+
+      Panel #BossTimedWindow {
+        Anchor: (Left: 70, Top: 68, Width: 1060, Height: 548);
+        Background: #0f1725;
+      }
+
+      Label #BossTimedTitle {
+        Anchor: (Left: 98, Top: 112, Width: 520, Height: 28);
+        Text: "Timed Boss Spawns";
+        Style: (FontSize: 20, TextColor: #f3f7ff, RenderBold: true);
+      }
+
+      TextButton #BossTimedCloseButton {
+        Anchor: (Left: 980, Top: 110, Width: 120, Height: 34);
+        Text: "Close";
+        Style: TextButtonStyle(
+          Default: (Background: #2a3d58, LabelStyle: (FontSize: 13, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #38567b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #4d77a8, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
+      }
+
+      Label #BossTimedHint1 { Anchor: (Left: 98, Top: 146, Width: 930, Height: 18); Text: "Enabled + BossID + ArenaID are required for each active timed rule."; Style: (FontSize: 12, TextColor: #8ea1bb); }
+      Label #BossTimedHint2 { Anchor: (Left: 98, Top: 164, Width: 930, Height: 18); Text: "Every H/M controls spawn interval. Despawn H/M uses 0 and 0 for infinite (never despawn)."; Style: (FontSize: 12, TextColor: #8ea1bb); }
+
+      Label #BossTimedHeaderEnabled { Anchor: (Left: 106, Top: 192, Width: 68, Height: 20); Text: "On"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderBossId { Anchor: (Left: 182, Top: 192, Width: 220, Height: 20); Text: "BossID"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderArenaId { Anchor: (Left: 410, Top: 192, Width: 220, Height: 20); Text: "ArenaID"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderEveryH { Anchor: (Left: 638, Top: 192, Width: 66, Height: 20); Text: "Every H"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderEveryM { Anchor: (Left: 712, Top: 192, Width: 66, Height: 20); Text: "Every M"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderPrevent { Anchor: (Left: 786, Top: 192, Width: 90, Height: 20); Text: "No Dup"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderDespawnH { Anchor: (Left: 884, Top: 192, Width: 74, Height: 20); Text: "Despawn H"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+      Label #BossTimedHeaderDespawnM { Anchor: (Left: 966, Top: 192, Width: 74, Height: 20); Text: "Despawn M"; Style: (FontSize: 13, TextColor: #8ea1bb, RenderBold: true); }
+
+      Panel #BossTimedRow1 { Anchor: (Left: 98, Top: 214, Width: 942, Height: 30); Background: #1a2b41; TextField #TimedEnabled1 { Anchor: (Left: 8, Top: 1, Width: 68, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedBossId1 { Anchor: (Left: 84, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedArenaId1 { Anchor: (Left: 312, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryHours1 { Anchor: (Left: 540, Top: 1, Width: 66, Height: 28); Value: "1"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryMinutes1 { Anchor: (Left: 614, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedPreventDup1 { Anchor: (Left: 688, Top: 1, Width: 90, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnHours1 { Anchor: (Left: 786, Top: 1, Width: 74, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnMinutes1 { Anchor: (Left: 868, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } }
+      Panel #BossTimedRow2 { Anchor: (Left: 98, Top: 248, Width: 942, Height: 30); Background: #1a2b41; TextField #TimedEnabled2 { Anchor: (Left: 8, Top: 1, Width: 68, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedBossId2 { Anchor: (Left: 84, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedArenaId2 { Anchor: (Left: 312, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryHours2 { Anchor: (Left: 540, Top: 1, Width: 66, Height: 28); Value: "1"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryMinutes2 { Anchor: (Left: 614, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedPreventDup2 { Anchor: (Left: 688, Top: 1, Width: 90, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnHours2 { Anchor: (Left: 786, Top: 1, Width: 74, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnMinutes2 { Anchor: (Left: 868, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } }
+      Panel #BossTimedRow3 { Anchor: (Left: 98, Top: 282, Width: 942, Height: 30); Background: #1a2b41; TextField #TimedEnabled3 { Anchor: (Left: 8, Top: 1, Width: 68, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedBossId3 { Anchor: (Left: 84, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedArenaId3 { Anchor: (Left: 312, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryHours3 { Anchor: (Left: 540, Top: 1, Width: 66, Height: 28); Value: "1"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryMinutes3 { Anchor: (Left: 614, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedPreventDup3 { Anchor: (Left: 688, Top: 1, Width: 90, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnHours3 { Anchor: (Left: 786, Top: 1, Width: 74, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnMinutes3 { Anchor: (Left: 868, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } }
+      Panel #BossTimedRow4 { Anchor: (Left: 98, Top: 316, Width: 942, Height: 30); Background: #1a2b41; TextField #TimedEnabled4 { Anchor: (Left: 8, Top: 1, Width: 68, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedBossId4 { Anchor: (Left: 84, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedArenaId4 { Anchor: (Left: 312, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryHours4 { Anchor: (Left: 540, Top: 1, Width: 66, Height: 28); Value: "1"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryMinutes4 { Anchor: (Left: 614, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedPreventDup4 { Anchor: (Left: 688, Top: 1, Width: 90, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnHours4 { Anchor: (Left: 786, Top: 1, Width: 74, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnMinutes4 { Anchor: (Left: 868, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } }
+      Panel #BossTimedRow5 { Anchor: (Left: 98, Top: 350, Width: 942, Height: 30); Background: #1a2b41; TextField #TimedEnabled5 { Anchor: (Left: 8, Top: 1, Width: 68, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedBossId5 { Anchor: (Left: 84, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedArenaId5 { Anchor: (Left: 312, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryHours5 { Anchor: (Left: 540, Top: 1, Width: 66, Height: 28); Value: "1"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryMinutes5 { Anchor: (Left: 614, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedPreventDup5 { Anchor: (Left: 688, Top: 1, Width: 90, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnHours5 { Anchor: (Left: 786, Top: 1, Width: 74, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnMinutes5 { Anchor: (Left: 868, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } }
+      Panel #BossTimedRow6 { Anchor: (Left: 98, Top: 384, Width: 942, Height: 30); Background: #1a2b41; TextField #TimedEnabled6 { Anchor: (Left: 8, Top: 1, Width: 68, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedBossId6 { Anchor: (Left: 84, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedArenaId6 { Anchor: (Left: 312, Top: 1, Width: 220, Height: 28); Value: ""; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryHours6 { Anchor: (Left: 540, Top: 1, Width: 66, Height: 28); Value: "1"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedEveryMinutes6 { Anchor: (Left: 614, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedPreventDup6 { Anchor: (Left: 688, Top: 1, Width: 90, Height: 28); Value: "true"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnHours6 { Anchor: (Left: 786, Top: 1, Width: 74, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } TextField #TimedDespawnMinutes6 { Anchor: (Left: 868, Top: 1, Width: 66, Height: 28); Value: "0"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; } }
+
+      Label #TimedAnnounceServerWideLabel { Anchor: (Left: 98, Top: 430, Width: 190, Height: 20); Text: "Announce Server-Wide"; Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #TimedAnnounceServerWide { Anchor: (Left: 252, Top: 428, Width: 90, Height: 24); Value: "false"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+      Label #TimedAnnounceWorldWideLabel { Anchor: (Left: 370, Top: 430, Width: 190, Height: 20); Text: "Announce This World"; Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #TimedAnnounceWorldWide { Anchor: (Left: 522, Top: 428, Width: 90, Height: 24); Value: "false"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+      Label #TimedAnnounceTextLabel { Anchor: (Left: 98, Top: 460, Width: 210, Height: 20); Text: "Announcement Text"; Style: (FontSize: 12, TextColor: #8ea1bb, RenderBold: true); }
+      TextField #TimedAnnounceText { Anchor: (Left: 252, Top: 458, Width: 788, Height: 24); Value: "[$World] $Boss event started at $Arena"; Style: (FontSize: 12, TextColor: #e6eefc); Padding: (Left: 8); Background: #122036; }
+
+      Label #BossTimedOverflowLabel {
+        Anchor: (Left: 98, Top: 520, Width: 860, Height: 24);
+        Text: "";
+        Visible: false;
+        Style: (FontSize: 13, TextColor: #ffd88f);
+      }
+
+      TextButton #BossTimedSaveButton {
+        Anchor: (Left: 980, Top: 554, Width: 120, Height: 34);
+        Text: "Save";
+        Style: TextButtonStyle(
+          Default: (Background: #1f7d4b, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Hovered: (Background: #2b9a5f, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+          Pressed: (Background: #17633c, LabelStyle: (FontSize: 13, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+        );
       }
     }
   }

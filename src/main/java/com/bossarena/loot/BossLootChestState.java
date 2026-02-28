@@ -62,12 +62,6 @@ public class BossLootChestState extends ItemContainerState {
         } else {
             LAST_OPEN_UUID.remove();
         }
-        if (getChunk() != null) {
-            BossLootHandler.scheduleChestExpiry(
-                    getChunk().getWorld(),
-                    new Vector3d(getBlockX(), getBlockY(), getBlockZ())
-            );
-        }
         return super.canOpen(ref, accessor);
     }
 

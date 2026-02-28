@@ -4,7 +4,11 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `1.2.1`
+- Current project version: `1.3.0`
+
+## Changelog
+
+- See `CHANGELOG.md` for release notes.
 
 ## Support
 
@@ -18,10 +22,21 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 - Server target: `2026.02.19-1a311a592`
 - Required dependencies: none (runs standalone)
+- Optional gameplay integrations:
+- `RPGLeveling` (plugin id `Zuxaw:RPGLeveling`) for level override support and HP-scale compatibility on tracked bosses.
 - Optional currency integrations:
 - `HyMarketPlus` (`currencyProvider: hymarket`, auto-detected in `auto` mode)
 - `EconomySystem` (`currencyProvider: economysystem`, auto-detected in `auto` mode)
 - If neither optional economy mod is present, BossArena falls back to item currency.
+
+### RPGLeveling Compatibility
+
+- BossArena auto-detects RPGLeveling at runtime. No extra setup is required.
+- Boss HP scaling compatibility is enforced on tracked bosses when RPGLeveling is loaded.
+- Boss level override is supported through `bosses.json` and the Boss editor UI:
+- `levelOverride: 0` (or blank in UI) = default RPGLeveling behavior.
+- `levelOverride: 1+` = force that spawn level for the boss.
+- Level overrides are applied while the boss is tracked and cleaned up when the boss/event ends.
 
 ## Credits
 
@@ -91,7 +106,7 @@ Reload targets:
 ## Config GUI (`/ba config`)
 
 - Tabs: `Bosses`, `Shop`, `Arenas`.
-- Bosses tab: edit boss identity, tier, stats, and loot rows.
+- Bosses tab: edit boss identity, tier, stats, level override, and loot rows.
 - Boss Waves overlay: edit `timeLimitMs`, wave count, and multi-add rows (`npcId`, `mobsPerWave`, `everyWave`).
 - Shop tab: shows saved shop locations for current world, nearest first.
 - Shop editor: set arena id override and toggle enabled bosses per location.
@@ -109,6 +124,7 @@ Fields:
 - `bossName`
 - `npcId`
 - `tier` (`uncommon`, `common`, `rare`, `epic`, `legendary`)
+- `levelOverride` (`0` = default RPGLeveling behavior, `1+` = force spawn level when RPGLeveling is installed)
 - `amount`
 - `modifiers.hp`
 - `modifiers.damage`
@@ -118,6 +134,8 @@ Fields:
 - `perPlayerIncrease.size`
 - `extraMobs.timeLimitMs`
 - `extraMobs.waves` (`0` none, `1..N` finite, `-1` infinite-until-boss-death)
+- `extraMobs.useRandomSpawnLocations` (`true|false`, default `true`)
+- `extraMobs.randomSpawnRadius` (blocks from boss origin, default `15`)
 - `extraMobs.adds[].npcId`
 - `extraMobs.adds[].mobsPerWave`
 - `extraMobs.adds[].everyWave`
@@ -219,6 +237,61 @@ Global config fields:
 - `currencyItemId`
 - `fallbackCurrencyItemId`
 - `arenas` (legacy)
+- `timedBossSpawns[]` (optional timed auto-spawn rules)
+
+`timedBossSpawns[]` fields:
+
+- `id` (optional label for logs)
+- `enabled` (`true|false`)
+- `bossId` (must match `bosses.json` boss id/name)
+- `arenaId` (must match `arenas.json` arena id)
+- `spawnIntervalHours`
+- `spawnIntervalMinutes`
+- `preventDuplicateWhileAlive` (`true` recommended)
+- `despawnAfterHours`
+- `despawnAfterMinutes`
+- `announceWorldWide` (`true|false`, server-wide across all worlds)
+- `announceCurrentWorld` (`true|false`, players in the boss world only)
+- `worldAnnouncementText` (supports `$Boss`, `$Arena`, `$World`)
+
+Timed announcement defaults:
+
+- `worldAnnouncementText`: `[$World] $Boss event started at $Arena`
+
+Behavior:
+
+- Boss spawns at the arena location on the configured interval.
+- If `preventDuplicateWhileAlive` is enabled and that boss is still alive in that arena, the next timed spawn is skipped.
+- If both `despawnAfterHours` and `despawnAfterMinutes` are `0`, the boss is infinite (no timed despawn).
+- If either despawn value is > `0`, the timed boss (and tracked adds) is removed when the timer is reached.
+- Announcement targeting:
+  - `announceWorldWide: true` sends to all players on the server.
+  - `announceCurrentWorld: true` sends only to players in the spawned world.
+  - If both are `false`, no timed announcement is sent.
+  - If both are `true`, `announceWorldWide` overrides and `announceCurrentWorld` is ignored.
+
+Example:
+
+```json
+{
+  "timedBossSpawns": [
+    {
+      "id": "volcano_hourly",
+      "enabled": true,
+      "bossId": "Example Boss",
+      "arenaId": "volcano_arena",
+      "spawnIntervalHours": 1,
+      "spawnIntervalMinutes": 30,
+      "preventDuplicateWhileAlive": true,
+      "despawnAfterHours": 0,
+      "despawnAfterMinutes": 45,
+      "announceWorldWide": true,
+      "announceCurrentWorld": false,
+      "worldAnnouncementText": "[$World] $Boss event started at $Arena"
+    }
+  ]
+}
+```
 
 ## Event and Loot Flow
 
@@ -236,4 +309,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-1.1.1.jar`
+- `target/BossArena-1.3.0.jar`

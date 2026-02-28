@@ -5,6 +5,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
 import com.hypixel.hytale.math.util.ChunkUtil;
+import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3i;
 import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
@@ -111,6 +112,14 @@ public class BossLootHandler {
 
     // Queue a loot spawn
     public static void queueLootSpawn(World world, Vector3d location, String bossName) {
+        if (world == null) {
+            LOGGER.warning("Skipping loot spawn queue for '" + bossName + "' because world is null.");
+            return;
+        }
+        if (location == null) {
+            LOGGER.warning("Skipping loot spawn queue for '" + bossName + "' because location is null.");
+            return;
+        }
         PENDING_SPAWNS.add(new PendingLootSpawn(world, location, bossName));
         LOGGER.info("Queued loot spawn for: " + bossName + " at " + location);
     }
@@ -119,6 +128,14 @@ public class BossLootHandler {
     public static void handleBossDeath(World world, Vector3d chestLocation, String bossName) {
         LOGGER.info("=== BOSS LOOT DEBUG ===");
         LOGGER.info("Boss: " + bossName + " died at: " + chestLocation);
+        if (world == null) {
+            LOGGER.warning("Cannot handle boss loot for '" + bossName + "': world is null.");
+            return;
+        }
+        if (chestLocation == null) {
+            LOGGER.warning("Cannot handle boss loot for '" + bossName + "': chest location is null.");
+            return;
+        }
 
         LootTable table = LootRegistry.get(bossName);
         if (table == null) {
@@ -138,7 +155,14 @@ public class BossLootHandler {
 
         for (PlayerRef ref : playerRefs) {
             UUID playerUuid = ref.getUuid();
-            Vector3d playerPos = ref.getTransform().getPosition();
+            Transform playerTransform = ref.getTransform();
+            if (playerTransform == null) {
+                continue;
+            }
+            Vector3d playerPos = playerTransform.getPosition();
+            if (playerPos == null) {
+                continue;
+            }
             double distance = calculateDistance(playerPos, chestLocation);
 
             LOGGER.info("Player " + playerUuid + " at " + playerPos + ", distance: " + distance);
@@ -269,13 +293,21 @@ public class BossLootHandler {
 
         Map<UUID, List<GeneratedLoot>> playerLoot = CHEST_LOOT.get(chestLoc);
         if (playerLoot == null || playerLoot.isEmpty()) {
-            CHEST_LOOT.remove(chestLoc);
-            CHEST_WORLD.remove(chestLoc);
-            cancelChestExpiry(chestLoc, false);
-            removeChestBlock(world, chestLoc);
-            LOGGER.info("All loot claimed, removed chest at " + chestLoc);
+            // Keep the block alive until expiry after the last window closes.
+            LOGGER.info("All loot claimed at " + chestLoc + ", waiting for close-expiry cleanup.");
             persistStateSafe();
         }
+    }
+
+    public static void pauseChestExpiry(World world, Vector3d location) {
+        if (location == null) {
+            return;
+        }
+        Vector3d key = normalizeChestKey(location);
+        if (world != null && !isWorldMatch(world, key)) {
+            return;
+        }
+        cancelChestExpiry(key, true);
     }
 
     public static void scheduleChestExpiry(World world, Vector3d location) {
@@ -284,6 +316,9 @@ public class BossLootHandler {
         }
 
         Vector3d key = normalizeChestKey(location);
+        if (!isWorldMatch(world, key)) {
+            return;
+        }
         long expiresAtEpochMs = System.currentTimeMillis() + CHEST_EXPIRY_MS;
         scheduleChestExpiryInternal(world, key, CHEST_EXPIRY_MS, expiresAtEpochMs, true);
     }

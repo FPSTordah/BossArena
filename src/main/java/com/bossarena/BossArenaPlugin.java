@@ -7,9 +7,12 @@ import com.bossarena.data.BossRegistry;
 import com.bossarena.command.BossArenaCommand;
 import com.bossarena.command.BossArenaShortCommand;
 import com.bossarena.spawn.BossSpawnService;
+import com.bossarena.spawn.BossTimedSpawnScheduler;
 import com.bossarena.system.BossTrackingSystem;
 import com.bossarena.system.BossDeathSystem;
+import com.bossarena.system.BossDamageScalingSystem;
 import com.bossarena.system.BossEventNotificationSystem;
+import com.bossarena.system.BossSpeedScalingSystem;
 import com.bossarena.system.LootSpawnSystem;
 import com.bossarena.system.RPGLevelingBossScaleCompatSystem;
 import com.bossarena.loot.LootRegistry;
@@ -87,10 +90,13 @@ public final class BossArenaPlugin extends JavaPlugin {
     private BossArenaConfig config = new BossArenaConfig();
     private BossShopConfig shopConfig = new BossShopConfig();
     private BossSpawnService bossSpawnService;
+    private BossTimedSpawnScheduler timedSpawnScheduler;
     private Path bossesJsonPath;
     private Path arenasJsonPath;
     private Path lootTablesPath;
     private Path lootChestStatePath;
+    private Path bossFightStatePath;
+    private Path timedSpawnStatePath;
     private Path shopJsonPath;
 
     public BossArenaPlugin(JavaPluginInit init) {
@@ -112,6 +118,8 @@ public final class BossArenaPlugin extends JavaPlugin {
         this.arenasJsonPath = modRoot.resolve("arenas.json");
         this.lootTablesPath = modRoot.resolve("loot_tables.json");
         this.lootChestStatePath = modRoot.resolve("loot_chests_state.json");
+        this.bossFightStatePath = modRoot.resolve("boss_fights_state.json");
+        this.timedSpawnStatePath = modRoot.resolve("timed_spawn_state.json");
         this.shopJsonPath = modRoot.resolve("shop.json");
 
         // Create tracking system
@@ -119,6 +127,8 @@ public final class BossArenaPlugin extends JavaPlugin {
 
         // Register ECS systems
         this.getEntityStoreRegistry().registerSystem(new LootSpawnSystem());
+        this.getEntityStoreRegistry().registerSystem(new BossDamageScalingSystem(trackingSystem));
+        this.getEntityStoreRegistry().registerSystem(new BossSpeedScalingSystem(trackingSystem));
         this.getEntityStoreRegistry().registerSystem(new BossDeathSystem(trackingSystem));
         this.getEntityStoreRegistry().registerSystem(new BossEventNotificationSystem(trackingSystem));
         this.getEntityStoreRegistry().registerSystem(new RPGLevelingBossScaleCompatSystem(trackingSystem));
@@ -166,6 +176,7 @@ public final class BossArenaPlugin extends JavaPlugin {
         }
 
         this.bossSpawnService = new BossSpawnService(trackingSystem, config);
+        this.timedSpawnScheduler = new BossTimedSpawnScheduler(bossSpawnService, trackingSystem);
 
         // Async startup
         CompletableFuture.runAsync(() -> {
@@ -921,6 +932,12 @@ public final class BossArenaPlugin extends JavaPlugin {
 
             BossLootHandler.initializePersistence(lootChestStatePath);
             getLogger().atInfo().log("Loot chest persistence initialized at " + lootChestStatePath);
+            trackingSystem.initializePersistence(bossFightStatePath);
+            getLogger().atInfo().log("Boss fight persistence initialized at " + bossFightStatePath);
+            if (timedSpawnScheduler != null) {
+                timedSpawnScheduler.initializePersistence(timedSpawnStatePath);
+                getLogger().atInfo().log("Timed spawn persistence initialized at " + timedSpawnStatePath);
+            }
 
             if (Files.notExists(bossesJsonPath)) {
                 writeDefaultBosses();
@@ -942,6 +959,7 @@ public final class BossArenaPlugin extends JavaPlugin {
 
             reloadBossDefinitions().thenRun(() -> {
                 reloadArenas().thenRun(() -> {
+                    refreshTimedBossSpawns();
                     getLogger().atInfo().log("BossArena fully initialized: " +
                             BossRegistry.size() + " bosses, " +
                             ArenaRegistry.size() + " arenas");
@@ -959,6 +977,12 @@ public final class BossArenaPlugin extends JavaPlugin {
     @Override
     protected void shutdown() {
         try {
+            if (timedSpawnScheduler != null) {
+                timedSpawnScheduler.shutdown();
+            }
+            if (trackingSystem != null) {
+                trackingSystem.shutdownPersistence();
+            }
             SHOP_REBIND_EXECUTOR.shutdownNow();
             BossLootHandler.flushPersistence();
             getLogger().atInfo().log("Persisted loot chest state during shutdown");
@@ -1048,6 +1072,14 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     public BossArenaConfig getConfigHandle() {
         return config;
+    }
+
+    public void refreshTimedBossSpawns() {
+        if (timedSpawnScheduler == null) {
+            return;
+        }
+        timedSpawnScheduler.reloadFromConfig(config);
+        timedSpawnScheduler.start();
     }
 
     public Path getLootTablesPath() {
@@ -1182,16 +1214,31 @@ public final class BossArenaPlugin extends JavaPlugin {
         exampleBoss.npcId = "Bat";
         exampleBoss.tier = "uncommon";
         exampleBoss.amount = 1;
+        exampleBoss.levelOverride = 0;
 
         exampleBoss.modifiers = new BossDefinition.Modifiers();
         exampleBoss.modifiers.hp = 2.0f;
         exampleBoss.modifiers.damage = 1.5f;
+        exampleBoss.modifiers.movementSpeed = 1.0f;
         exampleBoss.modifiers.size = 1.0f;
+        exampleBoss.modifiers.attackRate = 1.0f;
+        exampleBoss.modifiers.abilityCooldown = 1.0f;
+        exampleBoss.modifiers.knockbackGiven = 1.0f;
+        exampleBoss.modifiers.knockbackTaken = 1.0f;
+        exampleBoss.modifiers.turnRate = 1.0f;
+        exampleBoss.modifiers.regen = 1.0f;
 
         exampleBoss.perPlayerIncrease = new BossDefinition.PerPlayerIncrease();
         exampleBoss.perPlayerIncrease.hp = 0.5f;
         exampleBoss.perPlayerIncrease.damage = 0.2f;
+        exampleBoss.perPlayerIncrease.movementSpeed = 0.0f;
         exampleBoss.perPlayerIncrease.size = 0.0f;
+        exampleBoss.perPlayerIncrease.attackRate = 0.0f;
+        exampleBoss.perPlayerIncrease.abilityCooldown = 0.0f;
+        exampleBoss.perPlayerIncrease.knockbackGiven = 0.0f;
+        exampleBoss.perPlayerIncrease.knockbackTaken = 0.0f;
+        exampleBoss.perPlayerIncrease.turnRate = 0.0f;
+        exampleBoss.perPlayerIncrease.regen = 0.0f;
 
         exampleBoss.extraMobs = new BossDefinition.ExtraMobs();
         exampleBoss.extraMobs.npcId = "Bat";

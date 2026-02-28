@@ -13,13 +13,17 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.common.semver.SemverRange;
 
 import javax.annotation.Nonnull;
+import java.lang.reflect.Method;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Keeps BossArena's HP multiplier on tracked bosses when RPGLeveling is present.
+ * Keeps BossArena HP/level overrides on tracked bosses when RPGLeveling is present.
  * We intentionally avoid maximizing current HP here to prevent accidental mid-fight heals.
  */
 public final class RPGLevelingBossScaleCompatSystem extends TickingSystem<EntityStore> {
@@ -32,6 +36,11 @@ public final class RPGLevelingBossScaleCompatSystem extends TickingSystem<Entity
     private float elapsedSeconds;
     private boolean lastRpgLevelingLoaded;
     private boolean loadStateKnown;
+    private final Map<UUID, Integer> appliedLevelOverrides = new HashMap<>();
+    private Method rpgGetMethod;
+    private Method rpgPutSpawnLevelMethod;
+    private Method rpgRemoveSpawnLevelMethod;
+    private boolean rpgLevelApiResolved;
 
     public RPGLevelingBossScaleCompatSystem(BossTrackingSystem trackingSystem) {
         this.trackingSystem = trackingSystem;
@@ -53,9 +62,15 @@ public final class RPGLevelingBossScaleCompatSystem extends TickingSystem<Entity
             return;
         }
 
-        for (Map.Entry<UUID, BossTrackingSystem.BossData> entry : trackingSystem.snapshotTrackedBosses().entrySet()) {
+        Map<UUID, BossTrackingSystem.BossData> trackedBosses = trackingSystem.snapshotTrackedBosses();
+        Set<UUID> activeBossUuids = new HashSet<>(trackedBosses.keySet());
+        Object rpgPluginInstance = resolveRpgLevelingPluginInstance();
+
+        for (Map.Entry<UUID, BossTrackingSystem.BossData> entry : trackedBosses.entrySet()) {
             enforceBossHpScale(entry.getKey(), entry.getValue());
+            enforceBossLevelOverride(entry.getKey(), entry.getValue(), rpgPluginInstance);
         }
+        pruneStaleLevelOverrides(activeBossUuids, rpgPluginInstance);
     }
 
     private void enforceBossHpScale(UUID bossUuid, BossTrackingSystem.BossData bossData) {
@@ -119,6 +134,100 @@ public final class RPGLevelingBossScaleCompatSystem extends TickingSystem<Entity
         }
     }
 
+    private void enforceBossLevelOverride(UUID bossUuid,
+                                          BossTrackingSystem.BossData bossData,
+                                          Object rpgPluginInstance) {
+        if (bossUuid == null || bossData == null || rpgPluginInstance == null) {
+            return;
+        }
+        if (rpgPutSpawnLevelMethod == null || rpgRemoveSpawnLevelMethod == null) {
+            return;
+        }
+
+        int desiredLevel = bossData.levelOverride >= 1 ? bossData.levelOverride : 0;
+        Integer currentLevel = appliedLevelOverrides.get(bossUuid);
+
+        try {
+            if (desiredLevel >= 1) {
+                if (currentLevel != null && currentLevel == desiredLevel) {
+                    return;
+                }
+                rpgPutSpawnLevelMethod.invoke(rpgPluginInstance, bossUuid, desiredLevel);
+                appliedLevelOverrides.put(bossUuid, desiredLevel);
+                return;
+            }
+
+            if (currentLevel == null) {
+                return;
+            }
+            rpgRemoveSpawnLevelMethod.invoke(rpgPluginInstance, bossUuid);
+            appliedLevelOverrides.remove(bossUuid);
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Failed to enforce RPGLeveling level override for " + bossUuid, e);
+        }
+    }
+
+    private void pruneStaleLevelOverrides(Set<UUID> activeBossUuids, Object rpgPluginInstance) {
+        if (appliedLevelOverrides.isEmpty()) {
+            return;
+        }
+        if (rpgPluginInstance == null || rpgRemoveSpawnLevelMethod == null) {
+            appliedLevelOverrides.clear();
+            return;
+        }
+
+        for (UUID bossUuid : new HashSet<>(appliedLevelOverrides.keySet())) {
+            if (activeBossUuids.contains(bossUuid)) {
+                continue;
+            }
+            try {
+                rpgRemoveSpawnLevelMethod.invoke(rpgPluginInstance, bossUuid);
+            } catch (Exception e) {
+                LOGGER.log(Level.FINE, "Failed to clear stale RPGLeveling level override for " + bossUuid, e);
+            }
+            appliedLevelOverrides.remove(bossUuid);
+        }
+    }
+
+    private Object resolveRpgLevelingPluginInstance() {
+        resolveRpgLevelingLevelApi();
+        if (rpgGetMethod == null) {
+            return null;
+        }
+        try {
+            return rpgGetMethod.invoke(null);
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Failed to get RPGLeveling plugin instance", e);
+            return null;
+        }
+    }
+
+    private void resolveRpgLevelingLevelApi() {
+        if (rpgLevelApiResolved) {
+            return;
+        }
+        rpgLevelApiResolved = true;
+        try {
+            Class<?> pluginClass = Class.forName("org.zuxaw.plugin.RPGLevelingPlugin");
+            rpgGetMethod = pluginClass.getMethod("get");
+            rpgPutSpawnLevelMethod = pluginClass.getMethod("putSpawnLevelForEntity", UUID.class, int.class);
+            rpgRemoveSpawnLevelMethod = pluginClass.getMethod("removeSpawnLevelForEntity", UUID.class);
+        } catch (Exception e) {
+            rpgGetMethod = null;
+            rpgPutSpawnLevelMethod = null;
+            rpgRemoveSpawnLevelMethod = null;
+            LOGGER.log(Level.INFO, "BossArena compat could not resolve RPGLeveling level override API", e);
+        }
+    }
+
+    private void resetRpgLevelingCompatState() {
+        appliedLevelOverrides.clear();
+        rpgGetMethod = null;
+        rpgPutSpawnLevelMethod = null;
+        rpgRemoveSpawnLevelMethod = null;
+        rpgLevelApiResolved = false;
+    }
+
     private static boolean nearlyEqual(float a, float b) {
         return Math.abs(a - b) < EPSILON;
     }
@@ -142,6 +251,12 @@ public final class RPGLevelingBossScaleCompatSystem extends TickingSystem<Entity
         boolean loaded = pluginManager != null
                 && pluginManager.hasPlugin(BossArenaPlugin.RPG_LEVELING_PLUGIN_ID, SemverRange.WILDCARD);
         if (!loadStateKnown || loaded != lastRpgLevelingLoaded) {
+            if (!loaded) {
+                resetRpgLevelingCompatState();
+            } else if (loadStateKnown && !lastRpgLevelingLoaded) {
+                // Plugin transitioned from unloaded to loaded; resolve API again.
+                rpgLevelApiResolved = false;
+            }
             LOGGER.info("BossArena compat RPGLeveling loaded state: " + loaded);
             loadStateKnown = true;
             lastRpgLevelingLoaded = loaded;

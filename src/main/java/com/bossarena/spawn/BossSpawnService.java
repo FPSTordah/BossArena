@@ -30,11 +30,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -57,6 +60,7 @@ public final class BossSpawnService {
 
     private final BossTrackingSystem tracking;
     private final BossArenaConfig config;
+    private final Map<UUID, BossModifiers> pendingDetachedAddModifiers = new ConcurrentHashMap<>();
 
     public BossSpawnService(BossTrackingSystem tracking, BossArenaConfig config) {
         this.tracking = tracking;
@@ -68,6 +72,15 @@ public final class BossSpawnService {
                                   World world,
                                   Vector3d spawnPos,
                                   String arenaId) {  // ADD THIS PARAMETER
+        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, null);
+    }
+
+    public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
+                                  String bossId,
+                                  World world,
+                                  Vector3d spawnPos,
+                                  String arenaId,
+                                  Long countdownOverrideMinutes) {
         BossDefinition def = BossRegistry.get(bossId);
         if (def == null) {
             LOGGER.warning("Boss definition not found: " + bossId);
@@ -85,20 +98,48 @@ public final class BossSpawnService {
         }
         float baseHp = def.modifiers != null ? def.modifiers.hp : 1.0f;
         float baseDamage = def.modifiers != null ? def.modifiers.damage : 1.0f;
+        float baseSpeed = def.modifiers != null ? def.modifiers.movementSpeed : 1.0f;
         float baseSize = def.modifiers != null ? def.modifiers.size : 1.0f;
+        float baseAttackRate = def.modifiers != null ? def.modifiers.attackRate : 1.0f;
+        float baseAbilityCooldown = def.modifiers != null ? def.modifiers.abilityCooldown : 1.0f;
+        float baseKnockbackGiven = def.modifiers != null ? def.modifiers.knockbackGiven : 1.0f;
+        float baseKnockbackTaken = def.modifiers != null ? def.modifiers.knockbackTaken : 1.0f;
+        float baseTurnRate = def.modifiers != null ? def.modifiers.turnRate : 1.0f;
+        float baseRegen = def.modifiers != null ? def.modifiers.regen : 1.0f;
         float perHp = def.perPlayerIncrease != null ? def.perPlayerIncrease.hp : 0.0f;
         float perDamage = def.perPlayerIncrease != null ? def.perPlayerIncrease.damage : 0.0f;
+        float perSpeed = def.perPlayerIncrease != null ? def.perPlayerIncrease.movementSpeed : 0.0f;
         float perSize = def.perPlayerIncrease != null ? def.perPlayerIncrease.size : 0.0f;
+        float perAttackRate = def.perPlayerIncrease != null ? def.perPlayerIncrease.attackRate : 0.0f;
+        float perAbilityCooldown = def.perPlayerIncrease != null ? def.perPlayerIncrease.abilityCooldown : 0.0f;
+        float perKnockbackGiven = def.perPlayerIncrease != null ? def.perPlayerIncrease.knockbackGiven : 0.0f;
+        float perKnockbackTaken = def.perPlayerIncrease != null ? def.perPlayerIncrease.knockbackTaken : 0.0f;
+        float perTurnRate = def.perPlayerIncrease != null ? def.perPlayerIncrease.turnRate : 0.0f;
+        float perRegen = def.perPlayerIncrease != null ? def.perPlayerIncrease.regen : 0.0f;
         LOGGER.info("Scaling with players=" + playerCount +
                 " (nearby=" + nearbyCount + ", world=" + worldCount + ")" +
-                " base(hp=" + baseHp + ", dmg=" + baseDamage + ", size=" + baseSize + ")" +
-                " perPlayer(hp=" + perHp + ", dmg=" + perDamage + ", size=" + perSize + ")");
+                " base(hp=" + baseHp + ", dmg=" + baseDamage + ", spd=" + baseSpeed
+                + ", size=" + baseSize + ", atkRate=" + baseAttackRate + ", cd=" + baseAbilityCooldown
+                + ", kbGive=" + baseKnockbackGiven + ", kbTake=" + baseKnockbackTaken
+                + ", turn=" + baseTurnRate + ", regen=" + baseRegen + ")" +
+                " perPlayer(hp=" + perHp + ", dmg=" + perDamage + ", spd=" + perSpeed
+                + ", size=" + perSize + ", atkRate=" + perAttackRate + ", cd=" + perAbilityCooldown
+                + ", kbGive=" + perKnockbackGiven + ", kbTake=" + perKnockbackTaken
+                + ", turn=" + perTurnRate + ", regen=" + perRegen + ")");
         BossModifiers mods = BossScaler.calculateModifiers(def, playerCount);
 
-        LOGGER.info("Boss modifiers calculated - HP: " + mods.hpMultiplier() + ", Damage: " + mods.damageMultiplier() + ", Size: " + mods.scaleMultiplier());
+        LOGGER.info("Boss modifiers calculated - HP: " + mods.hpMultiplier()
+                + ", Damage: " + mods.damageMultiplier()
+                + ", Speed: " + mods.speedMultiplier()
+                + ", Size: " + mods.scaleMultiplier()
+                + ", AtkRate: " + mods.attackRateMultiplier()
+                + ", Cooldown: " + mods.abilityCooldownMultiplier()
+                + ", KnockbackGiven: " + mods.knockbackGivenMultiplier()
+                + ", KnockbackTaken: " + mods.knockbackTakenMultiplier()
+                + ", TurnRate: " + mods.turnRateMultiplier()
+                + ", Regen: " + mods.regenMultiplier());
 
-        int countdownMinutes = config != null ? config.getBossTierCountdownMinutes(def.tier) : 30;
-        long countdownDurationMs = TimeUnit.MINUTES.toMillis(Math.max(1, countdownMinutes));
+        long countdownDurationMs = resolveCountdownDurationMs(def, countdownOverrideMinutes);
         List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWavesBuffer = List.of();
         List<UUID> pendingPreBossAdds = Collections.synchronizedList(new ArrayList<>());
         AtomicInteger nextWaveNumber = new AtomicInteger(1);
@@ -192,7 +233,18 @@ public final class BossSpawnService {
                         bossEventId = tracking.createEvent(world, spawnPos, def.bossName, def.tier, countdownDurationMs);
                     }
 
-                    tracking.track(uuid, def.bossName, mods, arenaId, world, spreadPos, def.tier, bossEventId, spawnPos);
+                    tracking.track(
+                            uuid,
+                            def.bossName,
+                            mods,
+                            arenaId,
+                            world,
+                            spreadPos,
+                            def.tier,
+                            Math.max(0, def.levelOverride),
+                            bossEventId,
+                            spawnPos
+                    );
                     applyModifiers(store, npcRef, mods);
                     disableDefaultEntityLoot(store, npcRef, def.bossName + "#" + (i + 1));
 
@@ -224,6 +276,20 @@ public final class BossSpawnService {
         }
 
         return primaryBossUuid;
+    }
+
+    private long resolveCountdownDurationMs(BossDefinition def, Long countdownOverrideMinutes) {
+        if (countdownOverrideMinutes != null) {
+            long timedMinutes = Math.max(0L, countdownOverrideMinutes);
+            if (timedMinutes <= 0L) {
+                // Timed rules explicitly use 0h/0m for infinite lifetime (no countdown timer).
+                return 0L;
+            }
+            return TimeUnit.MINUTES.toMillis(timedMinutes);
+        }
+
+        int countdownMinutes = config != null ? config.getBossTierCountdownMinutes(def != null ? def.tier : null) : 30;
+        return TimeUnit.MINUTES.toMillis(Math.max(1, countdownMinutes));
     }
 
     private void applyModifiers(Store<EntityStore> store, Ref<EntityStore> entityRef, BossModifiers mods) {
@@ -532,10 +598,11 @@ public final class BossSpawnService {
 
         int attached = 0;
         for (UUID addUuid : preBossAdds) {
+            BossModifiers addMods = pendingDetachedAddModifiers.remove(addUuid);
             if (!isEntityAlive(world, addUuid)) {
                 continue;
             }
-            tracking.trackAdd(bossUuid, addUuid);
+            tracking.trackAdd(bossUuid, addUuid, addMods);
             attached++;
         }
         if (attached > 0) {
@@ -852,11 +919,7 @@ public final class BossSpawnService {
             }
             int mobCount = Math.max(1, add.mobsPerWave);
             for (int i = 0; i < mobCount; i++) {
-                Vector3d mobPos = spawnPos.add(
-                        (Math.random() - 0.5) * 5,
-                        0,
-                        (Math.random() - 0.5) * 5
-                );
+                Vector3d mobPos = computeWaveSpawnPosition(spawnPos, def.extraMobs);
 
                 var result = NPCPlugin.get().spawnNPC(
                         world.getEntityStore().getStore(),
@@ -875,7 +938,13 @@ public final class BossSpawnService {
                         Math.max(0.01f, add.hp),
                         Math.max(0.01f, add.damage),
                         1.0f,
-                        Math.max(0.01f, add.size)
+                        Math.max(0.01f, add.size),
+                        1.0f,
+                        1.0f,
+                        1.0f,
+                        1.0f,
+                        1.0f,
+                        1.0f
                 );
                 applyModifiers(world.getEntityStore().getStore(), addRef, addMods);
                 disableDefaultEntityLoot(world.getEntityStore().getStore(), addRef, add.npcId);
@@ -885,8 +954,10 @@ public final class BossSpawnService {
                     UUID addUuid = addUuidComp.getUuid();
                     spawnedAddUuids.add(addUuid);
                     if (bossUuid != null) {
-                        tracking.trackAdd(bossUuid, addUuid);
+                        tracking.trackAdd(bossUuid, addUuid, addMods);
                         trackedAddsSpawned++;
+                    } else {
+                        pendingDetachedAddModifiers.put(addUuid, addMods);
                     }
                 }
 
@@ -991,6 +1062,28 @@ public final class BossSpawnService {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to disable default drops for '" + label + "'.", e);
         }
+    }
+
+    private Vector3d computeWaveSpawnPosition(Vector3d origin, BossDefinition.ExtraMobs extraMobs) {
+        if (origin == null) {
+            return null;
+        }
+
+        if (extraMobs == null || !extraMobs.useRandomSpawnLocations) {
+            return origin;
+        }
+
+        double radius = extraMobs.getWaveRandomSpawnRadius();
+        if (radius <= 0.0d) {
+            return origin;
+        }
+
+        ThreadLocalRandom random = ThreadLocalRandom.current();
+        double angle = random.nextDouble(0.0d, Math.PI * 2.0d);
+        double distance = Math.sqrt(random.nextDouble()) * radius;
+        double x = origin.x + (Math.cos(angle) * distance);
+        double z = origin.z + (Math.sin(angle) * distance);
+        return new Vector3d(x, origin.y, z);
     }
 
     private Vector3d computeBossSpawnPosition(Vector3d center, int index) {
