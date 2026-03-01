@@ -1,5 +1,6 @@
 package com.bossarena.system;
 
+import com.bossarena.BossArenaPlugin;
 import com.bossarena.loot.BossLootHandler;
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.Ref;
@@ -75,16 +76,37 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
 
     private void handleTrackedBossDeath(UUID bossUuid) {
         LOGGER.info("🎯 BOSS DIED! UUID: " + bossUuid);
-        BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.markBossDead(bossUuid);
+
+        // Cleanup map marker
+        var plugin = BossArenaPlugin.getInstance();
+        if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
+            BossTrackingSystem.BossData data = trackingSystem.getBossData(bossUuid);
+            if (data != null) {
+                plugin.getTimedBossMapMarkerService().onTimedBossDespawn(data.world, bossUuid);
+            }
+        }
+
+        // Capture context BEFORE marking dead (as that removes the data)
         BossTrackingSystem.BossEventContext eventContext = trackingSystem.getEventContext(bossUuid);
+        BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.markBossDead(bossUuid);
+
+        // Capture counts AFTER marking dead for accurate remaining status
         int aliveBosses = trackingSystem.getAliveBossCount(bossUuid);
         int activeAdds = trackingSystem.getActiveAddCountForEvent(bossUuid);
 
         if (pendingLoot != null) {
             LOGGER.info("Boss event for '" + pendingLoot.bossName + "' is complete, spawning one loot chest.");
+
+            // Clear any remaining boss markers if event completed
+            if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
+                for (java.util.UUID uuid : pendingLoot.bossUuids) {
+                    plugin.getTimedBossMapMarkerService().onTimedBossDespawn(pendingLoot.world, uuid);
+                }
+            }
+
             BossWaveNotificationService.notifyBossAliveStatus(
                     pendingLoot.world,
-                    pendingLoot.spawnLocation,
+                    pendingLoot.eventCenter != null ? pendingLoot.eventCenter : pendingLoot.spawnLocation,
                     pendingLoot.bossName,
                     0,
                     0,
@@ -118,9 +140,18 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
 
         if (pendingLoot != null) {
             LOGGER.info("All bosses and tracked adds are dead for '" + pendingLoot.bossName + "', spawning one loot chest.");
+
+            // Cleanup all boss markers for the completed event
+            var plugin = BossArenaPlugin.getInstance();
+            if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
+                for (java.util.UUID buuid : pendingLoot.bossUuids) {
+                    plugin.getTimedBossMapMarkerService().onTimedBossDespawn(pendingLoot.world, buuid);
+                }
+            }
+
             BossWaveNotificationService.notifyBossAliveStatus(
                     pendingLoot.world,
-                    pendingLoot.spawnLocation,
+                    pendingLoot.eventCenter != null ? pendingLoot.eventCenter : pendingLoot.spawnLocation,
                     pendingLoot.bossName,
                     0,
                     0,

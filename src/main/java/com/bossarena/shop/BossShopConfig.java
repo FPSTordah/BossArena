@@ -25,92 +25,9 @@ public final class BossShopConfig {
     public String currencyProvider = DEFAULT_CURRENCY_PROVIDER;
     public String currencyItemId = "";
     public String shopNpcId = DEFAULT_SHOP_NPC_ID;
+    public boolean strictContractPricing = false;
     public List<ShopEntry> entries = new ArrayList<>();
     public List<ShopLocation> shops = new ArrayList<>();
-
-    public void load(Path path) {
-        if (path == null) {
-            currencyProvider = DEFAULT_CURRENCY_PROVIDER;
-            currencyItemId = "";
-            shopNpcId = DEFAULT_SHOP_NPC_ID;
-            entries = createDefaultEntries();
-            shops = new ArrayList<>();
-            return;
-        }
-
-        try {
-            Path parent = path.getParent();
-            if (parent != null) {
-                Files.createDirectories(parent);
-            }
-
-            if (Files.notExists(path)) {
-                currencyProvider = DEFAULT_CURRENCY_PROVIDER;
-                currencyItemId = "";
-                shopNpcId = DEFAULT_SHOP_NPC_ID;
-                entries = createDefaultEntries();
-                shops = new ArrayList<>();
-                save(path);
-                LOGGER.info("Created default shop config at " + path.toAbsolutePath());
-                return;
-            }
-
-            String raw = Files.readString(path, StandardCharsets.UTF_8);
-            JsonObject rawRoot = parseJsonObject(raw);
-            BossShopConfig parsed = GSON.fromJson(raw, BossShopConfig.class);
-
-            if (parsed == null) {
-                currencyProvider = DEFAULT_CURRENCY_PROVIDER;
-                currencyItemId = "";
-                shopNpcId = DEFAULT_SHOP_NPC_ID;
-                entries = createDefaultEntries();
-                shops = new ArrayList<>();
-                save(path);
-                LOGGER.warning("shop.json was empty; regenerated defaults.");
-                return;
-            }
-
-            currencyProvider = sanitizeCurrencyProvider(parsed.currencyProvider);
-            currencyItemId = sanitizeCurrencyItemId(parsed.currencyItemId);
-            shopNpcId = sanitizeShopNpcId(parsed.shopNpcId);
-            entries = sanitizeEntries(parsed.entries);
-            shops = sanitizeShops(parsed.shops);
-            if (entries.isEmpty()) {
-                entries = createDefaultEntries();
-            } else {
-                ensurePreviewEntriesEnabled(entries);
-            }
-
-            boolean migratedLegacyUuids = applyLegacyNpcUuids(rawRoot, shops);
-            if (migratedLegacyUuids) {
-                save(path);
-                LOGGER.info("Migrated legacy shop fields into shops list.");
-            }
-        } catch (Exception e) {
-            LOGGER.warning("Failed to load shop config: " + e.getMessage());
-            currencyProvider = DEFAULT_CURRENCY_PROVIDER;
-            currencyItemId = "";
-            shopNpcId = DEFAULT_SHOP_NPC_ID;
-            entries = createDefaultEntries();
-            shops = new ArrayList<>();
-            try {
-                save(path);
-            } catch (Exception ignored) {
-                // best effort only
-            }
-        }
-    }
-
-    public void save(Path path) throws IOException {
-        if (path == null) {
-            return;
-        }
-        Path parent = path.getParent();
-        if (parent != null) {
-            Files.createDirectories(parent);
-        }
-        Files.writeString(path, GSON.toJson(this), StandardCharsets.UTF_8);
-    }
 
     private static JsonObject parseJsonObject(String raw) {
         if (raw == null || raw.isBlank()) {
@@ -170,6 +87,7 @@ public final class BossShopConfig {
             normalized.z = entry.z;
             normalized.arenaId = sanitizeArenaId(entry.arenaId);
             normalized.enabledBossIds = sanitizeBossIds(entry.enabledBossIds);
+            normalized.contractPrices = sanitizeContractPrices(entry.contractPrices);
             if (normalized.name.isEmpty()) {
                 normalized.name = defaultShopName(normalized.uuid, normalized.x, normalized.y, normalized.z);
             }
@@ -280,6 +198,10 @@ public final class BossShopConfig {
                 && source.enabledBossIds != null && !source.enabledBossIds.isEmpty()) {
             target.enabledBossIds = sanitizeBossIds(source.enabledBossIds);
         }
+        if ((target.contractPrices == null || target.contractPrices.isEmpty())
+                && source.contractPrices != null && !source.contractPrices.isEmpty()) {
+            target.contractPrices = sanitizeContractPrices(source.contractPrices);
+        }
 
         if (optional(target.name).isEmpty()) {
             target.name = defaultShopName(target.uuid, target.x, target.y, target.z);
@@ -289,6 +211,11 @@ public final class BossShopConfig {
             target.enabledBossIds = new ArrayList<>();
         } else {
             target.enabledBossIds = sanitizeBossIds(target.enabledBossIds);
+        }
+        if (target.contractPrices == null) {
+            target.contractPrices = new ArrayList<>();
+        } else {
+            target.contractPrices = sanitizeContractPrices(target.contractPrices);
         }
     }
 
@@ -319,6 +246,37 @@ public final class BossShopConfig {
             if (!duplicate) {
                 out.add(trimmed);
             }
+        }
+        return out;
+    }
+
+    private static List<ContractPrice> sanitizeContractPrices(List<ContractPrice> source) {
+        List<ContractPrice> out = new ArrayList<>();
+        if (source == null || source.isEmpty()) {
+            return out;
+        }
+        for (ContractPrice raw : source) {
+            if (raw == null) {
+                continue;
+            }
+            String bossId = optional(raw.bossId);
+            if (bossId.isEmpty()) {
+                continue;
+            }
+            boolean duplicate = false;
+            for (ContractPrice existing : out) {
+                if (existing != null && bossId.equalsIgnoreCase(optional(existing.bossId))) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate) {
+                continue;
+            }
+            ContractPrice clean = new ContractPrice();
+            clean.bossId = bossId;
+            clean.cost = Math.max(0, raw.cost);
+            out.add(clean);
         }
         return out;
     }
@@ -362,6 +320,222 @@ public final class BossShopConfig {
     private static String sanitizeFallbackCurrencyItemId(String value) {
         String sanitized = sanitizeCurrencyItemId(value);
         return sanitized.isBlank() ? DEFAULT_FALLBACK_ITEM_CURRENCY_ID : sanitized;
+    }
+
+    private static List<ShopEntry> createDefaultEntries() {
+        List<ShopEntry> defaults = new ArrayList<>();
+
+        for (String tier : BossShopItems.TIER_ORDER) {
+            ShopEntry entry = new ShopEntry();
+            entry.tier = tier;
+            entry.slot = 1;
+            entry.enabled = true;
+            entry.cost = tierBaseCost(tier) + 25;
+            entry.displayName = BossShopItems.displayTier(tier) + " Boss Contract";
+            entry.description = "Configure shop arena in /ba config and bossId in mods/BossArena/shop.json. Cost uses copper (100c=1s, 10,000c=1g).";
+            entry.arenaId = "";
+            entry.bossId = "";
+            entry.icon = "Boss_Shop_" + BossShopItems.displayTier(tier) + "_1";
+            defaults.add(entry);
+        }
+
+        return defaults;
+    }
+
+    private static void ensurePreviewEntriesEnabled(List<ShopEntry> entries) {
+        boolean anyEnabled = false;
+        for (ShopEntry entry : entries) {
+            if (entry != null && entry.enabled) {
+                anyEnabled = true;
+                break;
+            }
+        }
+        if (anyEnabled) {
+            return;
+        }
+
+        int enabledCount = 0;
+        for (String tier : BossShopItems.TIER_ORDER) {
+            for (ShopEntry entry : entries) {
+                if (entry == null || entry.tier == null) {
+                    continue;
+                }
+                if (tier.equalsIgnoreCase(entry.tier) && entry.slot == 1) {
+                    entry.enabled = true;
+                    enabledCount++;
+                    break;
+                }
+            }
+            if (enabledCount >= 3) {
+                return;
+            }
+        }
+
+        for (ShopEntry entry : entries) {
+            if (entry == null || entry.enabled) {
+                continue;
+            }
+            entry.enabled = true;
+            enabledCount++;
+            if (enabledCount >= 3) {
+                return;
+            }
+        }
+    }
+
+    private static int tierBaseCost(String tier) {
+        return switch (tier) {
+            case "common" -> 100;
+            case "uncommon" -> 250;
+            case "rare" -> 500;
+            case "epic" -> 900;
+            case "legendary" -> 1500;
+            default -> 100;
+        };
+    }
+
+    private static ShopLocation findByUuid(List<ShopLocation> list, String uuid) {
+        String normalizedUuid = sanitizeUuid(uuid);
+        if (list == null || list.isEmpty() || normalizedUuid.isEmpty()) {
+            return null;
+        }
+        for (ShopLocation existing : list) {
+            if (existing == null) {
+                continue;
+            }
+            if (normalizedUuid.equalsIgnoreCase(optional(existing.uuid))) {
+                return existing;
+            }
+        }
+        return null;
+    }
+
+    private static ShopLocation findByLocation(List<ShopLocation> list, String worldName, int x, int y, int z) {
+        if (list == null || list.isEmpty() || worldName == null || worldName.isBlank()) {
+            return null;
+        }
+        for (ShopLocation existing : list) {
+            if (existing == null || existing.worldName == null) {
+                continue;
+            }
+            if (existing.worldName.equalsIgnoreCase(worldName)
+                    && existing.x == x
+                    && existing.y == y
+                    && existing.z == z) {
+                return existing;
+            }
+        }
+        return null;
+    }
+
+    private static boolean contractPriceListsEqual(List<ContractPrice> left, List<ContractPrice> right) {
+        if (left == right) {
+            return true;
+        }
+        if (left == null || right == null || left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            ContractPrice l = left.get(i);
+            ContractPrice r = right.get(i);
+            String lb = optional(l != null ? l.bossId : null);
+            String rb = optional(r != null ? r.bossId : null);
+            int lc = l != null ? Math.max(0, l.cost) : 0;
+            int rc = r != null ? Math.max(0, r.cost) : 0;
+            if (!lb.equalsIgnoreCase(rb) || lc != rc) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public void load(Path path) {
+        if (path == null) {
+            currencyProvider = DEFAULT_CURRENCY_PROVIDER;
+            currencyItemId = "";
+            shopNpcId = DEFAULT_SHOP_NPC_ID;
+            strictContractPricing = false;
+            entries = createDefaultEntries();
+            shops = new ArrayList<>();
+            return;
+        }
+
+        try {
+            Path parent = path.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+
+            if (Files.notExists(path)) {
+                currencyProvider = DEFAULT_CURRENCY_PROVIDER;
+                currencyItemId = "";
+                shopNpcId = DEFAULT_SHOP_NPC_ID;
+                strictContractPricing = false;
+                entries = createDefaultEntries();
+                shops = new ArrayList<>();
+                save(path);
+                LOGGER.info("Created default shop config at " + path.toAbsolutePath());
+                return;
+            }
+
+            String raw = Files.readString(path, StandardCharsets.UTF_8);
+            JsonObject rawRoot = parseJsonObject(raw);
+            BossShopConfig parsed = GSON.fromJson(raw, BossShopConfig.class);
+
+            if (parsed == null) {
+                currencyProvider = DEFAULT_CURRENCY_PROVIDER;
+                currencyItemId = "";
+                shopNpcId = DEFAULT_SHOP_NPC_ID;
+                strictContractPricing = false;
+                entries = createDefaultEntries();
+                shops = new ArrayList<>();
+                save(path);
+                LOGGER.warning("shop.json was empty; regenerated defaults.");
+                return;
+            }
+
+            currencyProvider = sanitizeCurrencyProvider(parsed.currencyProvider);
+            currencyItemId = sanitizeCurrencyItemId(parsed.currencyItemId);
+            shopNpcId = sanitizeShopNpcId(parsed.shopNpcId);
+            strictContractPricing = parsed.strictContractPricing;
+            entries = sanitizeEntries(parsed.entries);
+            shops = sanitizeShops(parsed.shops);
+            if (entries.isEmpty()) {
+                entries = createDefaultEntries();
+            } else {
+                ensurePreviewEntriesEnabled(entries);
+            }
+
+            boolean migratedLegacyUuids = applyLegacyNpcUuids(rawRoot, shops);
+            if (migratedLegacyUuids) {
+                save(path);
+                LOGGER.info("Migrated legacy shop fields into shops list.");
+            }
+        } catch (Exception e) {
+            LOGGER.warning("Failed to load shop config: " + e.getMessage());
+            currencyProvider = DEFAULT_CURRENCY_PROVIDER;
+            currencyItemId = "";
+            shopNpcId = DEFAULT_SHOP_NPC_ID;
+            strictContractPricing = false;
+            entries = createDefaultEntries();
+            shops = new ArrayList<>();
+            try {
+                save(path);
+            } catch (Exception ignored) {
+                // best effort only
+            }
+        }
+    }
+
+    public void save(Path path) throws IOException {
+        if (path == null) {
+            return;
+        }
+        Path parent = path.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+        Files.writeString(path, GSON.toJson(this), StandardCharsets.UTF_8);
     }
 
     public boolean applyRuntimeCurrencyDetection(String fallbackCurrencyItemId) {
@@ -474,78 +648,6 @@ public final class BossShopConfig {
         return out;
     }
 
-    private static List<ShopEntry> createDefaultEntries() {
-        List<ShopEntry> defaults = new ArrayList<>();
-
-        for (String tier : BossShopItems.TIER_ORDER) {
-            ShopEntry entry = new ShopEntry();
-            entry.tier = tier;
-            entry.slot = 1;
-            entry.enabled = true;
-            entry.cost = tierBaseCost(tier) + 25;
-            entry.displayName = BossShopItems.displayTier(tier) + " Boss Contract";
-            entry.description = "Configure shop arena in /ba config and bossId in mods/BossArena/shop.json. Cost uses copper (100c=1s, 10,000c=1g).";
-            entry.arenaId = "";
-            entry.bossId = "";
-            entry.icon = "Boss_Shop_" + BossShopItems.displayTier(tier) + "_1";
-            defaults.add(entry);
-        }
-
-        return defaults;
-    }
-
-    private static void ensurePreviewEntriesEnabled(List<ShopEntry> entries) {
-        boolean anyEnabled = false;
-        for (ShopEntry entry : entries) {
-            if (entry != null && entry.enabled) {
-                anyEnabled = true;
-                break;
-            }
-        }
-        if (anyEnabled) {
-            return;
-        }
-
-        int enabledCount = 0;
-        for (String tier : BossShopItems.TIER_ORDER) {
-            for (ShopEntry entry : entries) {
-                if (entry == null || entry.tier == null) {
-                    continue;
-                }
-                if (tier.equalsIgnoreCase(entry.tier) && entry.slot == 1) {
-                    entry.enabled = true;
-                    enabledCount++;
-                    break;
-                }
-            }
-            if (enabledCount >= 3) {
-                return;
-            }
-        }
-
-        for (ShopEntry entry : entries) {
-            if (entry == null || entry.enabled) {
-                continue;
-            }
-            entry.enabled = true;
-            enabledCount++;
-            if (enabledCount >= 3) {
-                return;
-            }
-        }
-    }
-
-    private static int tierBaseCost(String tier) {
-        return switch (tier) {
-            case "uncommon" -> 100;
-            case "common" -> 250;
-            case "rare" -> 500;
-            case "epic" -> 900;
-            case "legendary" -> 1500;
-            default -> 100;
-        };
-    }
-
     public boolean recordShopLocation(String uuid, String worldName, int x, int y, int z) {
         return recordShopLocation(uuid, null, worldName, x, y, z);
     }
@@ -584,6 +686,7 @@ public final class BossShopConfig {
             target.z = z;
             target.arenaId = "";
             target.enabledBossIds = new ArrayList<>();
+            target.contractPrices = new ArrayList<>();
             shops.add(target);
             changed = true;
         }
@@ -622,6 +725,16 @@ public final class BossShopConfig {
                 changed = true;
             }
         }
+        if (target.contractPrices == null) {
+            target.contractPrices = new ArrayList<>();
+            changed = true;
+        } else {
+            List<ContractPrice> cleanedContractPrices = sanitizeContractPrices(target.contractPrices);
+            if (!contractPriceListsEqual(cleanedContractPrices, target.contractPrices)) {
+                target.contractPrices = cleanedContractPrices;
+                changed = true;
+            }
+        }
         return changed;
     }
 
@@ -645,6 +758,11 @@ public final class BossShopConfig {
             location.enabledBossIds = new ArrayList<>();
         } else {
             location.enabledBossIds = sanitizeBossIds(location.enabledBossIds);
+        }
+        if (location.contractPrices == null) {
+            location.contractPrices = new ArrayList<>();
+        } else {
+            location.contractPrices = sanitizeContractPrices(location.contractPrices);
         }
         return location;
     }
@@ -733,40 +851,6 @@ public final class BossShopConfig {
         return false;
     }
 
-    private static ShopLocation findByUuid(List<ShopLocation> list, String uuid) {
-        String normalizedUuid = sanitizeUuid(uuid);
-        if (list == null || list.isEmpty() || normalizedUuid.isEmpty()) {
-            return null;
-        }
-        for (ShopLocation existing : list) {
-            if (existing == null) {
-                continue;
-            }
-            if (normalizedUuid.equalsIgnoreCase(optional(existing.uuid))) {
-                return existing;
-            }
-        }
-        return null;
-    }
-
-    private static ShopLocation findByLocation(List<ShopLocation> list, String worldName, int x, int y, int z) {
-        if (list == null || list.isEmpty() || worldName == null || worldName.isBlank()) {
-            return null;
-        }
-        for (ShopLocation existing : list) {
-            if (existing == null || existing.worldName == null) {
-                continue;
-            }
-            if (existing.worldName.equalsIgnoreCase(worldName)
-                    && existing.x == x
-                    && existing.y == y
-                    && existing.z == z) {
-                return existing;
-            }
-        }
-        return null;
-    }
-
     public static final class ShopLocation {
         public String uuid = "";
         public String name = "";
@@ -776,6 +860,7 @@ public final class BossShopConfig {
         public int z;
         public String arenaId = "";
         public List<String> enabledBossIds = new ArrayList<>();
+        public List<ContractPrice> contractPrices = new ArrayList<>();
 
         @Override
         public String toString() {
@@ -785,5 +870,10 @@ public final class BossShopConfig {
             }
             return worldName + ":" + x + "," + y + "," + z;
         }
+    }
+
+    public static final class ContractPrice {
+        public String bossId = "";
+        public int cost = 0;
     }
 }

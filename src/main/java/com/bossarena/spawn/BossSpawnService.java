@@ -21,6 +21,7 @@ import com.hypixel.hytale.server.core.modules.entitystats.modifier.StaticModifie
 import com.hypixel.hytale.server.core.modules.entitystats.modifier.Modifier;
 import com.hypixel.hytale.server.core.modules.interaction.Interactions;
 import com.hypixel.hytale.server.npc.NPCPlugin;
+import com.hypixel.hytale.server.npc.entities.NPCEntity;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.server.core.modules.entity.component.EntityScaleComponent;
@@ -39,13 +40,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class BossSpawnService {
-    private static final Logger LOGGER = Logger.getLogger("BossArena");
     public static final String HEALTH_MODIFIER_KEY = "BossArena.HealthMultiplier";
     public static final UUID DEFERRED_SPAWN_UUID = new UUID(0L, 2L);
+    private static final Logger LOGGER = Logger.getLogger("BossArena");
     private static final double GOLDEN_ANGLE_RADIANS = 2.399963229728653d;
     private static final double BOSS_SPAWN_SPACING_BLOCKS = 2.75d;
     private static final long DEFAULT_REPEAT_INTERVAL_MS = 1_000L;
@@ -67,12 +69,66 @@ public final class BossSpawnService {
         this.config = config;
     }
 
+    private static List<BossDefinition.ExtraMobs.ScheduledWave> filterSchedulesByTrigger(
+            List<BossDefinition.ExtraMobs.ScheduledWave> schedules,
+            String trigger
+    ) {
+        if (schedules == null || schedules.isEmpty()) {
+            return List.of();
+        }
+        List<BossDefinition.ExtraMobs.ScheduledWave> out = new ArrayList<>();
+        for (BossDefinition.ExtraMobs.ScheduledWave wave : schedules) {
+            if (wave != null && trigger.equals(wave.trigger)) {
+                out.add(wave);
+            }
+        }
+        return out;
+    }
+
+    private static double reverseHealthThresholdOrder(BossDefinition.ExtraMobs.ScheduledWave wave) {
+        if (wave == null) {
+            return Double.MAX_VALUE;
+        }
+        return -wave.triggerValue;
+    }
+
+    private static long toMillisOrDefault(double seconds, long defaultMs) {
+        if (!Double.isFinite(seconds)) {
+            return Math.max(0L, defaultMs);
+        }
+        if (seconds <= 0.0d) {
+            return Math.max(0L, defaultMs);
+        }
+        return Math.max(0L, Math.round(seconds * 1000.0d));
+    }
+
+    private static String formatSeconds(double value) {
+        return String.format("%.2f", value);
+    }
+
+    public void shutdown() {
+        if (EXTRA_WAVE_SCHEDULER != null) {
+            EXTRA_WAVE_SCHEDULER.shutdown();
+            try {
+                if (!EXTRA_WAVE_SCHEDULER.awaitTermination(2, TimeUnit.SECONDS)) {
+                    EXTRA_WAVE_SCHEDULER.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                EXTRA_WAVE_SCHEDULER.shutdownNow();
+            }
+        }
+    }
+
+    public boolean hasAnyEventInProgress() {
+        return tracking != null && tracking.hasAnyEventInProgress();
+    }
+
     public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
                                   String bossId,
                                   World world,
                                   Vector3d spawnPos,
                                   String arenaId) {  // ADD THIS PARAMETER
-        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, null);
+        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, null, null);
     }
 
     public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
@@ -81,6 +137,16 @@ public final class BossSpawnService {
                                   Vector3d spawnPos,
                                   String arenaId,
                                   Long countdownOverrideMinutes) {
+        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, countdownOverrideMinutes, null);
+    }
+
+    public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
+                                  String bossId,
+                                  World world,
+                                  Vector3d spawnPos,
+                                  String arenaId,
+                                  Long countdownOverrideMinutes,
+                                  Consumer<UUID> onPrimaryBossSpawned) {
         BossDefinition def = BossRegistry.get(bossId);
         if (def == null) {
             LOGGER.warning("Boss definition not found: " + bossId);
@@ -149,6 +215,20 @@ public final class BossSpawnService {
             resolvedWavesBuffer = def.extraMobs.getResolvedScheduledWaves();
         }
         final List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves = resolvedWavesBuffer;
+        boolean hasBeforeBossSchedule = !filterSchedulesByTrigger(
+                resolvedWaves,
+                BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS
+        ).isEmpty();
+        final UUID deferredEventId = hasBeforeBossSchedule
+                ? tracking.createEvent(
+                world,
+                spawnPos,
+                def.bossName,
+                def.tier,
+                countdownDurationMs,
+                true
+        )
+                : null;
 
         long preBossDelayMs = scheduleBeforeBossWaveTimeline(
                 world,
@@ -170,7 +250,9 @@ public final class BossSpawnService {
                             countdownDurationMs,
                             resolvedWaves,
                             pendingPreBossAdds,
-                            nextWaveNumber
+                            nextWaveNumber,
+                            deferredEventId,
+                            onPrimaryBossSpawned
                     )),
                     preBossDelayMs,
                     TimeUnit.MILLISECONDS
@@ -187,7 +269,9 @@ public final class BossSpawnService {
                 countdownDurationMs,
                 resolvedWaves,
                 pendingPreBossAdds,
-                nextWaveNumber
+                nextWaveNumber,
+                deferredEventId,
+                onPrimaryBossSpawned
         );
     }
 
@@ -199,9 +283,11 @@ public final class BossSpawnService {
                               long countdownDurationMs,
                               List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves,
                               List<UUID> pendingPreBossAdds,
-                              AtomicInteger nextWaveNumber) {
+                              AtomicInteger nextWaveNumber,
+                              UUID existingEventId,
+                              Consumer<UUID> onPrimaryBossSpawned) {
         UUID primaryBossUuid = null;
-        UUID bossEventId = null;
+        UUID bossEventId = existingEventId;
 
         // Spawn the boss(es)
         for (int i = 0; i < def.amount; i++) {
@@ -219,15 +305,15 @@ public final class BossSpawnService {
 
             if (result != null) {
                 Ref<EntityStore> npcRef = result.first();
+                if (npcRef == null || !npcRef.isValid()) {
+                    LOGGER.warning("Spawn returned invalid entity reference for NPC ID: " + def.npcId);
+                    continue;
+                }
                 var store = world.getEntityStore().getStore();
 
                 Object uuidCompObj = store.getComponent(npcRef, UUIDComponent.getComponentType());
                 if (uuidCompObj instanceof UUIDComponent uuidComp) {
                     UUID uuid = uuidComp.getUuid();
-
-                    if (primaryBossUuid == null) {
-                        primaryBossUuid = uuid;
-                    }
 
                     if (bossEventId == null) {
                         bossEventId = tracking.createEvent(world, spawnPos, def.bossName, def.tier, countdownDurationMs);
@@ -245,8 +331,38 @@ public final class BossSpawnService {
                             bossEventId,
                             spawnPos
                     );
+                    if (!npcRef.isValid()) {
+                        LOGGER.warning("Spawned boss entity became invalid immediately after tracking: "
+                                + def.bossName + " (" + uuid + ")");
+                        tracking.untrack(uuid);
+                        continue;
+                    }
                     applyModifiers(store, npcRef, mods);
                     disableDefaultEntityLoot(store, npcRef, def.bossName + "#" + (i + 1));
+
+                    // Diagnostic logging for NPC behavior
+                    Object npcObj = store.getComponent(npcRef, NPCEntity.getComponentType());
+                    if (npcObj instanceof NPCEntity npc) {
+                        LOGGER.info("Successfully confirmed NPCEntity component for " + def.bossName);
+                        if (npc.getRole() == null) {
+                            LOGGER.warning("Boss NPC " + def.bossName + " has no role! This might cause it to be static.");
+                        } else {
+                            LOGGER.info("Boss NPC " + def.bossName + " has role: " + npc.getRole().getClass().getSimpleName());
+                        }
+                    } else {
+                        LOGGER.warning("Boss NPC " + def.bossName + " DOES NOT have NPCEntity component! It will be static.");
+                    }
+
+                    if (!npcRef.isValid()) {
+                        LOGGER.warning("Spawned boss entity became invalid during setup: "
+                                + def.bossName + " (" + uuid + ")");
+                        tracking.untrack(uuid);
+                        continue;
+                    }
+
+                    if (primaryBossUuid == null) {
+                        primaryBossUuid = uuid;
+                    }
 
                     LOGGER.info("Successfully spawned boss: " + def.bossName + " (" + uuid + ") at " + spreadPos);
                 }
@@ -258,6 +374,17 @@ public final class BossSpawnService {
         if (primaryBossUuid != null && def.extraMobs != null && def.extraMobs.hasConfiguredAdds()) {
             attachPreBossAddsToEvent(world, primaryBossUuid, pendingPreBossAdds);
             scheduleConfiguredWaves(world, def, spawnPos, primaryBossUuid, resolvedWaves, nextWaveNumber);
+        }
+
+        if (primaryBossUuid == null && bossEventId != null) {
+            tracking.cancelEvent(bossEventId);
+            synchronized (pendingPreBossAdds) {
+                for (UUID pendingAdd : pendingPreBossAdds) {
+                    pendingDetachedAddModifiers.remove(pendingAdd);
+                }
+                pendingPreBossAdds.clear();
+            }
+            LOGGER.warning("Spawn sequence for '" + def.bossName + "' finished without a valid boss entity; event was cancelled.");
         }
 
         if (primaryBossUuid != null) {
@@ -272,6 +399,13 @@ public final class BossSpawnService {
                         null,
                         tracking.getRemainingCountdownMillis(primaryBossUuid)
                 );
+            }
+            if (onPrimaryBossSpawned != null) {
+                try {
+                    onPrimaryBossSpawned.accept(primaryBossUuid);
+                } catch (Exception callbackError) {
+                    LOGGER.log(Level.WARNING, "Primary boss spawn callback failed", callbackError);
+                }
             }
         }
 
@@ -934,6 +1068,10 @@ public final class BossSpawnService {
                 }
 
                 Ref<EntityStore> addRef = result.first();
+                if (addRef == null || !addRef.isValid()) {
+                    LOGGER.warning("Spawned add '" + add.npcId + "' has invalid entity reference; skipping.");
+                    continue;
+                }
                 BossModifiers addMods = new BossModifiers(
                         Math.max(0.01f, add.hp),
                         Math.max(0.01f, add.damage),
@@ -948,6 +1086,10 @@ public final class BossSpawnService {
                 );
                 applyModifiers(world.getEntityStore().getStore(), addRef, addMods);
                 disableDefaultEntityLoot(world.getEntityStore().getStore(), addRef, add.npcId);
+                if (!addRef.isValid()) {
+                    LOGGER.warning("Spawned add '" + add.npcId + "' became invalid during setup; skipping tracking.");
+                    continue;
+                }
 
                 Object addUuidObj = world.getEntityStore().getStore().getComponent(addRef, UUIDComponent.getComponentType());
                 if (addUuidObj instanceof UUIDComponent addUuidComp) {
@@ -993,60 +1135,6 @@ public final class BossSpawnService {
         }
 
         return spawnedAddUuids;
-    }
-
-    private static List<BossDefinition.ExtraMobs.ScheduledWave> filterSchedulesByTrigger(
-            List<BossDefinition.ExtraMobs.ScheduledWave> schedules,
-            String trigger
-    ) {
-        if (schedules == null || schedules.isEmpty()) {
-            return List.of();
-        }
-        List<BossDefinition.ExtraMobs.ScheduledWave> out = new ArrayList<>();
-        for (BossDefinition.ExtraMobs.ScheduledWave wave : schedules) {
-            if (wave != null && trigger.equals(wave.trigger)) {
-                out.add(wave);
-            }
-        }
-        return out;
-    }
-
-    private static double reverseHealthThresholdOrder(BossDefinition.ExtraMobs.ScheduledWave wave) {
-        if (wave == null) {
-            return Double.MAX_VALUE;
-        }
-        return -wave.triggerValue;
-    }
-
-    private static long toMillisOrDefault(double seconds, long defaultMs) {
-        if (!Double.isFinite(seconds)) {
-            return Math.max(0L, defaultMs);
-        }
-        if (seconds <= 0.0d) {
-            return Math.max(0L, defaultMs);
-        }
-        return Math.max(0L, Math.round(seconds * 1000.0d));
-    }
-
-    private static String formatSeconds(double value) {
-        return String.format("%.2f", value);
-    }
-
-    private static final class PreBossExecution {
-        private final long triggerDelayMs;
-        private final int executionNumber;
-        private final int scheduleIndex;
-        private final BossDefinition.ExtraMobs.ScheduledWave wave;
-
-        private PreBossExecution(long triggerDelayMs,
-                                 int executionNumber,
-                                 int scheduleIndex,
-                                 BossDefinition.ExtraMobs.ScheduledWave wave) {
-            this.triggerDelayMs = Math.max(0L, triggerDelayMs);
-            this.executionNumber = executionNumber;
-            this.scheduleIndex = Math.max(0, scheduleIndex);
-            this.wave = wave;
-        }
     }
 
     private void disableDefaultEntityLoot(Store<EntityStore> store, Ref<EntityStore> entityRef, String label) {
@@ -1097,6 +1185,23 @@ public final class BossSpawnService {
         double x = center.x + (Math.cos(angle) * radius);
         double z = center.z + (Math.sin(angle) * radius);
         return new Vector3d(x, center.y, z);
+    }
+
+    private static final class PreBossExecution {
+        private final long triggerDelayMs;
+        private final int executionNumber;
+        private final int scheduleIndex;
+        private final BossDefinition.ExtraMobs.ScheduledWave wave;
+
+        private PreBossExecution(long triggerDelayMs,
+                                 int executionNumber,
+                                 int scheduleIndex,
+                                 BossDefinition.ExtraMobs.ScheduledWave wave) {
+            this.triggerDelayMs = Math.max(0L, triggerDelayMs);
+            this.executionNumber = executionNumber;
+            this.scheduleIndex = Math.max(0, scheduleIndex);
+            this.wave = wave;
+        }
     }
 
 }

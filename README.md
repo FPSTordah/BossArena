@@ -4,7 +4,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `1.3.0`
+- Current project version: `2.0.0`
 
 ## Changelog
 
@@ -109,7 +109,7 @@ Reload targets:
 - Bosses tab: edit boss identity, tier, stats, level override, and loot rows.
 - Boss Waves overlay: edit `timeLimitMs`, wave count, and multi-add rows (`npcId`, `mobsPerWave`, `everyWave`).
 - Shop tab: shows saved shop locations for current world, nearest first.
-- Shop editor: set arena id override and toggle enabled bosses per location.
+- Shop editor: set arena id override, toggle enabled bosses, and edit per-boss contract prices per location.
 - Shop editor boss list supports scrolling for large boss lists.
 - Arenas tab: inline id/position editing, add at player location, and delete.
 
@@ -185,6 +185,7 @@ Top-level fields:
 - `currencyProvider` (`auto`, `item`, `hymarket`, `economysystem`)
 - `currencyItemId`
 - `shopNpcId`
+- `strictContractPricing` (`true|false`, disables tier auto-price fallback when `true`)
 - `entries[]`
 - `shops[]`
 
@@ -224,11 +225,21 @@ Item currency fallback order:
 - `z`
 - `arenaId`
 - `enabledBossIds[]`
+- `contractPrices[]`
+
+`contractPrices[]` fields:
+
+- `bossId` (boss name/id for that location contract)
+- `cost` (integer, clamped to `0+`)
 
 Notes:
 
 - First-run defaults generate one enabled preview entry per tier.
 - Contract visibility for players is filtered by location `enabledBossIds[]` and entry tier.
+- Per-contract pricing priority in location shops:
+  1. `shops[].contractPrices[]` (boss-specific, per shop location)
+  2. `entries[]` boss-specific cost match
+  3. tier auto-price fallback (only when `strictContractPricing` is `false`)
 
 ### `config.json`
 
@@ -237,7 +248,30 @@ Global config fields:
 - `currencyItemId`
 - `fallbackCurrencyItemId`
 - `arenas` (legacy)
+- `eventBanner` (custom event-title banner templates)
+- `timedMapMarker` (world map marker settings for active timed bosses)
 - `timedBossSpawns[]` (optional timed auto-spawn rules)
+
+`eventBanner` fields:
+
+- `activeTitle` (title while encounter is active)
+- `activeSubtitle` (subtitle while encounter is active)
+- `victoryTitle` (title when encounter is complete)
+- `victorySubtitle` (subtitle when encounter is complete)
+
+`eventBanner` placeholders:
+
+- `$Boss` / `{Boss}` = boss display name
+- `$BossUpper` / `{BossUpper}` = boss display name uppercased
+- `$BossAlive` / `{BossAlive}` = alive tracked boss count
+- `$AddsAlive` / `{AddsAlive}` = alive tracked add count
+- `$Context` / `{Context}` = extra context text (wave spawn/despawn info)
+- `$ContextLine` / `{ContextLine}` = context plus separator (`" | "`) when present
+- `$Countdown` / `{Countdown}` = remaining timer in `MM:SS` (blank when no timer)
+- `$CountdownLabel` / `{CountdownLabel}` = `Time left: MM:SS` (blank when no timer)
+- `$CountdownLine` / `{CountdownLine}` = countdown label plus separator (`" | "`) when timer is present
+- `$State` / `{State}` = `active` or `victory`
+- Legacy aliases still supported: `$ContextPrefix`, `$CountdownPrefix`
 
 `timedBossSpawns[]` fields:
 
@@ -253,6 +287,22 @@ Global config fields:
 - `announceWorldWide` (`true|false`, server-wide across all worlds)
 - `announceCurrentWorld` (`true|false`, players in the boss world only)
 - `worldAnnouncementText` (supports `$Boss`, `$Arena`, `$World`)
+
+`timedMapMarker` fields:
+
+- `enabled` (`true|false`)
+- `markerImage` (world-map marker icon id, for example `map_marker.png`)
+- `nameTemplate` (supports placeholders below)
+- If `libs/map_marker.png` exists, BossArena copies it to world map marker assets and normalizes it to `32x32`.
+- Optional: if `libs/map_marker.json` exists, it is copied alongside the marker image.
+
+`timedMapMarker.nameTemplate` placeholders:
+
+- `$Boss` / `{Boss}`
+- `$Arena` / `{Arena}`
+- `$Tier` / `{Tier}`
+- `$TierUpper` / `{TierUpper}`
+- `$World` / `{World}`
 
 Timed announcement defaults:
 
@@ -274,6 +324,17 @@ Example:
 
 ```json
 {
+  "timedMapMarker": {
+    "enabled": true,
+    "markerImage": "map_marker.png",
+    "nameTemplate": "Timed Boss: $Boss @ $Arena"
+  },
+  "eventBanner": {
+    "activeTitle": "The Shadows Stir: $Boss",
+    "activeSubtitle": "$ContextLine$CountdownLineBoss: $BossAlive | Adds: $AddsAlive",
+    "victoryTitle": "Victory Over $Boss",
+    "victorySubtitle": "All clear in this arena."
+  },
   "timedBossSpawns": [
     {
       "id": "volcano_hourly",
@@ -295,7 +356,7 @@ Example:
 
 ## Event and Loot Flow
 
-- Event title format while encounter is active: `Boss alive: <count> | Wave mobs alive: <count>`
+- Event title/banner text is configurable in `config.json.eventBanner`.
 - Notification stays until both boss and tracked adds reach zero.
 - Loot chest is queued only after tracked encounter completion.
 - Loot is per-player claim data, not globally shared item stacks.
@@ -309,4 +370,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-1.3.0.jar`
+- `target/BossArena-2.0.0.jar`

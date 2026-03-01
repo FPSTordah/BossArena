@@ -10,6 +10,7 @@ import com.bossarena.loot.LootItem;
 import com.bossarena.loot.LootRegistry;
 import com.bossarena.loot.LootTable;
 import com.bossarena.shop.BossShopConfig;
+import com.bossarena.shop.ShopEntry;
 import com.hypixel.hytale.codec.Codec;
 import com.hypixel.hytale.codec.KeyedCodec;
 import com.hypixel.hytale.codec.builder.BuilderCodec;
@@ -31,9 +32,11 @@ import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -53,18 +56,17 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
     private static final int MAX_TIMED_SPAWN_ROWS = 6;
     private static final int BOSS_SCROLL_THUMB_STEPS = 10;
     private static final int SHOP_EDIT_SCROLL_THUMB_STEPS = 10;
+    private static final int SHOP_CONTRACT_PRICE_STEP = 25;
     private static final Pattern ARENA_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]+$");
 
     private final BossArenaPlugin plugin;
-    private String selectedTab;
-
-    private String arenaStatusText = "";
-    private String shopStatusText = "";
-    private String bossStatusText = "";
-
     private final List<String> arenaRows = new ArrayList<>();
     private final List<ShopLocationRef> shopRows = new ArrayList<>();
     private final List<String> bossRows = new ArrayList<>();
+    private String selectedTab;
+    private String arenaStatusText = "";
+    private String shopStatusText = "";
+    private String bossStatusText = "";
     private int bossListOffset = 0;
 
     private BossEditorState bossEditorState;
@@ -103,6 +105,820 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
         BossArenaConfigPage page = new BossArenaConfigPage(playerRef, plugin, tab);
         player.getPageManager().openCustomPage(ref, store, page);
+    }
+
+    private static int countEnabledBosses(List<String> bossIds) {
+        if (bossIds == null || bossIds.isEmpty()) {
+            return 0;
+        }
+        int out = 0;
+        for (String bossId : bossIds) {
+            if (bossId != null && !bossId.isBlank()) {
+                out++;
+            }
+        }
+        return out;
+    }
+
+    private static Arena findNearestArenaForShop(String worldName, int x, int y, int z) {
+        Arena best = null;
+        double bestDistanceSq = Double.MAX_VALUE;
+        for (Arena arena : ArenaRegistry.getAll()) {
+            if (arena == null || arena.worldName == null) {
+                continue;
+            }
+            if (!arena.worldName.equalsIgnoreCase(worldName)) {
+                continue;
+            }
+            double dx = arena.x - x;
+            double dy = arena.y - y;
+            double dz = arena.z - z;
+            double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                best = arena;
+            }
+        }
+        return best;
+    }
+
+    private static int resolveShopEditScrollThumbStep(int offset, int maxOffset) {
+        if (maxOffset <= 0) {
+            return 1;
+        }
+        double normalized = Math.max(0.0d, Math.min(1.0d, (double) offset / (double) maxOffset));
+        int index = (int) Math.round(normalized * (SHOP_EDIT_SCROLL_THUMB_STEPS - 1));
+        return Math.max(1, Math.min(SHOP_EDIT_SCROLL_THUMB_STEPS, index + 1));
+    }
+
+    private static String resolveBossNameCaseInsensitive(List<String> bossNames, String input) {
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        for (String bossName : bossNames) {
+            if (bossName.equalsIgnoreCase(input)) {
+                return bossName;
+            }
+        }
+        return null;
+    }
+
+    private static int resolveBossScrollThumbStep(int offset, int maxOffset) {
+        if (maxOffset <= 0) {
+            return 1;
+        }
+        double normalized = Math.max(0.0d, Math.min(1.0d, (double) offset / (double) maxOffset));
+        int index = (int) Math.round(normalized * (BOSS_SCROLL_THUMB_STEPS - 1));
+        return Math.max(1, Math.min(BOSS_SCROLL_THUMB_STEPS, index + 1));
+    }
+
+    private static String defaultWaveTriggerInput(int row, boolean useExamples) {
+        if (!useExamples) {
+            return "After Spawn";
+        }
+        if (row == 1) {
+            return "3";
+        }
+        if (row == 2) {
+            return "After Spawn";
+        }
+        return "After Spawn";
+    }
+
+    private static int defaultWaveValueSeconds(int row, boolean useExamples) {
+        if (!useExamples) {
+            return 30;
+        }
+        if (row == 1) {
+            return 15;
+        }
+        if (row == 2) {
+            return 30;
+        }
+        return 30;
+    }
+
+    private static String defaultWaveNpcId(int row, boolean useExamples) {
+        if (!useExamples) {
+            return "";
+        }
+        if (row == 1) {
+            return "Bat";
+        }
+        if (row == 2) {
+            return "Spider";
+        }
+        return "";
+    }
+
+    private static String normalizeWaveTriggerInput(String input) {
+        String cleaned = optionalText(input)
+                .toLowerCase(Locale.ROOT)
+                .replace('_', ' ')
+                .replace('-', ' ')
+                .replace("(", " ")
+                .replace(")", " ")
+                .replace("%", " percent ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return switch (cleaned) {
+            case "1", "before boss", "before", "pre", "pre boss", "bb" -> BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS;
+            case "2", "on spawn", "spawn", "at spawn", "on boss spawn", "with boss", "os" ->
+                    BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN;
+            case "after spawn seconds", "after spawn", "after", "seconds", "time", "timer", "after spawn second" ->
+                    BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS;
+            case "3", "as", "after s" -> BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS;
+            case "since last wave", "since last wave second", "since last wave seconds", "since wave", "last wave",
+                 "wave delay", "since previous wave", "since last" -> BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE;
+            case "4", "slw", "since" -> BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE;
+            case "boss hp percent", "boss health percent", "hp percent", "health percent", "boss hp", "boss health",
+                 "hp" -> BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT;
+            case "5", "hpp", "health" -> BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT;
+            default -> null;
+        };
+    }
+
+    private static String toWaveTriggerDisplayName(String trigger) {
+        String normalized = normalizeWaveTriggerInput(trigger);
+        if (BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS.equals(normalized)) {
+            return "Before Boss";
+        }
+        if (BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN.equals(normalized)) {
+            return "On Spawn";
+        }
+        if (BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE.equals(normalized)) {
+            return "Since Last Wave";
+        }
+        if (BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT.equals(normalized)) {
+            return "Boss HP%";
+        }
+        return "After Spawn";
+    }
+
+    private static WaveScheduleRow copyWaveScheduleRow(WaveScheduleRow source) {
+        if (source == null || source.add == null) {
+            return null;
+        }
+        BossDefinition.ExtraMobs.WaveAdd copy = new BossDefinition.ExtraMobs.WaveAdd();
+        copy.npcId = source.add.npcId;
+        copy.mobsPerWave = source.add.mobsPerWave;
+        copy.everyWave = 1;
+        copy.hp = source.add.hp;
+        copy.damage = source.add.damage;
+        copy.size = source.add.size;
+        return new WaveScheduleRow(
+                source.trigger,
+                source.triggerValue,
+                source.repeatCount,
+                source.repeatEverySeconds,
+                copy
+        );
+    }
+
+    private static WaveScheduleRow defaultWaveScheduleRow() {
+        BossDefinition.ExtraMobs.WaveAdd add = new BossDefinition.ExtraMobs.WaveAdd();
+        add.npcId = "";
+        add.mobsPerWave = 1;
+        add.everyWave = 1;
+        add.hp = 1.0f;
+        add.damage = 1.0f;
+        add.size = 1.0f;
+        return new WaveScheduleRow(
+                BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS,
+                30.0d,
+                1,
+                0.0d,
+                add
+        );
+    }
+
+    private static List<WaveScheduleRow> flattenScheduleRows(BossDefinition.ExtraMobs extra) {
+        if (extra == null) {
+            return List.of();
+        }
+        extra.sanitize();
+        List<WaveScheduleRow> out = new ArrayList<>();
+        for (BossDefinition.ExtraMobs.ScheduledWave wave : extra.getResolvedScheduledWaves()) {
+            if (wave == null || wave.adds == null) {
+                continue;
+            }
+            for (BossDefinition.ExtraMobs.WaveAdd add : wave.adds) {
+                if (add == null || add.npcId == null || add.npcId.isBlank()) {
+                    continue;
+                }
+                BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
+                addCopy.npcId = add.npcId;
+                addCopy.mobsPerWave = Math.max(1, add.mobsPerWave);
+                addCopy.everyWave = 1;
+                addCopy.hp = add.hp > 0f ? add.hp : 1.0f;
+                addCopy.damage = add.damage > 0f ? add.damage : 1.0f;
+                addCopy.size = add.size > 0f ? add.size : 1.0f;
+                out.add(new WaveScheduleRow(
+                        optionalText(wave.trigger),
+                        wave.triggerValue,
+                        wave.repeatCount,
+                        wave.repeatEverySeconds,
+                        addCopy
+                ));
+                if (out.size() >= MAX_WAVE_ADD_ROWS) {
+                    return out;
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void applyScheduleRowsToExtra(BossDefinition.ExtraMobs extra, List<WaveScheduleRow> rows) {
+        if (extra == null) {
+            return;
+        }
+
+        extra.npcId = "";
+        extra.timeLimitMs = 0L;
+        extra.waves = 0;
+        extra.mobsPerWave = 1;
+        extra.adds = new ArrayList<>();
+        extra.scheduledWaves = new ArrayList<>();
+
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+
+        for (WaveScheduleRow row : rows) {
+            if (row == null || row.add == null || row.add.npcId == null || row.add.npcId.isBlank()) {
+                continue;
+            }
+
+            BossDefinition.ExtraMobs.ScheduledWave target = null;
+            for (BossDefinition.ExtraMobs.ScheduledWave existing : extra.scheduledWaves) {
+                if (sameScheduleKey(existing, row)) {
+                    target = existing;
+                    break;
+                }
+            }
+            if (target == null) {
+                target = new BossDefinition.ExtraMobs.ScheduledWave();
+                target.trigger = row.trigger;
+                target.triggerValue = row.triggerValue;
+                target.repeatCount = row.repeatCount;
+                target.repeatEverySeconds = row.repeatEverySeconds;
+                target.adds = new ArrayList<>();
+                extra.scheduledWaves.add(target);
+            }
+
+            BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
+            addCopy.npcId = row.add.npcId;
+            addCopy.mobsPerWave = Math.max(1, row.add.mobsPerWave);
+            addCopy.everyWave = 1;
+            addCopy.hp = row.add.hp > 0f ? row.add.hp : 1.0f;
+            addCopy.damage = row.add.damage > 0f ? row.add.damage : 1.0f;
+            addCopy.size = row.add.size > 0f ? row.add.size : 1.0f;
+            target.adds.add(addCopy);
+        }
+    }
+
+    private static boolean sameScheduleKey(BossDefinition.ExtraMobs.ScheduledWave existing, WaveScheduleRow row) {
+        if (existing == null || row == null) {
+            return false;
+        }
+        if (!optionalText(existing.trigger).equals(optionalText(row.trigger))) {
+            return false;
+        }
+        if (Math.abs(existing.triggerValue - row.triggerValue) > 0.0001d) {
+            return false;
+        }
+        if (existing.repeatCount != row.repeatCount) {
+            return false;
+        }
+        return Math.abs(existing.repeatEverySeconds - row.repeatEverySeconds) <= 0.0001d;
+    }
+
+    private static void applyWaveSpawnSettingsFromData(BossDefinition.ExtraMobs extra, ConfigEventData data) {
+        if (extra == null || data == null) {
+            return;
+        }
+
+        String resolvedRandomLocations = resolvedOrFallback(
+                data.bossWaveRandomLocations,
+                extra.useRandomSpawnLocations ? "true" : "false"
+        );
+        if (!resolvedRandomLocations.isEmpty()) {
+            Boolean randomEnabled = parseToggleInput(resolvedRandomLocations);
+            if (randomEnabled == null) {
+                throw new IllegalArgumentException("Random wave locations must be true/false, on/off, yes/no, or 1/0.");
+            }
+            extra.useRandomSpawnLocations = randomEnabled;
+        }
+
+        String resolvedRadius = resolvedOrFallback(
+                data.bossWaveRandomRadius,
+                formatWaveNumber(extra.getWaveRandomSpawnRadius())
+        );
+        if (!resolvedRadius.isEmpty()) {
+            extra.randomSpawnRadius = parseRequiredDouble(
+                    resolvedRadius,
+                    "Random wave radius must be a number greater than or equal to 0.",
+                    0.0d,
+                    Double.MAX_VALUE
+            );
+        }
+        extra.sanitize();
+    }
+
+    private static Boolean parseToggleInput(String raw) {
+        String value = optionalText(raw).toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case "1", "true", "t", "yes", "y", "on", "enabled", "enable" -> true;
+            case "0", "false", "f", "no", "n", "off", "disabled", "disable" -> false;
+            default -> null;
+        };
+    }
+
+    private static int parseRow(String token) {
+        try {
+            return Integer.parseInt(token);
+        } catch (NumberFormatException ignored) {
+            return -1;
+        }
+    }
+
+    private static Double parseCoordinate(String raw) {
+        if (raw == null) {
+            return null;
+        }
+
+        try {
+            double value = Double.parseDouble(raw.trim());
+            return Double.isFinite(value) ? value : null;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String normalizeArenaId(String raw) {
+        return raw == null ? "" : raw.trim();
+    }
+
+    private static String formatCoord(double value) {
+        return String.format(Locale.ROOT, "%.1f", value);
+    }
+
+    private static String formatFloat(float value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    private static String formatDouble(double value) {
+        return String.format(Locale.ROOT, "%.3f", value);
+    }
+
+    private static String formatSecondsFromMillis(long millis) {
+        if (millis <= 0L) {
+            return "0";
+        }
+        if (millis % 1000L == 0L) {
+            return Long.toString(millis / 1000L);
+        }
+        return formatDouble(millis / 1000.0d);
+    }
+
+    private static String safeText(String value) {
+        return value == null ? "" : value;
+    }
+
+    private static String normalizeTier(String input) {
+        if (input == null) {
+            return "common";
+        }
+        String tier = input.trim().toLowerCase(Locale.ROOT);
+        return switch (tier) {
+            case "common", "uncommon", "rare", "epic", "legendary" -> tier;
+            default -> "common";
+        };
+    }
+
+    private static int defaultContractPriceForTier(String tier) {
+        return switch (normalizeTier(tier)) {
+            case "common" -> 100;
+            case "uncommon" -> 250;
+            case "rare" -> 500;
+            case "epic" -> 900;
+            case "legendary" -> 1500;
+            default -> 100;
+        };
+    }
+
+    private static Integer findEntryContractPrice(List<ShopEntry> entries, String bossName, String tier) {
+        if (entries == null || entries.isEmpty() || bossName == null || bossName.isBlank()) {
+            return null;
+        }
+        for (ShopEntry entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            if (!normalizeTier(tier).equalsIgnoreCase(normalizeTier(entry.tier))) {
+                continue;
+            }
+            if (bossName.equalsIgnoreCase(optionalText(entry.bossId))) {
+                return Math.max(0, entry.cost);
+            }
+        }
+        return null;
+    }
+
+    private static int resolveDefaultContractPrice(BossShopConfig shopConfig, String bossName, String tier) {
+        Integer configured = findEntryContractPrice(shopConfig != null ? shopConfig.entries : null, bossName, tier);
+        return configured != null ? configured : defaultContractPriceForTier(tier);
+    }
+
+    private static String capitalize(String value) {
+        String text = optionalText(value);
+        if (text.isEmpty()) {
+            return "";
+        }
+        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
+    }
+
+    private static String optionalText(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String requireNonBlank(String value, String errorMessage) {
+        String out = optionalText(value);
+        if (out.isEmpty()) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+        return out;
+    }
+
+    private static String firstResolvedValue(String primary, String fallback) {
+        String primaryValue = optionalText(primary);
+        if (!primaryValue.isEmpty() && !looksLikeUiBindingExpression(primaryValue)) {
+            return primaryValue;
+        }
+
+        String fallbackValue = optionalText(fallback);
+        if (!fallbackValue.isEmpty() && !looksLikeUiBindingExpression(fallbackValue)) {
+            return fallbackValue;
+        }
+
+        return primaryValue;
+    }
+
+    private static String resolvedOrFallback(String input, String fallback) {
+        String value = optionalText(input);
+        if (!value.isEmpty() && !looksLikeUiBindingExpression(value)) {
+            return value;
+        }
+        String fallbackValue = optionalText(fallback);
+        if (!fallbackValue.isEmpty() && !looksLikeUiBindingExpression(fallbackValue)) {
+            return fallbackValue;
+        }
+        return "";
+    }
+
+    private static boolean looksLikeUiBindingExpression(String value) {
+        String out = optionalText(value);
+        return out.startsWith("#") && (out.endsWith(".Value") || out.endsWith(".Text"));
+    }
+
+    private static int parseRequiredInt(String raw, String errorMessage, int min, int max) {
+        try {
+            int out = Integer.parseInt(optionalText(raw));
+            if (out < min || out > max) {
+                throw new IllegalArgumentException(errorMessage);
+            }
+            return out;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+    }
+
+    private static int parseBossLevelOverride(String raw, String errorMessage) {
+        String value = optionalText(raw);
+        if (value.isEmpty()) {
+            return 0;
+        }
+        try {
+            int out = Integer.parseInt(value);
+            if (out < 0) {
+                throw new IllegalArgumentException(errorMessage);
+            }
+            return out;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+    }
+
+    private static long parseRequiredLong(String raw, String errorMessage, long min, long max) {
+        try {
+            long out = Long.parseLong(optionalText(raw));
+            if (out < min || out > max) {
+                throw new IllegalArgumentException(errorMessage);
+            }
+            return out;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+    }
+
+    private static long parseRequiredSecondsToMillis(String raw, String errorMessage) {
+        double seconds = parseRequiredDouble(raw, errorMessage, 0.0d, Double.MAX_VALUE);
+        if (seconds > (Long.MAX_VALUE / 1000.0d)) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+        return Math.round(seconds * 1000.0d);
+    }
+
+    private static float parseRequiredFloat(String raw, String errorMessage, float min, float max) {
+        try {
+            float out = Float.parseFloat(optionalText(raw));
+            if (!Float.isFinite(out) || out < min || out > max) {
+                throw new IllegalArgumentException(errorMessage);
+            }
+            return out;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+    }
+
+    private static double parseRequiredDouble(String raw, String errorMessage, double min, double max) {
+        try {
+            double out = Double.parseDouble(optionalText(raw));
+            if (!Double.isFinite(out) || out < min || out > max) {
+                throw new IllegalArgumentException(errorMessage);
+            }
+            return out;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+    }
+
+    private static double clamp(double value, double min, double max) {
+        if (value < min) return min;
+        return Math.min(value, max);
+    }
+
+    private static Integer parseOptionalInt(String raw) {
+        try {
+            String value = optionalText(raw);
+            if (value.isEmpty()) {
+                return null;
+            }
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static Float parseOptionalFloat(String raw) {
+        try {
+            String value = optionalText(raw);
+            if (value.isEmpty()) {
+                return null;
+            }
+            float parsed = Float.parseFloat(value);
+            return Float.isFinite(parsed) ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static Double parseOptionalDouble(String raw) {
+        try {
+            String value = optionalText(raw);
+            if (value.isEmpty()) {
+                return null;
+            }
+            double parsed = Double.parseDouble(value);
+            return Double.isFinite(parsed) ? parsed : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private static List<Arena> snapshotArenas() {
+        List<Arena> arenas = new ArrayList<>(ArenaRegistry.getAll());
+        arenas.sort(Comparator.comparing(a -> a.arenaId == null ? "" : a.arenaId, String.CASE_INSENSITIVE_ORDER));
+        return arenas;
+    }
+
+    private static List<String> snapshotBossNames() {
+        List<BossDefinition> bosses = new ArrayList<>(BossRegistry.getAll().values());
+
+        List<String> names = new ArrayList<>();
+        for (BossDefinition boss : bosses) {
+            if (boss != null && boss.bossName != null && !boss.bossName.isBlank()) {
+                names.add(boss.bossName);
+            }
+        }
+        return names;
+    }
+
+    private static String nextArenaId() {
+        int index = 1;
+        while (ArenaRegistry.exists("arena" + index)) {
+            index++;
+        }
+        return "arena" + index;
+    }
+
+    private static BossDefinition cloneBoss(BossDefinition source) {
+        BossDefinition out = new BossDefinition();
+        out.bossName = source != null ? source.bossName : "";
+        out.npcId = source != null ? source.npcId : "";
+        out.tier = source != null ? normalizeTier(source.tier) : "common";
+        out.amount = source != null ? source.amount : 1;
+        out.levelOverride = source != null ? Math.max(0, source.levelOverride) : 0;
+
+        out.modifiers = new BossDefinition.Modifiers();
+        if (source != null && source.modifiers != null) {
+            out.modifiers.hp = source.modifiers.hp;
+            out.modifiers.damage = source.modifiers.damage;
+            out.modifiers.movementSpeed = source.modifiers.movementSpeed;
+            out.modifiers.size = source.modifiers.size;
+            out.modifiers.attackRate = source.modifiers.attackRate;
+            out.modifiers.abilityCooldown = source.modifiers.abilityCooldown;
+            out.modifiers.knockbackGiven = source.modifiers.knockbackGiven;
+            out.modifiers.knockbackTaken = source.modifiers.knockbackTaken;
+            out.modifiers.turnRate = source.modifiers.turnRate;
+            out.modifiers.regen = source.modifiers.regen;
+        }
+
+        out.perPlayerIncrease = new BossDefinition.PerPlayerIncrease();
+        if (source != null && source.perPlayerIncrease != null) {
+            out.perPlayerIncrease.hp = source.perPlayerIncrease.hp;
+            out.perPlayerIncrease.damage = source.perPlayerIncrease.damage;
+            out.perPlayerIncrease.movementSpeed = source.perPlayerIncrease.movementSpeed;
+            out.perPlayerIncrease.size = source.perPlayerIncrease.size;
+            out.perPlayerIncrease.attackRate = source.perPlayerIncrease.attackRate;
+            out.perPlayerIncrease.abilityCooldown = source.perPlayerIncrease.abilityCooldown;
+            out.perPlayerIncrease.knockbackGiven = source.perPlayerIncrease.knockbackGiven;
+            out.perPlayerIncrease.knockbackTaken = source.perPlayerIncrease.knockbackTaken;
+            out.perPlayerIncrease.turnRate = source.perPlayerIncrease.turnRate;
+            out.perPlayerIncrease.regen = source.perPlayerIncrease.regen;
+        }
+
+        out.extraMobs = new BossDefinition.ExtraMobs();
+        if (source != null && source.extraMobs != null) {
+            out.extraMobs.npcId = source.extraMobs.npcId;
+            out.extraMobs.timeLimitMs = source.extraMobs.timeLimitMs;
+            out.extraMobs.waves = source.extraMobs.waves;
+            out.extraMobs.mobsPerWave = source.extraMobs.mobsPerWave;
+            out.extraMobs.useRandomSpawnLocations = source.extraMobs.useRandomSpawnLocations;
+            out.extraMobs.randomSpawnRadius = source.extraMobs.randomSpawnRadius;
+            out.extraMobs.adds = new ArrayList<>();
+            if (source.extraMobs.adds != null) {
+                for (BossDefinition.ExtraMobs.WaveAdd add : source.extraMobs.adds) {
+                    if (add == null) {
+                        continue;
+                    }
+                    BossDefinition.ExtraMobs.WaveAdd copy = new BossDefinition.ExtraMobs.WaveAdd();
+                    copy.npcId = add.npcId;
+                    copy.mobsPerWave = add.mobsPerWave;
+                    copy.everyWave = add.everyWave;
+                    copy.hp = add.hp;
+                    copy.damage = add.damage;
+                    copy.size = add.size;
+                    out.extraMobs.adds.add(copy);
+                }
+            }
+            out.extraMobs.scheduledWaves = new ArrayList<>();
+            if (source.extraMobs.scheduledWaves != null) {
+                for (BossDefinition.ExtraMobs.ScheduledWave wave : source.extraMobs.scheduledWaves) {
+                    if (wave == null) {
+                        continue;
+                    }
+                    BossDefinition.ExtraMobs.ScheduledWave waveCopy = new BossDefinition.ExtraMobs.ScheduledWave();
+                    waveCopy.trigger = wave.trigger;
+                    waveCopy.triggerValue = wave.triggerValue;
+                    waveCopy.repeatCount = wave.repeatCount;
+                    waveCopy.repeatEverySeconds = wave.repeatEverySeconds;
+                    waveCopy.adds = new ArrayList<>();
+                    if (wave.adds != null) {
+                        for (BossDefinition.ExtraMobs.WaveAdd add : wave.adds) {
+                            if (add == null) {
+                                continue;
+                            }
+                            BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
+                            addCopy.npcId = add.npcId;
+                            addCopy.mobsPerWave = add.mobsPerWave;
+                            addCopy.everyWave = add.everyWave;
+                            addCopy.hp = add.hp;
+                            addCopy.damage = add.damage;
+                            addCopy.size = add.size;
+                            waveCopy.adds.add(addCopy);
+                        }
+                    }
+                    out.extraMobs.scheduledWaves.add(waveCopy);
+                }
+            }
+        }
+        out.extraMobs.sanitize();
+
+        return out;
+    }
+
+    private static BossWavesSummary buildBossWavesSummary(BossDefinition.ExtraMobs extra) {
+        if (extra == null) {
+            return new BossWavesSummary("No wave schedule configured.", "Press Edit Schedule to add waves.", "Rows: 0");
+        }
+        extra.sanitize();
+
+        List<WaveScheduleRow> rows = flattenScheduleRows(extra);
+        String addLine1 = "No wave schedule configured.";
+        String addLine2 = "";
+        if (!rows.isEmpty()) {
+            WaveScheduleRow first = rows.get(0);
+            addLine1 = "Row 1: " + toWaveTriggerDisplayName(first.trigger) + " @ " + formatWaveNumber(first.triggerValue)
+                    + " | " + formatWaveAdd(first.add);
+            if (rows.size() >= 2) {
+                WaveScheduleRow second = rows.get(1);
+                addLine2 = "Row 2: " + toWaveTriggerDisplayName(second.trigger) + " @ " + formatWaveNumber(second.triggerValue)
+                        + " | " + formatWaveAdd(second.add);
+                if (rows.size() > 2) {
+                    addLine2 = addLine2 + " | +" + (rows.size() - 2) + " more rows";
+                }
+            }
+        }
+
+        List<BossDefinition.ExtraMobs.ScheduledWave> schedule = extra.getResolvedScheduledWaves();
+        String meta = "Rows: " + rows.size();
+        if (!schedule.isEmpty()) {
+            meta = "Triggers: " + schedule.size() + " | Rows: " + rows.size();
+        }
+        meta += " | Rand: " + (extra.useRandomSpawnLocations ? "On" : "Off")
+                + " (" + formatWaveNumber(extra.getWaveRandomSpawnRadius()) + "m)";
+
+        return new BossWavesSummary(addLine1, addLine2, meta);
+    }
+
+    private static String formatWaveAdd(BossDefinition.ExtraMobs.WaveAdd add) {
+        if (add == null) {
+            return "";
+        }
+        String summary = safeText(add.npcId)
+                + " x" + Math.max(1, add.mobsPerWave);
+        float hp = add.hp > 0f ? add.hp : 1.0f;
+        float damage = add.damage > 0f ? add.damage : 1.0f;
+        float size = add.size > 0f ? add.size : 1.0f;
+        if (Math.abs(hp - 1.0f) > 0.0001f || Math.abs(damage - 1.0f) > 0.0001f || Math.abs(size - 1.0f) > 0.0001f) {
+            summary += " [" + formatFloat(hp) + "/" + formatFloat(damage) + "/" + formatFloat(size) + "]";
+        }
+        return summary;
+    }
+
+    private static String formatWaveNumber(double value) {
+        if (!Double.isFinite(value)) {
+            return "0";
+        }
+        double rounded = Math.rint(value);
+        if (Math.abs(value - rounded) <= 0.0001d) {
+            return Long.toString((long) rounded);
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
+
+    private static List<LootItem> buildDefaultEarlyZoneLootItems() {
+        List<LootItem> out = new ArrayList<>();
+        out.add(new LootItem("Ingredient_Fibre", 1.0d, 4, 10));
+        out.add(new LootItem("Ingredient_Stick", 0.85d, 2, 6));
+        out.add(new LootItem("Ore_Copper", 0.70d, 1, 4));
+        out.add(new LootItem("Plant_Fruit_Berries_Red", 0.60d, 2, 5));
+        return out;
+    }
+
+    private static LootTable cloneLoot(LootTable source, String fallbackBossName) {
+        LootTable out = new LootTable();
+        out.bossName = source != null && source.bossName != null && !source.bossName.isBlank()
+                ? source.bossName
+                : fallbackBossName;
+        out.lootRadius = source != null ? source.lootRadius : 40.0d;
+        out.items = new ArrayList<>();
+        out.commands = new ArrayList<>();
+
+        if (source != null && source.items != null) {
+            for (LootItem item : source.items) {
+                if (item == null) {
+                    continue;
+                }
+                out.items.add(new LootItem(item.itemId, item.dropChance, item.minAmount, item.maxAmount));
+            }
+        }
+        if (source != null && source.commands != null) {
+            out.commands.addAll(source.commands);
+        }
+
+        return out;
+    }
+
+    private static String sanitizeTab(String tab) {
+        if (TAB_SHOP.equals(tab)) {
+            return TAB_SHOP;
+        }
+        if (TAB_ARENAS.equals(tab)) {
+            return TAB_ARENAS;
+        }
+        return TAB_BOSSES;
     }
 
     @Override
@@ -330,41 +1146,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         return out;
     }
 
-    private static int countEnabledBosses(List<String> bossIds) {
-        if (bossIds == null || bossIds.isEmpty()) {
-            return 0;
-        }
-        int out = 0;
-        for (String bossId : bossIds) {
-            if (bossId != null && !bossId.isBlank()) {
-                out++;
-            }
-        }
-        return out;
-    }
-
-    private static Arena findNearestArenaForShop(String worldName, int x, int y, int z) {
-        Arena best = null;
-        double bestDistanceSq = Double.MAX_VALUE;
-        for (Arena arena : ArenaRegistry.getAll()) {
-            if (arena == null || arena.worldName == null) {
-                continue;
-            }
-            if (!arena.worldName.equalsIgnoreCase(worldName)) {
-                continue;
-            }
-            double dx = arena.x - x;
-            double dy = arena.y - y;
-            double dz = arena.z - z;
-            double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
-            if (distanceSq < bestDistanceSq) {
-                bestDistanceSq = distanceSq;
-                best = arena;
-            }
-        }
-        return best;
-    }
-
     private void handleShopAction(String action, ConfigEventData data) {
         if (action == null || action.isBlank()) {
             return;
@@ -377,6 +1158,16 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
         if (action.startsWith("shop_edit_toggle_")) {
             handleShopEditToggle(action.substring("shop_edit_toggle_".length()));
+            return;
+        }
+
+        if (action.startsWith("shop_edit_price_inc_")) {
+            handleShopEditPriceAdjust(action.substring("shop_edit_price_inc_".length()), SHOP_CONTRACT_PRICE_STEP);
+            return;
+        }
+
+        if (action.startsWith("shop_edit_price_dec_")) {
+            handleShopEditPriceAdjust(action.substring("shop_edit_price_dec_".length()), -SHOP_CONTRACT_PRICE_STEP);
             return;
         }
 
@@ -426,6 +1217,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
         List<String> orderedBosses = snapshotBossNames();
         Set<String> enabled = new LinkedHashSet<>();
+        Map<String, Integer> contractPrices = new LinkedHashMap<>();
         if (location.enabledBossIds != null) {
             for (String bossId : location.enabledBossIds) {
                 if (bossId == null || bossId.isBlank()) {
@@ -438,7 +1230,36 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             }
         }
 
-        shopLocationEditorState = new ShopLocationEditorState(shopLocation, orderedBosses, enabled, optionalText(location.arenaId));
+        if (location.contractPrices != null) {
+            for (BossShopConfig.ContractPrice contractPrice : location.contractPrices) {
+                if (contractPrice == null || contractPrice.bossId == null || contractPrice.bossId.isBlank()) {
+                    continue;
+                }
+                String resolvedBossName = resolveBossNameCaseInsensitive(orderedBosses, contractPrice.bossId);
+                if (resolvedBossName == null) {
+                    continue;
+                }
+                contractPrices.put(resolvedBossName, Math.max(0, contractPrice.cost));
+            }
+        }
+
+        for (String bossName : orderedBosses) {
+            if (bossName == null || bossName.isBlank() || contractPrices.containsKey(bossName)) {
+                continue;
+            }
+            BossDefinition boss = BossRegistry.get(bossName);
+            String tier = boss != null ? normalizeTier(boss.tier) : "common";
+            int fallbackCost = resolveDefaultContractPrice(shopConfig, bossName, tier);
+            contractPrices.put(bossName, Math.max(0, fallbackCost));
+        }
+
+        shopLocationEditorState = new ShopLocationEditorState(
+                shopLocation,
+                orderedBosses,
+                enabled,
+                contractPrices,
+                optionalText(location.arenaId)
+        );
         shopStatusText = "";
         rebuild();
     }
@@ -468,6 +1289,38 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         } else {
             shopLocationEditorState.enabledBossNames.add(bossName);
         }
+        rebuild();
+    }
+
+    private void handleShopEditPriceAdjust(String rowToken, int delta) {
+        if (shopLocationEditorState == null || delta == 0) {
+            return;
+        }
+
+        int row = parseRow(rowToken);
+        if (row < 1 || row > MAX_SHOP_BOSS_VISIBLE_ROWS) {
+            shopStatusText = "Invalid boss price row.";
+            rebuild();
+            return;
+        }
+
+        int bossIndex = shopLocationEditorState.bossListOffset + row - 1;
+        if (bossIndex < 0 || bossIndex >= shopLocationEditorState.orderedBossNames.size()) {
+            shopStatusText = "Invalid boss price row.";
+            rebuild();
+            return;
+        }
+
+        String bossName = shopLocationEditorState.orderedBossNames.get(bossIndex);
+        if (bossName == null || bossName.isBlank()) {
+            shopStatusText = "Invalid boss price row.";
+            rebuild();
+            return;
+        }
+
+        int current = Math.max(0, shopLocationEditorState.contractPriceByBossName.getOrDefault(bossName, 0));
+        int next = Math.max(0, current + delta);
+        shopLocationEditorState.contractPriceByBossName.put(bossName, next);
         rebuild();
     }
 
@@ -518,10 +1371,21 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         shopLocationEditorState.arenaId = configuredArenaId;
         location.arenaId = configuredArenaId;
         location.enabledBossIds = savedBossIds;
+        List<BossShopConfig.ContractPrice> savedContractPrices = new ArrayList<>();
+        for (String bossName : savedBossIds) {
+            if (bossName == null || bossName.isBlank()) {
+                continue;
+            }
+            BossShopConfig.ContractPrice contractPrice = new BossShopConfig.ContractPrice();
+            contractPrice.bossId = bossName;
+            contractPrice.cost = Math.max(0, shopLocationEditorState.contractPriceByBossName.getOrDefault(bossName, 0));
+            savedContractPrices.add(contractPrice);
+        }
+        location.contractPrices = savedContractPrices;
 
         plugin.saveShopConfig();
         String arenaText = configuredArenaId.isEmpty() ? "nearest arena (auto)" : configuredArenaId;
-        shopStatusText = "Saved shop location (" + shopLocation.x + ", " + shopLocation.y + ", " + shopLocation.z + ") with arena '" + arenaText + "'.";
+        shopStatusText = "Saved shop location (" + shopLocation.x + ", " + shopLocation.y + ", " + shopLocation.z + ") with arena '" + arenaText + "' and " + savedContractPrices.size() + " price override(s).";
         shopLocationEditorState = null;
         rebuild();
     }
@@ -539,7 +1403,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         );
         cmd.set(
                 "#ShopEditorHint.Text",
-                "Set the shop arena and toggle bosses. Enabled bosses are the only contracts shown there."
+                "Set the shop arena, toggle bosses, and adjust each enabled contract price."
         );
         cmd.set("#ShopEditorArena.Value", optionalText(state.arenaId));
 
@@ -594,17 +1458,32 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
             String bossName = state.orderedBossNames.get(bossIndex);
             BossDefinition boss = BossRegistry.get(bossName);
-            String tierText = boss != null ? normalizeTier(boss.tier) : "uncommon";
+            String tierText = boss != null ? normalizeTier(boss.tier) : "common";
             boolean enabled = state.enabledBossNames.contains(bossName);
+            int contractPrice = Math.max(0, state.contractPriceByBossName.getOrDefault(
+                    bossName,
+                    resolveDefaultContractPrice(plugin.getShopConfig(), bossName, tierText)
+            ));
 
             cmd.set("#ShopEditBossName" + suffix + ".Text", safeText(bossName));
             cmd.set("#ShopEditBossTier" + suffix + ".Text", capitalize(tierText));
             cmd.set("#ShopEditBossToggle" + suffix + ".Text", enabled ? "On" : "Off");
+            cmd.set("#ShopEditBossPrice" + suffix + ".Text", Integer.toString(contractPrice));
 
             events.addEventBinding(
                     CustomUIEventBindingType.Activating,
                     "#ShopEditBossToggle" + suffix,
                     EventData.of("Action", "shop_edit_toggle_" + row)
+            );
+            events.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    "#ShopEditBossPriceUp" + suffix,
+                    EventData.of("Action", "shop_edit_price_inc_" + row)
+            );
+            events.addEventBinding(
+                    CustomUIEventBindingType.Activating,
+                    "#ShopEditBossPriceDown" + suffix,
+                    EventData.of("Action", "shop_edit_price_dec_" + row)
             );
         }
 
@@ -616,27 +1495,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                         .append("@ShopEditArenaId", "#ShopEditorArena.Value")
         );
         events.addEventBinding(CustomUIEventBindingType.Activating, "#ShopEditorCloseButton", EventData.of("Action", "shop_edit_close"));
-    }
-
-    private static int resolveShopEditScrollThumbStep(int offset, int maxOffset) {
-        if (maxOffset <= 0) {
-            return 1;
-        }
-        double normalized = Math.max(0.0d, Math.min(1.0d, (double) offset / (double) maxOffset));
-        int index = (int) Math.round(normalized * (SHOP_EDIT_SCROLL_THUMB_STEPS - 1));
-        return Math.max(1, Math.min(SHOP_EDIT_SCROLL_THUMB_STEPS, index + 1));
-    }
-
-    private static String resolveBossNameCaseInsensitive(List<String> bossNames, String input) {
-        if (input == null || input.isBlank()) {
-            return null;
-        }
-        for (String bossName : bossNames) {
-            if (bossName.equalsIgnoreCase(input)) {
-                return bossName;
-            }
-        }
-        return null;
     }
 
     private void handleArenasAction(String action,
@@ -1027,15 +1885,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         rebuild();
     }
 
-    private static int resolveBossScrollThumbStep(int offset, int maxOffset) {
-        if (maxOffset <= 0) {
-            return 1;
-        }
-        double normalized = Math.max(0.0d, Math.min(1.0d, (double) offset / (double) maxOffset));
-        int index = (int) Math.round(normalized * (BOSS_SCROLL_THUMB_STEPS - 1));
-        return Math.max(1, Math.min(BOSS_SCROLL_THUMB_STEPS, index + 1));
-    }
-
     private void buildBossEditorOverlay(UICommandBuilder cmd, UIEventBuilder events) {
         BossDefinition boss = bossEditorState.boss;
         LootTable loot = bossEditorState.loot;
@@ -1200,45 +2049,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         }
     }
 
-    private static String defaultWaveTriggerInput(int row, boolean useExamples) {
-        if (!useExamples) {
-            return "After Spawn";
-        }
-        if (row == 1) {
-            return "3";
-        }
-        if (row == 2) {
-            return "After Spawn";
-        }
-        return "After Spawn";
-    }
-
-    private static int defaultWaveValueSeconds(int row, boolean useExamples) {
-        if (!useExamples) {
-            return 30;
-        }
-        if (row == 1) {
-            return 15;
-        }
-        if (row == 2) {
-            return 30;
-        }
-        return 30;
-    }
-
-    private static String defaultWaveNpcId(int row, boolean useExamples) {
-        if (!useExamples) {
-            return "";
-        }
-        if (row == 1) {
-            return "Bat";
-        }
-        if (row == 2) {
-            return "Spider";
-        }
-        return "";
-    }
-
     private void buildBossTimedOverlay(UICommandBuilder cmd, UIEventBuilder events) {
         List<BossArenaConfig.TimedBossSpawn> rows = List.of();
         BossArenaConfig cfg = plugin.getConfigHandle();
@@ -1249,19 +2059,19 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         boolean announceServerWide = false;
         boolean announceWorldWide = false;
         String announceText = BossArenaConfig.DEFAULT_TIMED_ANNOUNCEMENT_TEXT;
-            if (!rows.isEmpty()) {
-                BossArenaConfig.TimedBossSpawn first = rows.get(0);
-                if (first != null) {
-                    announceServerWide = first.announceWorldWide;
-                    announceWorldWide = first.announceCurrentWorld;
-                    if (announceServerWide) {
-                        announceWorldWide = false;
-                    }
-                    announceText = resolvedOrFallback(
-                            first.worldAnnouncementText,
-                            BossArenaConfig.DEFAULT_TIMED_ANNOUNCEMENT_TEXT
-                    );
+        if (!rows.isEmpty()) {
+            BossArenaConfig.TimedBossSpawn first = rows.get(0);
+            if (first != null) {
+                announceServerWide = first.announceWorldWide;
+                announceWorldWide = first.announceCurrentWorld;
+                if (announceServerWide) {
+                    announceWorldWide = false;
                 }
+                announceText = resolvedOrFallback(
+                        first.worldAnnouncementText,
+                        BossArenaConfig.DEFAULT_TIMED_ANNOUNCEMENT_TEXT
+                );
+            }
         }
 
         cmd.set("#BossTimedOverflowLabel.Visible", rows.size() > MAX_TIMED_SPAWN_ROWS);
@@ -1526,7 +2336,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         BossDefinition boss = new BossDefinition();
         boss.bossName = nextBossName();
         boss.npcId = "Bat";
-        boss.tier = "uncommon";
+        boss.tier = "common";
         boss.amount = 1;
 
         boss.modifiers = new BossDefinition.Modifiers();
@@ -2299,228 +3109,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         return rows;
     }
 
-    private static String normalizeWaveTriggerInput(String input) {
-        String cleaned = optionalText(input)
-                .toLowerCase(Locale.ROOT)
-                .replace('_', ' ')
-                .replace('-', ' ')
-                .replace("(", " ")
-                .replace(")", " ")
-                .replace("%", " percent ")
-                .replaceAll("\\s+", " ")
-                .trim();
-        return switch (cleaned) {
-            case "1", "before boss", "before", "pre", "pre boss", "bb" -> BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS;
-            case "2", "on spawn", "spawn", "at spawn", "on boss spawn", "with boss", "os" -> BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN;
-            case "after spawn seconds", "after spawn", "after", "seconds", "time", "timer", "after spawn second" ->
-                    BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS;
-            case "3", "as", "after s" -> BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS;
-            case "since last wave", "since last wave second", "since last wave seconds", "since wave", "last wave", "wave delay", "since previous wave", "since last" ->
-                    BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE;
-            case "4", "slw", "since" -> BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE;
-            case "boss hp percent", "boss health percent", "hp percent", "health percent", "boss hp", "boss health", "hp" ->
-                    BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT;
-            case "5", "hpp", "health" -> BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT;
-            default -> null;
-        };
-    }
-
-    private static String toWaveTriggerDisplayName(String trigger) {
-        String normalized = normalizeWaveTriggerInput(trigger);
-        if (BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS.equals(normalized)) {
-            return "Before Boss";
-        }
-        if (BossDefinition.ExtraMobs.TRIGGER_ON_SPAWN.equals(normalized)) {
-            return "On Spawn";
-        }
-        if (BossDefinition.ExtraMobs.TRIGGER_SINCE_LAST_WAVE.equals(normalized)) {
-            return "Since Last Wave";
-        }
-        if (BossDefinition.ExtraMobs.TRIGGER_BOSS_HP_PERCENT.equals(normalized)) {
-            return "Boss HP%";
-        }
-        return "After Spawn";
-    }
-
-    private static WaveScheduleRow copyWaveScheduleRow(WaveScheduleRow source) {
-        if (source == null || source.add == null) {
-            return null;
-        }
-        BossDefinition.ExtraMobs.WaveAdd copy = new BossDefinition.ExtraMobs.WaveAdd();
-        copy.npcId = source.add.npcId;
-        copy.mobsPerWave = source.add.mobsPerWave;
-        copy.everyWave = 1;
-        copy.hp = source.add.hp;
-        copy.damage = source.add.damage;
-        copy.size = source.add.size;
-        return new WaveScheduleRow(
-                source.trigger,
-                source.triggerValue,
-                source.repeatCount,
-                source.repeatEverySeconds,
-                copy
-        );
-    }
-
-    private static WaveScheduleRow defaultWaveScheduleRow() {
-        BossDefinition.ExtraMobs.WaveAdd add = new BossDefinition.ExtraMobs.WaveAdd();
-        add.npcId = "";
-        add.mobsPerWave = 1;
-        add.everyWave = 1;
-        add.hp = 1.0f;
-        add.damage = 1.0f;
-        add.size = 1.0f;
-        return new WaveScheduleRow(
-                BossDefinition.ExtraMobs.TRIGGER_AFTER_SPAWN_SECONDS,
-                30.0d,
-                1,
-                0.0d,
-                add
-        );
-    }
-
-    private static List<WaveScheduleRow> flattenScheduleRows(BossDefinition.ExtraMobs extra) {
-        if (extra == null) {
-            return List.of();
-        }
-        extra.sanitize();
-        List<WaveScheduleRow> out = new ArrayList<>();
-        for (BossDefinition.ExtraMobs.ScheduledWave wave : extra.getResolvedScheduledWaves()) {
-            if (wave == null || wave.adds == null) {
-                continue;
-            }
-            for (BossDefinition.ExtraMobs.WaveAdd add : wave.adds) {
-                if (add == null || add.npcId == null || add.npcId.isBlank()) {
-                    continue;
-                }
-                BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
-                addCopy.npcId = add.npcId;
-                addCopy.mobsPerWave = Math.max(1, add.mobsPerWave);
-                addCopy.everyWave = 1;
-                addCopy.hp = add.hp > 0f ? add.hp : 1.0f;
-                addCopy.damage = add.damage > 0f ? add.damage : 1.0f;
-                addCopy.size = add.size > 0f ? add.size : 1.0f;
-                out.add(new WaveScheduleRow(
-                        optionalText(wave.trigger),
-                        wave.triggerValue,
-                        wave.repeatCount,
-                        wave.repeatEverySeconds,
-                        addCopy
-                ));
-                if (out.size() >= MAX_WAVE_ADD_ROWS) {
-                    return out;
-                }
-            }
-        }
-        return out;
-    }
-
-    private static void applyScheduleRowsToExtra(BossDefinition.ExtraMobs extra, List<WaveScheduleRow> rows) {
-        if (extra == null) {
-            return;
-        }
-
-        extra.npcId = "";
-        extra.timeLimitMs = 0L;
-        extra.waves = 0;
-        extra.mobsPerWave = 1;
-        extra.adds = new ArrayList<>();
-        extra.scheduledWaves = new ArrayList<>();
-
-        if (rows == null || rows.isEmpty()) {
-            return;
-        }
-
-        for (WaveScheduleRow row : rows) {
-            if (row == null || row.add == null || row.add.npcId == null || row.add.npcId.isBlank()) {
-                continue;
-            }
-
-            BossDefinition.ExtraMobs.ScheduledWave target = null;
-            for (BossDefinition.ExtraMobs.ScheduledWave existing : extra.scheduledWaves) {
-                if (sameScheduleKey(existing, row)) {
-                    target = existing;
-                    break;
-                }
-            }
-            if (target == null) {
-                target = new BossDefinition.ExtraMobs.ScheduledWave();
-                target.trigger = row.trigger;
-                target.triggerValue = row.triggerValue;
-                target.repeatCount = row.repeatCount;
-                target.repeatEverySeconds = row.repeatEverySeconds;
-                target.adds = new ArrayList<>();
-                extra.scheduledWaves.add(target);
-            }
-
-            BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
-            addCopy.npcId = row.add.npcId;
-            addCopy.mobsPerWave = Math.max(1, row.add.mobsPerWave);
-            addCopy.everyWave = 1;
-            addCopy.hp = row.add.hp > 0f ? row.add.hp : 1.0f;
-            addCopy.damage = row.add.damage > 0f ? row.add.damage : 1.0f;
-            addCopy.size = row.add.size > 0f ? row.add.size : 1.0f;
-            target.adds.add(addCopy);
-        }
-    }
-
-    private static boolean sameScheduleKey(BossDefinition.ExtraMobs.ScheduledWave existing, WaveScheduleRow row) {
-        if (existing == null || row == null) {
-            return false;
-        }
-        if (!optionalText(existing.trigger).equals(optionalText(row.trigger))) {
-            return false;
-        }
-        if (Math.abs(existing.triggerValue - row.triggerValue) > 0.0001d) {
-            return false;
-        }
-        if (existing.repeatCount != row.repeatCount) {
-            return false;
-        }
-        return Math.abs(existing.repeatEverySeconds - row.repeatEverySeconds) <= 0.0001d;
-    }
-
-    private static void applyWaveSpawnSettingsFromData(BossDefinition.ExtraMobs extra, ConfigEventData data) {
-        if (extra == null || data == null) {
-            return;
-        }
-
-        String resolvedRandomLocations = resolvedOrFallback(
-                data.bossWaveRandomLocations,
-                extra.useRandomSpawnLocations ? "true" : "false"
-        );
-        if (!resolvedRandomLocations.isEmpty()) {
-            Boolean randomEnabled = parseToggleInput(resolvedRandomLocations);
-            if (randomEnabled == null) {
-                throw new IllegalArgumentException("Random wave locations must be true/false, on/off, yes/no, or 1/0.");
-            }
-            extra.useRandomSpawnLocations = randomEnabled;
-        }
-
-        String resolvedRadius = resolvedOrFallback(
-                data.bossWaveRandomRadius,
-                formatWaveNumber(extra.getWaveRandomSpawnRadius())
-        );
-        if (!resolvedRadius.isEmpty()) {
-            extra.randomSpawnRadius = parseRequiredDouble(
-                    resolvedRadius,
-                    "Random wave radius must be a number greater than or equal to 0.",
-                    0.0d,
-                    Double.MAX_VALUE
-            );
-        }
-        extra.sanitize();
-    }
-
-    private static Boolean parseToggleInput(String raw) {
-        String value = optionalText(raw).toLowerCase(Locale.ROOT);
-        return switch (value) {
-            case "1", "true", "t", "yes", "y", "on", "enabled", "enable" -> true;
-            case "0", "false", "f", "no", "n", "off", "disabled", "disable" -> false;
-            default -> null;
-        };
-    }
-
     private List<LootItem> snapshotLootFromData(ConfigEventData data) {
         List<LootItem> rows = new ArrayList<>();
         List<LootItem> fallbackRows = List.of();
@@ -2562,461 +3150,12 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         return rows;
     }
 
-    private static int parseRow(String token) {
-        try {
-            return Integer.parseInt(token);
-        } catch (NumberFormatException ignored) {
-            return -1;
-        }
-    }
-
-    private static Double parseCoordinate(String raw) {
-        if (raw == null) {
-            return null;
-        }
-
-        try {
-            double value = Double.parseDouble(raw.trim());
-            return Double.isFinite(value) ? value : null;
-        } catch (NumberFormatException ignored) {
-            return null;
-        }
-    }
-
-    private static String normalizeArenaId(String raw) {
-        return raw == null ? "" : raw.trim();
-    }
-
-    private static String formatCoord(double value) {
-        return String.format(Locale.ROOT, "%.1f", value);
-    }
-
-    private static String formatFloat(float value) {
-        return String.format(Locale.ROOT, "%.2f", value);
-    }
-
-    private static String formatDouble(double value) {
-        return String.format(Locale.ROOT, "%.3f", value);
-    }
-
-    private static String formatSecondsFromMillis(long millis) {
-        if (millis <= 0L) {
-            return "0";
-        }
-        if (millis % 1000L == 0L) {
-            return Long.toString(millis / 1000L);
-        }
-        return formatDouble(millis / 1000.0d);
-    }
-
-    private static String safeText(String value) {
-        return value == null ? "" : value;
-    }
-
-    private static String normalizeTier(String input) {
-        if (input == null) {
-            return "uncommon";
-        }
-        String tier = input.trim().toLowerCase(Locale.ROOT);
-        return switch (tier) {
-            case "common", "rare", "epic", "legendary", "uncommon" -> tier;
-            default -> "uncommon";
-        };
-    }
-
-    private static String capitalize(String value) {
-        String text = optionalText(value);
-        if (text.isEmpty()) {
-            return "";
-        }
-        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
-    }
-
-    private static String optionalText(String value) {
-        return value == null ? "" : value.trim();
-    }
-
-    private static String requireNonBlank(String value, String errorMessage) {
-        String out = optionalText(value);
-        if (out.isEmpty()) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-        return out;
-    }
-
-    private static String firstResolvedValue(String primary, String fallback) {
-        String primaryValue = optionalText(primary);
-        if (!primaryValue.isEmpty() && !looksLikeUiBindingExpression(primaryValue)) {
-            return primaryValue;
-        }
-
-        String fallbackValue = optionalText(fallback);
-        if (!fallbackValue.isEmpty() && !looksLikeUiBindingExpression(fallbackValue)) {
-            return fallbackValue;
-        }
-
-        return primaryValue;
-    }
-
-    private static String resolvedOrFallback(String input, String fallback) {
-        String value = optionalText(input);
-        if (!value.isEmpty() && !looksLikeUiBindingExpression(value)) {
-            return value;
-        }
-        String fallbackValue = optionalText(fallback);
-        if (!fallbackValue.isEmpty() && !looksLikeUiBindingExpression(fallbackValue)) {
-            return fallbackValue;
-        }
-        return "";
-    }
-
-    private static boolean looksLikeUiBindingExpression(String value) {
-        String out = optionalText(value);
-        return out.startsWith("#") && (out.endsWith(".Value") || out.endsWith(".Text"));
-    }
-
-    private static int parseRequiredInt(String raw, String errorMessage, int min, int max) {
-        try {
-            int out = Integer.parseInt(optionalText(raw));
-            if (out < min || out > max) {
-                throw new IllegalArgumentException(errorMessage);
-            }
-            return out;
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-    }
-
-    private static int parseBossLevelOverride(String raw, String errorMessage) {
-        String value = optionalText(raw);
-        if (value.isEmpty()) {
-            return 0;
-        }
-        try {
-            int out = Integer.parseInt(value);
-            if (out < 0) {
-                throw new IllegalArgumentException(errorMessage);
-            }
-            return out;
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-    }
-
-    private static long parseRequiredLong(String raw, String errorMessage, long min, long max) {
-        try {
-            long out = Long.parseLong(optionalText(raw));
-            if (out < min || out > max) {
-                throw new IllegalArgumentException(errorMessage);
-            }
-            return out;
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-    }
-
-    private static long parseRequiredSecondsToMillis(String raw, String errorMessage) {
-        double seconds = parseRequiredDouble(raw, errorMessage, 0.0d, Double.MAX_VALUE);
-        if (seconds > (Long.MAX_VALUE / 1000.0d)) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-        return Math.round(seconds * 1000.0d);
-    }
-
-    private static float parseRequiredFloat(String raw, String errorMessage, float min, float max) {
-        try {
-            float out = Float.parseFloat(optionalText(raw));
-            if (!Float.isFinite(out) || out < min || out > max) {
-                throw new IllegalArgumentException(errorMessage);
-            }
-            return out;
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-    }
-
-    private static double parseRequiredDouble(String raw, String errorMessage, double min, double max) {
-        try {
-            double out = Double.parseDouble(optionalText(raw));
-            if (!Double.isFinite(out) || out < min || out > max) {
-                throw new IllegalArgumentException(errorMessage);
-            }
-            return out;
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException(errorMessage);
-        }
-    }
-
-    private static double clamp(double value, double min, double max) {
-        if (value < min) return min;
-        return Math.min(value, max);
-    }
-
-    private static Integer parseOptionalInt(String raw) {
-        try {
-            String value = optionalText(raw);
-            if (value.isEmpty()) {
-                return null;
-            }
-            return Integer.parseInt(value);
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
-    private static Float parseOptionalFloat(String raw) {
-        try {
-            String value = optionalText(raw);
-            if (value.isEmpty()) {
-                return null;
-            }
-            float parsed = Float.parseFloat(value);
-            return Float.isFinite(parsed) ? parsed : null;
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
-    private static Double parseOptionalDouble(String raw) {
-        try {
-            String value = optionalText(raw);
-            if (value.isEmpty()) {
-                return null;
-            }
-            double parsed = Double.parseDouble(value);
-            return Double.isFinite(parsed) ? parsed : null;
-        } catch (NumberFormatException ex) {
-            return null;
-        }
-    }
-
-    private static List<Arena> snapshotArenas() {
-        List<Arena> arenas = new ArrayList<>(ArenaRegistry.getAll());
-        arenas.sort(Comparator.comparing(a -> a.arenaId == null ? "" : a.arenaId, String.CASE_INSENSITIVE_ORDER));
-        return arenas;
-    }
-
-    private static List<String> snapshotBossNames() {
-        List<BossDefinition> bosses = new ArrayList<>(BossRegistry.getAll().values());
-
-        List<String> names = new ArrayList<>();
-        for (BossDefinition boss : bosses) {
-            if (boss != null && boss.bossName != null && !boss.bossName.isBlank()) {
-                names.add(boss.bossName);
-            }
-        }
-        return names;
-    }
-
     private String nextBossName() {
         int index = 1;
         while (BossRegistry.exists("boss" + index)) {
             index++;
         }
         return "boss" + index;
-    }
-
-    private static String nextArenaId() {
-        int index = 1;
-        while (ArenaRegistry.exists("arena" + index)) {
-            index++;
-        }
-        return "arena" + index;
-    }
-
-    private static BossDefinition cloneBoss(BossDefinition source) {
-        BossDefinition out = new BossDefinition();
-        out.bossName = source != null ? source.bossName : "";
-        out.npcId = source != null ? source.npcId : "";
-        out.tier = source != null ? normalizeTier(source.tier) : "uncommon";
-        out.amount = source != null ? source.amount : 1;
-        out.levelOverride = source != null ? Math.max(0, source.levelOverride) : 0;
-
-        out.modifiers = new BossDefinition.Modifiers();
-        if (source != null && source.modifiers != null) {
-            out.modifiers.hp = source.modifiers.hp;
-            out.modifiers.damage = source.modifiers.damage;
-            out.modifiers.movementSpeed = source.modifiers.movementSpeed;
-            out.modifiers.size = source.modifiers.size;
-            out.modifiers.attackRate = source.modifiers.attackRate;
-            out.modifiers.abilityCooldown = source.modifiers.abilityCooldown;
-            out.modifiers.knockbackGiven = source.modifiers.knockbackGiven;
-            out.modifiers.knockbackTaken = source.modifiers.knockbackTaken;
-            out.modifiers.turnRate = source.modifiers.turnRate;
-            out.modifiers.regen = source.modifiers.regen;
-        }
-
-        out.perPlayerIncrease = new BossDefinition.PerPlayerIncrease();
-        if (source != null && source.perPlayerIncrease != null) {
-            out.perPlayerIncrease.hp = source.perPlayerIncrease.hp;
-            out.perPlayerIncrease.damage = source.perPlayerIncrease.damage;
-            out.perPlayerIncrease.movementSpeed = source.perPlayerIncrease.movementSpeed;
-            out.perPlayerIncrease.size = source.perPlayerIncrease.size;
-            out.perPlayerIncrease.attackRate = source.perPlayerIncrease.attackRate;
-            out.perPlayerIncrease.abilityCooldown = source.perPlayerIncrease.abilityCooldown;
-            out.perPlayerIncrease.knockbackGiven = source.perPlayerIncrease.knockbackGiven;
-            out.perPlayerIncrease.knockbackTaken = source.perPlayerIncrease.knockbackTaken;
-            out.perPlayerIncrease.turnRate = source.perPlayerIncrease.turnRate;
-            out.perPlayerIncrease.regen = source.perPlayerIncrease.regen;
-        }
-
-        out.extraMobs = new BossDefinition.ExtraMobs();
-        if (source != null && source.extraMobs != null) {
-            out.extraMobs.npcId = source.extraMobs.npcId;
-            out.extraMobs.timeLimitMs = source.extraMobs.timeLimitMs;
-            out.extraMobs.waves = source.extraMobs.waves;
-            out.extraMobs.mobsPerWave = source.extraMobs.mobsPerWave;
-            out.extraMobs.useRandomSpawnLocations = source.extraMobs.useRandomSpawnLocations;
-            out.extraMobs.randomSpawnRadius = source.extraMobs.randomSpawnRadius;
-            out.extraMobs.adds = new ArrayList<>();
-            if (source.extraMobs.adds != null) {
-                for (BossDefinition.ExtraMobs.WaveAdd add : source.extraMobs.adds) {
-                    if (add == null) {
-                        continue;
-                    }
-                    BossDefinition.ExtraMobs.WaveAdd copy = new BossDefinition.ExtraMobs.WaveAdd();
-                    copy.npcId = add.npcId;
-                    copy.mobsPerWave = add.mobsPerWave;
-                    copy.everyWave = add.everyWave;
-                    copy.hp = add.hp;
-                    copy.damage = add.damage;
-                    copy.size = add.size;
-                    out.extraMobs.adds.add(copy);
-                }
-            }
-            out.extraMobs.scheduledWaves = new ArrayList<>();
-            if (source.extraMobs.scheduledWaves != null) {
-                for (BossDefinition.ExtraMobs.ScheduledWave wave : source.extraMobs.scheduledWaves) {
-                    if (wave == null) {
-                        continue;
-                    }
-                    BossDefinition.ExtraMobs.ScheduledWave waveCopy = new BossDefinition.ExtraMobs.ScheduledWave();
-                    waveCopy.trigger = wave.trigger;
-                    waveCopy.triggerValue = wave.triggerValue;
-                    waveCopy.repeatCount = wave.repeatCount;
-                    waveCopy.repeatEverySeconds = wave.repeatEverySeconds;
-                    waveCopy.adds = new ArrayList<>();
-                    if (wave.adds != null) {
-                        for (BossDefinition.ExtraMobs.WaveAdd add : wave.adds) {
-                            if (add == null) {
-                                continue;
-                            }
-                            BossDefinition.ExtraMobs.WaveAdd addCopy = new BossDefinition.ExtraMobs.WaveAdd();
-                            addCopy.npcId = add.npcId;
-                            addCopy.mobsPerWave = add.mobsPerWave;
-                            addCopy.everyWave = add.everyWave;
-                            addCopy.hp = add.hp;
-                            addCopy.damage = add.damage;
-                            addCopy.size = add.size;
-                            waveCopy.adds.add(addCopy);
-                        }
-                    }
-                    out.extraMobs.scheduledWaves.add(waveCopy);
-                }
-            }
-        }
-        out.extraMobs.sanitize();
-
-        return out;
-    }
-
-    private static BossWavesSummary buildBossWavesSummary(BossDefinition.ExtraMobs extra) {
-        if (extra == null) {
-            return new BossWavesSummary("No wave schedule configured.", "Press Edit Schedule to add waves.", "Rows: 0");
-        }
-        extra.sanitize();
-
-        List<WaveScheduleRow> rows = flattenScheduleRows(extra);
-        String addLine1 = "No wave schedule configured.";
-        String addLine2 = "";
-        if (!rows.isEmpty()) {
-            WaveScheduleRow first = rows.get(0);
-            addLine1 = "Row 1: " + toWaveTriggerDisplayName(first.trigger) + " @ " + formatWaveNumber(first.triggerValue)
-                    + " | " + formatWaveAdd(first.add);
-            if (rows.size() >= 2) {
-                WaveScheduleRow second = rows.get(1);
-                addLine2 = "Row 2: " + toWaveTriggerDisplayName(second.trigger) + " @ " + formatWaveNumber(second.triggerValue)
-                        + " | " + formatWaveAdd(second.add);
-                if (rows.size() > 2) {
-                    addLine2 = addLine2 + " | +" + (rows.size() - 2) + " more rows";
-                }
-            }
-        }
-
-        List<BossDefinition.ExtraMobs.ScheduledWave> schedule = extra.getResolvedScheduledWaves();
-        String meta = "Rows: " + rows.size();
-        if (!schedule.isEmpty()) {
-            meta = "Triggers: " + schedule.size() + " | Rows: " + rows.size();
-        }
-        meta += " | Rand: " + (extra.useRandomSpawnLocations ? "On" : "Off")
-                + " (" + formatWaveNumber(extra.getWaveRandomSpawnRadius()) + "m)";
-
-        return new BossWavesSummary(addLine1, addLine2, meta);
-    }
-
-    private static String formatWaveAdd(BossDefinition.ExtraMobs.WaveAdd add) {
-        if (add == null) {
-            return "";
-        }
-        String summary = safeText(add.npcId)
-                + " x" + Math.max(1, add.mobsPerWave);
-        float hp = add.hp > 0f ? add.hp : 1.0f;
-        float damage = add.damage > 0f ? add.damage : 1.0f;
-        float size = add.size > 0f ? add.size : 1.0f;
-        if (Math.abs(hp - 1.0f) > 0.0001f || Math.abs(damage - 1.0f) > 0.0001f || Math.abs(size - 1.0f) > 0.0001f) {
-            summary += " [" + formatFloat(hp) + "/" + formatFloat(damage) + "/" + formatFloat(size) + "]";
-        }
-        return summary;
-    }
-
-    private static String formatWaveNumber(double value) {
-        if (!Double.isFinite(value)) {
-            return "0";
-        }
-        double rounded = Math.rint(value);
-        if (Math.abs(value - rounded) <= 0.0001d) {
-            return Long.toString((long) rounded);
-        }
-        return String.format(Locale.ROOT, "%.2f", value);
-    }
-
-    private static List<LootItem> buildDefaultEarlyZoneLootItems() {
-        List<LootItem> out = new ArrayList<>();
-        out.add(new LootItem("Ingredient_Fibre", 1.0d, 4, 10));
-        out.add(new LootItem("Ingredient_Stick", 0.85d, 2, 6));
-        out.add(new LootItem("Ore_Copper", 0.70d, 1, 4));
-        out.add(new LootItem("Plant_Fruit_Berries_Red", 0.60d, 2, 5));
-        return out;
-    }
-
-    private static LootTable cloneLoot(LootTable source, String fallbackBossName) {
-        LootTable out = new LootTable();
-        out.bossName = source != null && source.bossName != null && !source.bossName.isBlank()
-                ? source.bossName
-                : fallbackBossName;
-        out.lootRadius = source != null ? source.lootRadius : 40.0d;
-        out.items = new ArrayList<>();
-
-        if (source != null && source.items != null) {
-            for (LootItem item : source.items) {
-                if (item == null) {
-                    continue;
-                }
-                out.items.add(new LootItem(item.itemId, item.dropChance, item.minAmount, item.maxAmount));
-            }
-        }
-
-        return out;
-    }
-
-    private static String sanitizeTab(String tab) {
-        if (TAB_SHOP.equals(tab)) {
-            return TAB_SHOP;
-        }
-        if (TAB_ARENAS.equals(tab)) {
-            return TAB_ARENAS;
-        }
-        return TAB_BOSSES;
     }
 
     private static final class ShopLocationRef {
@@ -3037,16 +3176,19 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         private final ShopLocationRef shopLocation;
         private final List<String> orderedBossNames;
         private final Set<String> enabledBossNames;
+        private final Map<String, Integer> contractPriceByBossName;
         private String arenaId;
         private int bossListOffset;
 
         private ShopLocationEditorState(ShopLocationRef shopLocation,
                                         List<String> orderedBossNames,
                                         Set<String> enabledBossNames,
+                                        Map<String, Integer> contractPriceByBossName,
                                         String arenaId) {
             this.shopLocation = shopLocation;
             this.orderedBossNames = orderedBossNames;
             this.enabledBossNames = enabledBossNames;
+            this.contractPriceByBossName = contractPriceByBossName;
             this.arenaId = arenaId;
             this.bossListOffset = 0;
         }
@@ -3064,14 +3206,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         private final int totalBosses;
 
         private ShopLocationView(String arenaLabel,
-                              String distanceLabel,
-                              Double distance,
-                              String worldName,
-                              int x,
-                              int y,
-                              int z,
-                              int enabledBosses,
-                              int totalBosses) {
+                                 String distanceLabel,
+                                 Double distance,
+                                 String worldName,
+                                 int x,
+                                 int y,
+                                 int z,
+                                 int enabledBosses,
+                                 int totalBosses) {
             this.arenaLabel = arenaLabel;
             this.distanceLabel = distanceLabel;
             this.distance = distance;
@@ -3129,14 +3271,157 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
     }
 
     public static final class ConfigEventData {
-        public String action;
+        public static final BuilderCodec<ConfigEventData> CODEC = BuilderCodec.builder(
+                        ConfigEventData.class,
+                        ConfigEventData::new
+                )
+                .append(new KeyedCodec<>("Action", Codec.STRING), (d, v) -> d.action = v, d -> d.action).add()
 
+                .append(new KeyedCodec<>("@ArenaName", Codec.STRING), (d, v) -> d.arenaName = v, d -> d.arenaName).add()
+                .append(new KeyedCodec<>("@ArenaX", Codec.STRING), (d, v) -> d.arenaX = v, d -> d.arenaX).add()
+                .append(new KeyedCodec<>("@ArenaY", Codec.STRING), (d, v) -> d.arenaY = v, d -> d.arenaY).add()
+                .append(new KeyedCodec<>("@ArenaZ", Codec.STRING), (d, v) -> d.arenaZ = v, d -> d.arenaZ).add()
+                .append(new KeyedCodec<>("@ShopEditArenaId", Codec.STRING), (d, v) -> d.shopEditArenaId = v, d -> d.shopEditArenaId).add()
+
+                .append(new KeyedCodec<>("@BossEditName", Codec.STRING), (d, v) -> d.bossEditName = v, d -> d.bossEditName).add()
+                .append(new KeyedCodec<>("@BossEditNpcId", Codec.STRING), (d, v) -> d.bossEditNpcId = v, d -> d.bossEditNpcId).add()
+                .append(new KeyedCodec<>("@BossEditTier", Codec.STRING), (d, v) -> d.bossEditTier = v, d -> d.bossEditTier).add()
+                .append(new KeyedCodec<>("@BossEditAmount", Codec.STRING), (d, v) -> d.bossEditAmount = v, d -> d.bossEditAmount).add()
+                .append(new KeyedCodec<>("@BossEditLevelOverride", Codec.STRING), (d, v) -> d.bossEditLevelOverride = v, d -> d.bossEditLevelOverride).add()
+                .append(new KeyedCodec<>("@BossEditHp", Codec.STRING), (d, v) -> d.bossEditHp = v, d -> d.bossEditHp).add()
+                .append(new KeyedCodec<>("@BossEditDamage", Codec.STRING), (d, v) -> d.bossEditDamage = v, d -> d.bossEditDamage).add()
+                .append(new KeyedCodec<>("@BossEditSpeed", Codec.STRING), (d, v) -> d.bossEditSpeed = v, d -> d.bossEditSpeed).add()
+                .append(new KeyedCodec<>("@BossEditSize", Codec.STRING), (d, v) -> d.bossEditSize = v, d -> d.bossEditSize).add()
+                .append(new KeyedCodec<>("@BossEditAttackRate", Codec.STRING), (d, v) -> d.bossEditAttackRate = v, d -> d.bossEditAttackRate).add()
+                .append(new KeyedCodec<>("@BossEditAbilityCooldown", Codec.STRING), (d, v) -> d.bossEditAbilityCooldown = v, d -> d.bossEditAbilityCooldown).add()
+                .append(new KeyedCodec<>("@BossEditKnockbackGiven", Codec.STRING), (d, v) -> d.bossEditKnockbackGiven = v, d -> d.bossEditKnockbackGiven).add()
+                .append(new KeyedCodec<>("@BossEditKnockbackTaken", Codec.STRING), (d, v) -> d.bossEditKnockbackTaken = v, d -> d.bossEditKnockbackTaken).add()
+                .append(new KeyedCodec<>("@BossEditTurnRate", Codec.STRING), (d, v) -> d.bossEditTurnRate = v, d -> d.bossEditTurnRate).add()
+                .append(new KeyedCodec<>("@BossEditRegen", Codec.STRING), (d, v) -> d.bossEditRegen = v, d -> d.bossEditRegen).add()
+                .append(new KeyedCodec<>("@BossEditPpHp", Codec.STRING), (d, v) -> d.bossEditPpHp = v, d -> d.bossEditPpHp).add()
+                .append(new KeyedCodec<>("@BossEditPpDamage", Codec.STRING), (d, v) -> d.bossEditPpDamage = v, d -> d.bossEditPpDamage).add()
+                .append(new KeyedCodec<>("@BossEditPpSpeed", Codec.STRING), (d, v) -> d.bossEditPpSpeed = v, d -> d.bossEditPpSpeed).add()
+                .append(new KeyedCodec<>("@BossEditPpSize", Codec.STRING), (d, v) -> d.bossEditPpSize = v, d -> d.bossEditPpSize).add()
+                .append(new KeyedCodec<>("@BossEditPpAttackRate", Codec.STRING), (d, v) -> d.bossEditPpAttackRate = v, d -> d.bossEditPpAttackRate).add()
+                .append(new KeyedCodec<>("@BossEditPpAbilityCooldown", Codec.STRING), (d, v) -> d.bossEditPpAbilityCooldown = v, d -> d.bossEditPpAbilityCooldown).add()
+                .append(new KeyedCodec<>("@BossEditPpKnockbackGiven", Codec.STRING), (d, v) -> d.bossEditPpKnockbackGiven = v, d -> d.bossEditPpKnockbackGiven).add()
+                .append(new KeyedCodec<>("@BossEditPpKnockbackTaken", Codec.STRING), (d, v) -> d.bossEditPpKnockbackTaken = v, d -> d.bossEditPpKnockbackTaken).add()
+                .append(new KeyedCodec<>("@BossEditPpTurnRate", Codec.STRING), (d, v) -> d.bossEditPpTurnRate = v, d -> d.bossEditPpTurnRate).add()
+                .append(new KeyedCodec<>("@BossEditPpRegen", Codec.STRING), (d, v) -> d.bossEditPpRegen = v, d -> d.bossEditPpRegen).add()
+                .append(new KeyedCodec<>("@BossEditWaves", Codec.STRING), (d, v) -> d.bossEditWaves = v, d -> d.bossEditWaves).add()
+                .append(new KeyedCodec<>("@BossEditExtraNpcId", Codec.STRING), (d, v) -> d.bossEditExtraNpcId = v, d -> d.bossEditExtraNpcId).add()
+                .append(new KeyedCodec<>("@BossEditExtraTimeLimit", Codec.STRING), (d, v) -> d.bossEditExtraTimeLimit = v, d -> d.bossEditExtraTimeLimit).add()
+                .append(new KeyedCodec<>("@BossEditExtraWaves", Codec.STRING), (d, v) -> d.bossEditExtraWaves = v, d -> d.bossEditExtraWaves).add()
+                .append(new KeyedCodec<>("@BossEditExtraMobsPerWave", Codec.STRING), (d, v) -> d.bossEditExtraMobsPerWave = v, d -> d.bossEditExtraMobsPerWave).add()
+                .append(new KeyedCodec<>("@BossEditLootRadius", Codec.STRING), (d, v) -> d.bossEditLootRadius = v, d -> d.bossEditLootRadius).add()
+
+                .append(new KeyedCodec<>("@BossWaveRandomLocations", Codec.STRING), (d, v) -> d.bossWaveRandomLocations = v, d -> d.bossWaveRandomLocations).add()
+                .append(new KeyedCodec<>("@BossWaveRandomRadius", Codec.STRING), (d, v) -> d.bossWaveRandomRadius = v, d -> d.bossWaveRandomRadius).add()
+                .append(new KeyedCodec<>("@BossWaveTimeSec", Codec.STRING), (d, v) -> d.bossWaveTimeSec = v, d -> d.bossWaveTimeSec).add()
+                .append(new KeyedCodec<>("@BossWaveNpc1", Codec.STRING), (d, v) -> d.bossWaveNpc1 = v, d -> d.bossWaveNpc1).add()
+                .append(new KeyedCodec<>("@BossWaveAmount1", Codec.STRING), (d, v) -> d.bossWaveAmount1 = v, d -> d.bossWaveAmount1).add()
+                .append(new KeyedCodec<>("@BossWaveEvery1", Codec.STRING), (d, v) -> d.bossWaveEvery1 = v, d -> d.bossWaveEvery1).add()
+                .append(new KeyedCodec<>("@BossWaveHp1", Codec.STRING), (d, v) -> d.bossWaveHp1 = v, d -> d.bossWaveHp1).add()
+                .append(new KeyedCodec<>("@BossWaveDamage1", Codec.STRING), (d, v) -> d.bossWaveDamage1 = v, d -> d.bossWaveDamage1).add()
+                .append(new KeyedCodec<>("@BossWaveSize1", Codec.STRING), (d, v) -> d.bossWaveSize1 = v, d -> d.bossWaveSize1).add()
+                .append(new KeyedCodec<>("@BossWaveNpc2", Codec.STRING), (d, v) -> d.bossWaveNpc2 = v, d -> d.bossWaveNpc2).add()
+                .append(new KeyedCodec<>("@BossWaveAmount2", Codec.STRING), (d, v) -> d.bossWaveAmount2 = v, d -> d.bossWaveAmount2).add()
+                .append(new KeyedCodec<>("@BossWaveEvery2", Codec.STRING), (d, v) -> d.bossWaveEvery2 = v, d -> d.bossWaveEvery2).add()
+                .append(new KeyedCodec<>("@BossWaveHp2", Codec.STRING), (d, v) -> d.bossWaveHp2 = v, d -> d.bossWaveHp2).add()
+                .append(new KeyedCodec<>("@BossWaveDamage2", Codec.STRING), (d, v) -> d.bossWaveDamage2 = v, d -> d.bossWaveDamage2).add()
+                .append(new KeyedCodec<>("@BossWaveSize2", Codec.STRING), (d, v) -> d.bossWaveSize2 = v, d -> d.bossWaveSize2).add()
+                .append(new KeyedCodec<>("@BossWaveNpc3", Codec.STRING), (d, v) -> d.bossWaveNpc3 = v, d -> d.bossWaveNpc3).add()
+                .append(new KeyedCodec<>("@BossWaveAmount3", Codec.STRING), (d, v) -> d.bossWaveAmount3 = v, d -> d.bossWaveAmount3).add()
+                .append(new KeyedCodec<>("@BossWaveEvery3", Codec.STRING), (d, v) -> d.bossWaveEvery3 = v, d -> d.bossWaveEvery3).add()
+                .append(new KeyedCodec<>("@BossWaveHp3", Codec.STRING), (d, v) -> d.bossWaveHp3 = v, d -> d.bossWaveHp3).add()
+                .append(new KeyedCodec<>("@BossWaveDamage3", Codec.STRING), (d, v) -> d.bossWaveDamage3 = v, d -> d.bossWaveDamage3).add()
+                .append(new KeyedCodec<>("@BossWaveSize3", Codec.STRING), (d, v) -> d.bossWaveSize3 = v, d -> d.bossWaveSize3).add()
+                .append(new KeyedCodec<>("@BossWaveNpc4", Codec.STRING), (d, v) -> d.bossWaveNpc4 = v, d -> d.bossWaveNpc4).add()
+                .append(new KeyedCodec<>("@BossWaveAmount4", Codec.STRING), (d, v) -> d.bossWaveAmount4 = v, d -> d.bossWaveAmount4).add()
+                .append(new KeyedCodec<>("@BossWaveEvery4", Codec.STRING), (d, v) -> d.bossWaveEvery4 = v, d -> d.bossWaveEvery4).add()
+                .append(new KeyedCodec<>("@BossWaveHp4", Codec.STRING), (d, v) -> d.bossWaveHp4 = v, d -> d.bossWaveHp4).add()
+                .append(new KeyedCodec<>("@BossWaveDamage4", Codec.STRING), (d, v) -> d.bossWaveDamage4 = v, d -> d.bossWaveDamage4).add()
+                .append(new KeyedCodec<>("@BossWaveSize4", Codec.STRING), (d, v) -> d.bossWaveSize4 = v, d -> d.bossWaveSize4).add()
+                .append(new KeyedCodec<>("@BossWaveNpc5", Codec.STRING), (d, v) -> d.bossWaveNpc5 = v, d -> d.bossWaveNpc5).add()
+                .append(new KeyedCodec<>("@BossWaveAmount5", Codec.STRING), (d, v) -> d.bossWaveAmount5 = v, d -> d.bossWaveAmount5).add()
+                .append(new KeyedCodec<>("@BossWaveEvery5", Codec.STRING), (d, v) -> d.bossWaveEvery5 = v, d -> d.bossWaveEvery5).add()
+                .append(new KeyedCodec<>("@BossWaveHp5", Codec.STRING), (d, v) -> d.bossWaveHp5 = v, d -> d.bossWaveHp5).add()
+                .append(new KeyedCodec<>("@BossWaveDamage5", Codec.STRING), (d, v) -> d.bossWaveDamage5 = v, d -> d.bossWaveDamage5).add()
+                .append(new KeyedCodec<>("@BossWaveSize5", Codec.STRING), (d, v) -> d.bossWaveSize5 = v, d -> d.bossWaveSize5).add()
+                .append(new KeyedCodec<>("@BossWaveNpc6", Codec.STRING), (d, v) -> d.bossWaveNpc6 = v, d -> d.bossWaveNpc6).add()
+                .append(new KeyedCodec<>("@BossWaveAmount6", Codec.STRING), (d, v) -> d.bossWaveAmount6 = v, d -> d.bossWaveAmount6).add()
+                .append(new KeyedCodec<>("@BossWaveEvery6", Codec.STRING), (d, v) -> d.bossWaveEvery6 = v, d -> d.bossWaveEvery6).add()
+                .append(new KeyedCodec<>("@BossWaveHp6", Codec.STRING), (d, v) -> d.bossWaveHp6 = v, d -> d.bossWaveHp6).add()
+                .append(new KeyedCodec<>("@BossWaveDamage6", Codec.STRING), (d, v) -> d.bossWaveDamage6 = v, d -> d.bossWaveDamage6).add()
+                .append(new KeyedCodec<>("@BossWaveSize6", Codec.STRING), (d, v) -> d.bossWaveSize6 = v, d -> d.bossWaveSize6).add()
+                .append(new KeyedCodec<>("@BossWaveValue1", Codec.STRING), (d, v) -> d.bossWaveValue1 = v, d -> d.bossWaveValue1).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount1", Codec.STRING), (d, v) -> d.bossWaveRepeatCount1 = v, d -> d.bossWaveRepeatCount1).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec1", Codec.STRING), (d, v) -> d.bossWaveRepeatSec1 = v, d -> d.bossWaveRepeatSec1).add()
+                .append(new KeyedCodec<>("@BossWaveValue2", Codec.STRING), (d, v) -> d.bossWaveValue2 = v, d -> d.bossWaveValue2).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount2", Codec.STRING), (d, v) -> d.bossWaveRepeatCount2 = v, d -> d.bossWaveRepeatCount2).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec2", Codec.STRING), (d, v) -> d.bossWaveRepeatSec2 = v, d -> d.bossWaveRepeatSec2).add()
+                .append(new KeyedCodec<>("@BossWaveValue3", Codec.STRING), (d, v) -> d.bossWaveValue3 = v, d -> d.bossWaveValue3).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount3", Codec.STRING), (d, v) -> d.bossWaveRepeatCount3 = v, d -> d.bossWaveRepeatCount3).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec3", Codec.STRING), (d, v) -> d.bossWaveRepeatSec3 = v, d -> d.bossWaveRepeatSec3).add()
+                .append(new KeyedCodec<>("@BossWaveValue4", Codec.STRING), (d, v) -> d.bossWaveValue4 = v, d -> d.bossWaveValue4).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount4", Codec.STRING), (d, v) -> d.bossWaveRepeatCount4 = v, d -> d.bossWaveRepeatCount4).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec4", Codec.STRING), (d, v) -> d.bossWaveRepeatSec4 = v, d -> d.bossWaveRepeatSec4).add()
+                .append(new KeyedCodec<>("@BossWaveValue5", Codec.STRING), (d, v) -> d.bossWaveValue5 = v, d -> d.bossWaveValue5).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount5", Codec.STRING), (d, v) -> d.bossWaveRepeatCount5 = v, d -> d.bossWaveRepeatCount5).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec5", Codec.STRING), (d, v) -> d.bossWaveRepeatSec5 = v, d -> d.bossWaveRepeatSec5).add()
+                .append(new KeyedCodec<>("@BossWaveValue6", Codec.STRING), (d, v) -> d.bossWaveValue6 = v, d -> d.bossWaveValue6).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatCount6", Codec.STRING), (d, v) -> d.bossWaveRepeatCount6 = v, d -> d.bossWaveRepeatCount6).add()
+                .append(new KeyedCodec<>("@BossWaveRepeatSec6", Codec.STRING), (d, v) -> d.bossWaveRepeatSec6 = v, d -> d.bossWaveRepeatSec6).add()
+                .append(new KeyedCodec<>("@TimedAnnounceServerWide", Codec.STRING), (d, v) -> d.timedAnnounceServerWide = v, d -> d.timedAnnounceServerWide).add()
+                .append(new KeyedCodec<>("@TimedAnnounceWorldWide", Codec.STRING), (d, v) -> d.timedAnnounceWorldWide = v, d -> d.timedAnnounceWorldWide).add()
+                .append(new KeyedCodec<>("@TimedAnnounceText", Codec.STRING), (d, v) -> d.timedAnnounceText = v, d -> d.timedAnnounceText).add()
+
+                .append(new KeyedCodec<>("@BossLootName1", Codec.STRING), (d, v) -> d.bossLootName1 = v, d -> d.bossLootName1).add()
+                .append(new KeyedCodec<>("@BossLootMin1", Codec.STRING), (d, v) -> d.bossLootMin1 = v, d -> d.bossLootMin1).add()
+                .append(new KeyedCodec<>("@BossLootMax1", Codec.STRING), (d, v) -> d.bossLootMax1 = v, d -> d.bossLootMax1).add()
+                .append(new KeyedCodec<>("@BossLootChance1", Codec.STRING), (d, v) -> d.bossLootChance1 = v, d -> d.bossLootChance1).add()
+
+                .append(new KeyedCodec<>("@BossLootName2", Codec.STRING), (d, v) -> d.bossLootName2 = v, d -> d.bossLootName2).add()
+                .append(new KeyedCodec<>("@BossLootMin2", Codec.STRING), (d, v) -> d.bossLootMin2 = v, d -> d.bossLootMin2).add()
+                .append(new KeyedCodec<>("@BossLootMax2", Codec.STRING), (d, v) -> d.bossLootMax2 = v, d -> d.bossLootMax2).add()
+                .append(new KeyedCodec<>("@BossLootChance2", Codec.STRING), (d, v) -> d.bossLootChance2 = v, d -> d.bossLootChance2).add()
+
+                .append(new KeyedCodec<>("@BossLootName3", Codec.STRING), (d, v) -> d.bossLootName3 = v, d -> d.bossLootName3).add()
+                .append(new KeyedCodec<>("@BossLootMin3", Codec.STRING), (d, v) -> d.bossLootMin3 = v, d -> d.bossLootMin3).add()
+                .append(new KeyedCodec<>("@BossLootMax3", Codec.STRING), (d, v) -> d.bossLootMax3 = v, d -> d.bossLootMax3).add()
+                .append(new KeyedCodec<>("@BossLootChance3", Codec.STRING), (d, v) -> d.bossLootChance3 = v, d -> d.bossLootChance3).add()
+
+                .append(new KeyedCodec<>("@BossLootName4", Codec.STRING), (d, v) -> d.bossLootName4 = v, d -> d.bossLootName4).add()
+                .append(new KeyedCodec<>("@BossLootMin4", Codec.STRING), (d, v) -> d.bossLootMin4 = v, d -> d.bossLootMin4).add()
+                .append(new KeyedCodec<>("@BossLootMax4", Codec.STRING), (d, v) -> d.bossLootMax4 = v, d -> d.bossLootMax4).add()
+                .append(new KeyedCodec<>("@BossLootChance4", Codec.STRING), (d, v) -> d.bossLootChance4 = v, d -> d.bossLootChance4).add()
+
+                .append(new KeyedCodec<>("@BossLootName5", Codec.STRING), (d, v) -> d.bossLootName5 = v, d -> d.bossLootName5).add()
+                .append(new KeyedCodec<>("@BossLootMin5", Codec.STRING), (d, v) -> d.bossLootMin5 = v, d -> d.bossLootMin5).add()
+                .append(new KeyedCodec<>("@BossLootMax5", Codec.STRING), (d, v) -> d.bossLootMax5 = v, d -> d.bossLootMax5).add()
+                .append(new KeyedCodec<>("@BossLootChance5", Codec.STRING), (d, v) -> d.bossLootChance5 = v, d -> d.bossLootChance5).add()
+
+                .append(new KeyedCodec<>("@BossLootName6", Codec.STRING), (d, v) -> d.bossLootName6 = v, d -> d.bossLootName6).add()
+                .append(new KeyedCodec<>("@BossLootMin6", Codec.STRING), (d, v) -> d.bossLootMin6 = v, d -> d.bossLootMin6).add()
+                .append(new KeyedCodec<>("@BossLootMax6", Codec.STRING), (d, v) -> d.bossLootMax6 = v, d -> d.bossLootMax6).add()
+                .append(new KeyedCodec<>("@BossLootChance6", Codec.STRING), (d, v) -> d.bossLootChance6 = v, d -> d.bossLootChance6).add()
+
+                .append(new KeyedCodec<>("@BossLootName7", Codec.STRING), (d, v) -> d.bossLootName7 = v, d -> d.bossLootName7).add()
+                .append(new KeyedCodec<>("@BossLootMin7", Codec.STRING), (d, v) -> d.bossLootMin7 = v, d -> d.bossLootMin7).add()
+                .append(new KeyedCodec<>("@BossLootMax7", Codec.STRING), (d, v) -> d.bossLootMax7 = v, d -> d.bossLootMax7).add()
+                .append(new KeyedCodec<>("@BossLootChance7", Codec.STRING), (d, v) -> d.bossLootChance7 = v, d -> d.bossLootChance7).add()
+
+                .append(new KeyedCodec<>("@BossLootName8", Codec.STRING), (d, v) -> d.bossLootName8 = v, d -> d.bossLootName8).add()
+                .append(new KeyedCodec<>("@BossLootMin8", Codec.STRING), (d, v) -> d.bossLootMin8 = v, d -> d.bossLootMin8).add()
+                .append(new KeyedCodec<>("@BossLootMax8", Codec.STRING), (d, v) -> d.bossLootMax8 = v, d -> d.bossLootMax8).add()
+                .append(new KeyedCodec<>("@BossLootChance8", Codec.STRING), (d, v) -> d.bossLootChance8 = v, d -> d.bossLootChance8).add()
+                .build();
+        public String action;
         public String arenaName;
         public String arenaX;
         public String arenaY;
         public String arenaZ;
         public String shopEditArenaId;
-
         public String bossEditName;
         public String bossEditNpcId;
         public String bossEditTier;
@@ -3168,7 +3453,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String bossEditExtraWaves;
         public String bossEditExtraMobsPerWave;
         public String bossEditLootRadius;
-
         public String bossWaveRandomLocations;
         public String bossWaveRandomRadius;
         public String bossWaveTimeSec;
@@ -3229,42 +3513,34 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String timedAnnounceServerWide;
         public String timedAnnounceWorldWide;
         public String timedAnnounceText;
-
         public String bossLootName1;
         public String bossLootMin1;
         public String bossLootMax1;
         public String bossLootChance1;
-
         public String bossLootName2;
         public String bossLootMin2;
         public String bossLootMax2;
         public String bossLootChance2;
-
         public String bossLootName3;
         public String bossLootMin3;
         public String bossLootMax3;
         public String bossLootChance3;
-
         public String bossLootName4;
         public String bossLootMin4;
         public String bossLootMax4;
         public String bossLootChance4;
-
         public String bossLootName5;
         public String bossLootMin5;
         public String bossLootMax5;
         public String bossLootChance5;
-
         public String bossLootName6;
         public String bossLootMin6;
         public String bossLootMax6;
         public String bossLootChance6;
-
         public String bossLootName7;
         public String bossLootMin7;
         public String bossLootMax7;
         public String bossLootChance7;
-
         public String bossLootName8;
         public String bossLootMin8;
         public String bossLootMax8;
@@ -3433,151 +3709,5 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 default -> "";
             };
         }
-
-        public static final BuilderCodec<ConfigEventData> CODEC = BuilderCodec.builder(
-                        ConfigEventData.class,
-                        ConfigEventData::new
-                )
-                .append(new KeyedCodec<>("Action", Codec.STRING), (d, v) -> d.action = v, d -> d.action).add()
-
-                .append(new KeyedCodec<>("@ArenaName", Codec.STRING), (d, v) -> d.arenaName = v, d -> d.arenaName).add()
-                .append(new KeyedCodec<>("@ArenaX", Codec.STRING), (d, v) -> d.arenaX = v, d -> d.arenaX).add()
-                .append(new KeyedCodec<>("@ArenaY", Codec.STRING), (d, v) -> d.arenaY = v, d -> d.arenaY).add()
-                .append(new KeyedCodec<>("@ArenaZ", Codec.STRING), (d, v) -> d.arenaZ = v, d -> d.arenaZ).add()
-                .append(new KeyedCodec<>("@ShopEditArenaId", Codec.STRING), (d, v) -> d.shopEditArenaId = v, d -> d.shopEditArenaId).add()
-
-                .append(new KeyedCodec<>("@BossEditName", Codec.STRING), (d, v) -> d.bossEditName = v, d -> d.bossEditName).add()
-                .append(new KeyedCodec<>("@BossEditNpcId", Codec.STRING), (d, v) -> d.bossEditNpcId = v, d -> d.bossEditNpcId).add()
-                .append(new KeyedCodec<>("@BossEditTier", Codec.STRING), (d, v) -> d.bossEditTier = v, d -> d.bossEditTier).add()
-                .append(new KeyedCodec<>("@BossEditAmount", Codec.STRING), (d, v) -> d.bossEditAmount = v, d -> d.bossEditAmount).add()
-                .append(new KeyedCodec<>("@BossEditLevelOverride", Codec.STRING), (d, v) -> d.bossEditLevelOverride = v, d -> d.bossEditLevelOverride).add()
-                .append(new KeyedCodec<>("@BossEditHp", Codec.STRING), (d, v) -> d.bossEditHp = v, d -> d.bossEditHp).add()
-                .append(new KeyedCodec<>("@BossEditDamage", Codec.STRING), (d, v) -> d.bossEditDamage = v, d -> d.bossEditDamage).add()
-                .append(new KeyedCodec<>("@BossEditSpeed", Codec.STRING), (d, v) -> d.bossEditSpeed = v, d -> d.bossEditSpeed).add()
-                .append(new KeyedCodec<>("@BossEditSize", Codec.STRING), (d, v) -> d.bossEditSize = v, d -> d.bossEditSize).add()
-                .append(new KeyedCodec<>("@BossEditAttackRate", Codec.STRING), (d, v) -> d.bossEditAttackRate = v, d -> d.bossEditAttackRate).add()
-                .append(new KeyedCodec<>("@BossEditAbilityCooldown", Codec.STRING), (d, v) -> d.bossEditAbilityCooldown = v, d -> d.bossEditAbilityCooldown).add()
-                .append(new KeyedCodec<>("@BossEditKnockbackGiven", Codec.STRING), (d, v) -> d.bossEditKnockbackGiven = v, d -> d.bossEditKnockbackGiven).add()
-                .append(new KeyedCodec<>("@BossEditKnockbackTaken", Codec.STRING), (d, v) -> d.bossEditKnockbackTaken = v, d -> d.bossEditKnockbackTaken).add()
-                .append(new KeyedCodec<>("@BossEditTurnRate", Codec.STRING), (d, v) -> d.bossEditTurnRate = v, d -> d.bossEditTurnRate).add()
-                .append(new KeyedCodec<>("@BossEditRegen", Codec.STRING), (d, v) -> d.bossEditRegen = v, d -> d.bossEditRegen).add()
-                .append(new KeyedCodec<>("@BossEditPpHp", Codec.STRING), (d, v) -> d.bossEditPpHp = v, d -> d.bossEditPpHp).add()
-                .append(new KeyedCodec<>("@BossEditPpDamage", Codec.STRING), (d, v) -> d.bossEditPpDamage = v, d -> d.bossEditPpDamage).add()
-                .append(new KeyedCodec<>("@BossEditPpSpeed", Codec.STRING), (d, v) -> d.bossEditPpSpeed = v, d -> d.bossEditPpSpeed).add()
-                .append(new KeyedCodec<>("@BossEditPpSize", Codec.STRING), (d, v) -> d.bossEditPpSize = v, d -> d.bossEditPpSize).add()
-                .append(new KeyedCodec<>("@BossEditPpAttackRate", Codec.STRING), (d, v) -> d.bossEditPpAttackRate = v, d -> d.bossEditPpAttackRate).add()
-                .append(new KeyedCodec<>("@BossEditPpAbilityCooldown", Codec.STRING), (d, v) -> d.bossEditPpAbilityCooldown = v, d -> d.bossEditPpAbilityCooldown).add()
-                .append(new KeyedCodec<>("@BossEditPpKnockbackGiven", Codec.STRING), (d, v) -> d.bossEditPpKnockbackGiven = v, d -> d.bossEditPpKnockbackGiven).add()
-                .append(new KeyedCodec<>("@BossEditPpKnockbackTaken", Codec.STRING), (d, v) -> d.bossEditPpKnockbackTaken = v, d -> d.bossEditPpKnockbackTaken).add()
-                .append(new KeyedCodec<>("@BossEditPpTurnRate", Codec.STRING), (d, v) -> d.bossEditPpTurnRate = v, d -> d.bossEditPpTurnRate).add()
-                .append(new KeyedCodec<>("@BossEditPpRegen", Codec.STRING), (d, v) -> d.bossEditPpRegen = v, d -> d.bossEditPpRegen).add()
-                .append(new KeyedCodec<>("@BossEditWaves", Codec.STRING), (d, v) -> d.bossEditWaves = v, d -> d.bossEditWaves).add()
-                .append(new KeyedCodec<>("@BossEditExtraNpcId", Codec.STRING), (d, v) -> d.bossEditExtraNpcId = v, d -> d.bossEditExtraNpcId).add()
-                .append(new KeyedCodec<>("@BossEditExtraTimeLimit", Codec.STRING), (d, v) -> d.bossEditExtraTimeLimit = v, d -> d.bossEditExtraTimeLimit).add()
-                .append(new KeyedCodec<>("@BossEditExtraWaves", Codec.STRING), (d, v) -> d.bossEditExtraWaves = v, d -> d.bossEditExtraWaves).add()
-                .append(new KeyedCodec<>("@BossEditExtraMobsPerWave", Codec.STRING), (d, v) -> d.bossEditExtraMobsPerWave = v, d -> d.bossEditExtraMobsPerWave).add()
-                .append(new KeyedCodec<>("@BossEditLootRadius", Codec.STRING), (d, v) -> d.bossEditLootRadius = v, d -> d.bossEditLootRadius).add()
-
-                .append(new KeyedCodec<>("@BossWaveRandomLocations", Codec.STRING), (d, v) -> d.bossWaveRandomLocations = v, d -> d.bossWaveRandomLocations).add()
-                .append(new KeyedCodec<>("@BossWaveRandomRadius", Codec.STRING), (d, v) -> d.bossWaveRandomRadius = v, d -> d.bossWaveRandomRadius).add()
-                .append(new KeyedCodec<>("@BossWaveTimeSec", Codec.STRING), (d, v) -> d.bossWaveTimeSec = v, d -> d.bossWaveTimeSec).add()
-                .append(new KeyedCodec<>("@BossWaveNpc1", Codec.STRING), (d, v) -> d.bossWaveNpc1 = v, d -> d.bossWaveNpc1).add()
-                .append(new KeyedCodec<>("@BossWaveAmount1", Codec.STRING), (d, v) -> d.bossWaveAmount1 = v, d -> d.bossWaveAmount1).add()
-                .append(new KeyedCodec<>("@BossWaveEvery1", Codec.STRING), (d, v) -> d.bossWaveEvery1 = v, d -> d.bossWaveEvery1).add()
-                .append(new KeyedCodec<>("@BossWaveHp1", Codec.STRING), (d, v) -> d.bossWaveHp1 = v, d -> d.bossWaveHp1).add()
-                .append(new KeyedCodec<>("@BossWaveDamage1", Codec.STRING), (d, v) -> d.bossWaveDamage1 = v, d -> d.bossWaveDamage1).add()
-                .append(new KeyedCodec<>("@BossWaveSize1", Codec.STRING), (d, v) -> d.bossWaveSize1 = v, d -> d.bossWaveSize1).add()
-                .append(new KeyedCodec<>("@BossWaveNpc2", Codec.STRING), (d, v) -> d.bossWaveNpc2 = v, d -> d.bossWaveNpc2).add()
-                .append(new KeyedCodec<>("@BossWaveAmount2", Codec.STRING), (d, v) -> d.bossWaveAmount2 = v, d -> d.bossWaveAmount2).add()
-                .append(new KeyedCodec<>("@BossWaveEvery2", Codec.STRING), (d, v) -> d.bossWaveEvery2 = v, d -> d.bossWaveEvery2).add()
-                .append(new KeyedCodec<>("@BossWaveHp2", Codec.STRING), (d, v) -> d.bossWaveHp2 = v, d -> d.bossWaveHp2).add()
-                .append(new KeyedCodec<>("@BossWaveDamage2", Codec.STRING), (d, v) -> d.bossWaveDamage2 = v, d -> d.bossWaveDamage2).add()
-                .append(new KeyedCodec<>("@BossWaveSize2", Codec.STRING), (d, v) -> d.bossWaveSize2 = v, d -> d.bossWaveSize2).add()
-                .append(new KeyedCodec<>("@BossWaveNpc3", Codec.STRING), (d, v) -> d.bossWaveNpc3 = v, d -> d.bossWaveNpc3).add()
-                .append(new KeyedCodec<>("@BossWaveAmount3", Codec.STRING), (d, v) -> d.bossWaveAmount3 = v, d -> d.bossWaveAmount3).add()
-                .append(new KeyedCodec<>("@BossWaveEvery3", Codec.STRING), (d, v) -> d.bossWaveEvery3 = v, d -> d.bossWaveEvery3).add()
-                .append(new KeyedCodec<>("@BossWaveHp3", Codec.STRING), (d, v) -> d.bossWaveHp3 = v, d -> d.bossWaveHp3).add()
-                .append(new KeyedCodec<>("@BossWaveDamage3", Codec.STRING), (d, v) -> d.bossWaveDamage3 = v, d -> d.bossWaveDamage3).add()
-                .append(new KeyedCodec<>("@BossWaveSize3", Codec.STRING), (d, v) -> d.bossWaveSize3 = v, d -> d.bossWaveSize3).add()
-                .append(new KeyedCodec<>("@BossWaveNpc4", Codec.STRING), (d, v) -> d.bossWaveNpc4 = v, d -> d.bossWaveNpc4).add()
-                .append(new KeyedCodec<>("@BossWaveAmount4", Codec.STRING), (d, v) -> d.bossWaveAmount4 = v, d -> d.bossWaveAmount4).add()
-                .append(new KeyedCodec<>("@BossWaveEvery4", Codec.STRING), (d, v) -> d.bossWaveEvery4 = v, d -> d.bossWaveEvery4).add()
-                .append(new KeyedCodec<>("@BossWaveHp4", Codec.STRING), (d, v) -> d.bossWaveHp4 = v, d -> d.bossWaveHp4).add()
-                .append(new KeyedCodec<>("@BossWaveDamage4", Codec.STRING), (d, v) -> d.bossWaveDamage4 = v, d -> d.bossWaveDamage4).add()
-                .append(new KeyedCodec<>("@BossWaveSize4", Codec.STRING), (d, v) -> d.bossWaveSize4 = v, d -> d.bossWaveSize4).add()
-                .append(new KeyedCodec<>("@BossWaveNpc5", Codec.STRING), (d, v) -> d.bossWaveNpc5 = v, d -> d.bossWaveNpc5).add()
-                .append(new KeyedCodec<>("@BossWaveAmount5", Codec.STRING), (d, v) -> d.bossWaveAmount5 = v, d -> d.bossWaveAmount5).add()
-                .append(new KeyedCodec<>("@BossWaveEvery5", Codec.STRING), (d, v) -> d.bossWaveEvery5 = v, d -> d.bossWaveEvery5).add()
-                .append(new KeyedCodec<>("@BossWaveHp5", Codec.STRING), (d, v) -> d.bossWaveHp5 = v, d -> d.bossWaveHp5).add()
-                .append(new KeyedCodec<>("@BossWaveDamage5", Codec.STRING), (d, v) -> d.bossWaveDamage5 = v, d -> d.bossWaveDamage5).add()
-                .append(new KeyedCodec<>("@BossWaveSize5", Codec.STRING), (d, v) -> d.bossWaveSize5 = v, d -> d.bossWaveSize5).add()
-                .append(new KeyedCodec<>("@BossWaveNpc6", Codec.STRING), (d, v) -> d.bossWaveNpc6 = v, d -> d.bossWaveNpc6).add()
-                .append(new KeyedCodec<>("@BossWaveAmount6", Codec.STRING), (d, v) -> d.bossWaveAmount6 = v, d -> d.bossWaveAmount6).add()
-                .append(new KeyedCodec<>("@BossWaveEvery6", Codec.STRING), (d, v) -> d.bossWaveEvery6 = v, d -> d.bossWaveEvery6).add()
-                .append(new KeyedCodec<>("@BossWaveHp6", Codec.STRING), (d, v) -> d.bossWaveHp6 = v, d -> d.bossWaveHp6).add()
-                .append(new KeyedCodec<>("@BossWaveDamage6", Codec.STRING), (d, v) -> d.bossWaveDamage6 = v, d -> d.bossWaveDamage6).add()
-                .append(new KeyedCodec<>("@BossWaveSize6", Codec.STRING), (d, v) -> d.bossWaveSize6 = v, d -> d.bossWaveSize6).add()
-                .append(new KeyedCodec<>("@BossWaveValue1", Codec.STRING), (d, v) -> d.bossWaveValue1 = v, d -> d.bossWaveValue1).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatCount1", Codec.STRING), (d, v) -> d.bossWaveRepeatCount1 = v, d -> d.bossWaveRepeatCount1).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatSec1", Codec.STRING), (d, v) -> d.bossWaveRepeatSec1 = v, d -> d.bossWaveRepeatSec1).add()
-                .append(new KeyedCodec<>("@BossWaveValue2", Codec.STRING), (d, v) -> d.bossWaveValue2 = v, d -> d.bossWaveValue2).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatCount2", Codec.STRING), (d, v) -> d.bossWaveRepeatCount2 = v, d -> d.bossWaveRepeatCount2).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatSec2", Codec.STRING), (d, v) -> d.bossWaveRepeatSec2 = v, d -> d.bossWaveRepeatSec2).add()
-                .append(new KeyedCodec<>("@BossWaveValue3", Codec.STRING), (d, v) -> d.bossWaveValue3 = v, d -> d.bossWaveValue3).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatCount3", Codec.STRING), (d, v) -> d.bossWaveRepeatCount3 = v, d -> d.bossWaveRepeatCount3).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatSec3", Codec.STRING), (d, v) -> d.bossWaveRepeatSec3 = v, d -> d.bossWaveRepeatSec3).add()
-                .append(new KeyedCodec<>("@BossWaveValue4", Codec.STRING), (d, v) -> d.bossWaveValue4 = v, d -> d.bossWaveValue4).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatCount4", Codec.STRING), (d, v) -> d.bossWaveRepeatCount4 = v, d -> d.bossWaveRepeatCount4).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatSec4", Codec.STRING), (d, v) -> d.bossWaveRepeatSec4 = v, d -> d.bossWaveRepeatSec4).add()
-                .append(new KeyedCodec<>("@BossWaveValue5", Codec.STRING), (d, v) -> d.bossWaveValue5 = v, d -> d.bossWaveValue5).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatCount5", Codec.STRING), (d, v) -> d.bossWaveRepeatCount5 = v, d -> d.bossWaveRepeatCount5).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatSec5", Codec.STRING), (d, v) -> d.bossWaveRepeatSec5 = v, d -> d.bossWaveRepeatSec5).add()
-                .append(new KeyedCodec<>("@BossWaveValue6", Codec.STRING), (d, v) -> d.bossWaveValue6 = v, d -> d.bossWaveValue6).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatCount6", Codec.STRING), (d, v) -> d.bossWaveRepeatCount6 = v, d -> d.bossWaveRepeatCount6).add()
-                .append(new KeyedCodec<>("@BossWaveRepeatSec6", Codec.STRING), (d, v) -> d.bossWaveRepeatSec6 = v, d -> d.bossWaveRepeatSec6).add()
-                .append(new KeyedCodec<>("@TimedAnnounceServerWide", Codec.STRING), (d, v) -> d.timedAnnounceServerWide = v, d -> d.timedAnnounceServerWide).add()
-                .append(new KeyedCodec<>("@TimedAnnounceWorldWide", Codec.STRING), (d, v) -> d.timedAnnounceWorldWide = v, d -> d.timedAnnounceWorldWide).add()
-                .append(new KeyedCodec<>("@TimedAnnounceText", Codec.STRING), (d, v) -> d.timedAnnounceText = v, d -> d.timedAnnounceText).add()
-
-                .append(new KeyedCodec<>("@BossLootName1", Codec.STRING), (d, v) -> d.bossLootName1 = v, d -> d.bossLootName1).add()
-                .append(new KeyedCodec<>("@BossLootMin1", Codec.STRING), (d, v) -> d.bossLootMin1 = v, d -> d.bossLootMin1).add()
-                .append(new KeyedCodec<>("@BossLootMax1", Codec.STRING), (d, v) -> d.bossLootMax1 = v, d -> d.bossLootMax1).add()
-                .append(new KeyedCodec<>("@BossLootChance1", Codec.STRING), (d, v) -> d.bossLootChance1 = v, d -> d.bossLootChance1).add()
-
-                .append(new KeyedCodec<>("@BossLootName2", Codec.STRING), (d, v) -> d.bossLootName2 = v, d -> d.bossLootName2).add()
-                .append(new KeyedCodec<>("@BossLootMin2", Codec.STRING), (d, v) -> d.bossLootMin2 = v, d -> d.bossLootMin2).add()
-                .append(new KeyedCodec<>("@BossLootMax2", Codec.STRING), (d, v) -> d.bossLootMax2 = v, d -> d.bossLootMax2).add()
-                .append(new KeyedCodec<>("@BossLootChance2", Codec.STRING), (d, v) -> d.bossLootChance2 = v, d -> d.bossLootChance2).add()
-
-                .append(new KeyedCodec<>("@BossLootName3", Codec.STRING), (d, v) -> d.bossLootName3 = v, d -> d.bossLootName3).add()
-                .append(new KeyedCodec<>("@BossLootMin3", Codec.STRING), (d, v) -> d.bossLootMin3 = v, d -> d.bossLootMin3).add()
-                .append(new KeyedCodec<>("@BossLootMax3", Codec.STRING), (d, v) -> d.bossLootMax3 = v, d -> d.bossLootMax3).add()
-                .append(new KeyedCodec<>("@BossLootChance3", Codec.STRING), (d, v) -> d.bossLootChance3 = v, d -> d.bossLootChance3).add()
-
-                .append(new KeyedCodec<>("@BossLootName4", Codec.STRING), (d, v) -> d.bossLootName4 = v, d -> d.bossLootName4).add()
-                .append(new KeyedCodec<>("@BossLootMin4", Codec.STRING), (d, v) -> d.bossLootMin4 = v, d -> d.bossLootMin4).add()
-                .append(new KeyedCodec<>("@BossLootMax4", Codec.STRING), (d, v) -> d.bossLootMax4 = v, d -> d.bossLootMax4).add()
-                .append(new KeyedCodec<>("@BossLootChance4", Codec.STRING), (d, v) -> d.bossLootChance4 = v, d -> d.bossLootChance4).add()
-
-                .append(new KeyedCodec<>("@BossLootName5", Codec.STRING), (d, v) -> d.bossLootName5 = v, d -> d.bossLootName5).add()
-                .append(new KeyedCodec<>("@BossLootMin5", Codec.STRING), (d, v) -> d.bossLootMin5 = v, d -> d.bossLootMin5).add()
-                .append(new KeyedCodec<>("@BossLootMax5", Codec.STRING), (d, v) -> d.bossLootMax5 = v, d -> d.bossLootMax5).add()
-                .append(new KeyedCodec<>("@BossLootChance5", Codec.STRING), (d, v) -> d.bossLootChance5 = v, d -> d.bossLootChance5).add()
-
-                .append(new KeyedCodec<>("@BossLootName6", Codec.STRING), (d, v) -> d.bossLootName6 = v, d -> d.bossLootName6).add()
-                .append(new KeyedCodec<>("@BossLootMin6", Codec.STRING), (d, v) -> d.bossLootMin6 = v, d -> d.bossLootMin6).add()
-                .append(new KeyedCodec<>("@BossLootMax6", Codec.STRING), (d, v) -> d.bossLootMax6 = v, d -> d.bossLootMax6).add()
-                .append(new KeyedCodec<>("@BossLootChance6", Codec.STRING), (d, v) -> d.bossLootChance6 = v, d -> d.bossLootChance6).add()
-
-                .append(new KeyedCodec<>("@BossLootName7", Codec.STRING), (d, v) -> d.bossLootName7 = v, d -> d.bossLootName7).add()
-                .append(new KeyedCodec<>("@BossLootMin7", Codec.STRING), (d, v) -> d.bossLootMin7 = v, d -> d.bossLootMin7).add()
-                .append(new KeyedCodec<>("@BossLootMax7", Codec.STRING), (d, v) -> d.bossLootMax7 = v, d -> d.bossLootMax7).add()
-                .append(new KeyedCodec<>("@BossLootChance7", Codec.STRING), (d, v) -> d.bossLootChance7 = v, d -> d.bossLootChance7).add()
-
-                .append(new KeyedCodec<>("@BossLootName8", Codec.STRING), (d, v) -> d.bossLootName8 = v, d -> d.bossLootName8).add()
-                .append(new KeyedCodec<>("@BossLootMin8", Codec.STRING), (d, v) -> d.bossLootMin8 = v, d -> d.bossLootMin8).add()
-                .append(new KeyedCodec<>("@BossLootMax8", Codec.STRING), (d, v) -> d.bossLootMax8 = v, d -> d.bossLootMax8).add()
-                .append(new KeyedCodec<>("@BossLootChance8", Codec.STRING), (d, v) -> d.bossLootChance8 = v, d -> d.bossLootChance8).add()
-                .build();
     }
 }

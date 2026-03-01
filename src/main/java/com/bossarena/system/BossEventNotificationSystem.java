@@ -1,23 +1,65 @@
 package com.bossarena.system;
 
+import com.bossarena.BossArenaPlugin;
 import com.bossarena.loot.BossLootHandler;
+import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.component.system.tick.TickingSystem;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 
 import javax.annotation.Nonnull;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.UUID;
 
 public final class BossEventNotificationSystem extends TickingSystem<EntityStore> {
     private static final float UPDATE_INTERVAL_SECONDS = 1.0f;
+    private static final long MISSING_RECONCILE_GRACE_MS = 15_000L;
+    private static final double MISSING_RECONCILE_PLAYER_RADIUS = 192.0d;
 
     private final BossTrackingSystem trackingSystem;
+    private final Map<UUID, Long> missingBossSince = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> missingAddSince = new ConcurrentHashMap<>();
     private float elapsedSeconds;
 
     public BossEventNotificationSystem(BossTrackingSystem trackingSystem) {
         this.trackingSystem = trackingSystem;
+    }
+
+    private static boolean isEntityMissing(World world, UUID entityUuid) {
+        if (world == null || entityUuid == null) {
+            return true;
+        }
+        try {
+            var entityRef = world.getEntityRef(entityUuid);
+            return entityRef == null || !entityRef.isValid();
+        } catch (Exception ignored) {
+            return true;
+        }
+    }
+
+    private static boolean isMissingReconcileEligible(World world, Vector3d anchor) {
+        if (world == null || anchor == null) {
+            return false;
+        }
+        try {
+            for (var player : world.getPlayers()) {
+                if (player == null || player.getTransformComponent() == null) {
+                    continue;
+                }
+                Vector3d playerPos = player.getTransformComponent().getPosition();
+                if (playerPos == null) {
+                    continue;
+                }
+                if (playerPos.distanceSquaredTo(anchor) <= (MISSING_RECONCILE_PLAYER_RADIUS * MISSING_RECONCILE_PLAYER_RADIUS)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            // Best effort only; if this fails we skip reconcile.
+        }
+        return false;
     }
 
     @Override
@@ -44,30 +86,61 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
                     event.bossName,
                     event.aliveBossCount,
                     event.activeAddCount,
-                    null,
-                    event.remainingCountdownMillis
+                    event.awaitingPrimaryBossSpawn ? "Preparing encounter" : null,
+                    event.remainingCountdownMillis,
+                    true
             );
         }
     }
 
     private void reconcileMissingTrackedEntities() {
-        for (Map.Entry<UUID, BossTrackingSystem.BossData> entry : trackingSystem.snapshotTrackedBosses().entrySet()) {
+        long now = System.currentTimeMillis();
+        Map<UUID, BossTrackingSystem.BossData> trackedBosses = trackingSystem.snapshotTrackedBosses();
+        Map<UUID, UUID> trackedAdds = trackingSystem.snapshotTrackedAdds();
+        missingBossSince.keySet().retainAll(trackedBosses.keySet());
+        missingAddSince.keySet().retainAll(trackedAdds.keySet());
+
+        for (Map.Entry<UUID, BossTrackingSystem.BossData> entry : trackedBosses.entrySet()) {
             UUID bossUuid = entry.getKey();
             BossTrackingSystem.BossData bossData = entry.getValue();
             if (bossUuid == null || bossData == null) {
                 continue;
             }
-            if (!isEntityMissing(bossData.world, bossUuid)) {
+            if (!isMissingReconcileEligible(bossData.world, bossData.spawnLocation)) {
+                missingBossSince.remove(bossUuid);
                 continue;
             }
+            if (!isEntityMissing(bossData.world, bossUuid)) {
+                missingBossSince.remove(bossUuid);
+                continue;
+            }
+            long missingSince = missingBossSince.computeIfAbsent(bossUuid, ignored -> now);
+            if ((now - missingSince) < MISSING_RECONCILE_GRACE_MS) {
+                continue;
+            }
+            missingBossSince.remove(bossUuid);
 
-            BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.markBossDead(bossUuid);
+            // Capture context BEFORE marking dead
             BossTrackingSystem.BossEventContext eventContext = trackingSystem.getEventContext(bossUuid);
+            BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.markBossDead(bossUuid);
+
+            // Cleanup map marker
+            var plugin = BossArenaPlugin.getInstance();
+            if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
+                plugin.getTimedBossMapMarkerService().onTimedBossDespawn(bossData.world, bossUuid);
+            }
 
             if (pendingLoot != null) {
+                // Clear any remaining boss markers if event completed
+                if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
+                    for (java.util.UUID uuid : pendingLoot.bossUuids) {
+                        plugin.getTimedBossMapMarkerService().onTimedBossDespawn(pendingLoot.world, uuid);
+                    }
+                }
+
                 BossWaveNotificationService.notifyBossAliveStatus(
                         pendingLoot.world,
-                        pendingLoot.spawnLocation,
+                        pendingLoot.eventCenter != null ? pendingLoot.eventCenter : pendingLoot.spawnLocation,
                         pendingLoot.bossName,
                         0,
                         0,
@@ -91,7 +164,7 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
             }
         }
 
-        for (Map.Entry<UUID, UUID> entry : trackingSystem.snapshotTrackedAdds().entrySet()) {
+        for (Map.Entry<UUID, UUID> entry : trackedAdds.entrySet()) {
             UUID addUuid = entry.getKey();
             UUID bossUuid = entry.getValue();
             if (addUuid == null || bossUuid == null) {
@@ -101,17 +174,37 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
             BossTrackingSystem.BossData bossData = trackingSystem.getBossData(bossUuid);
             BossTrackingSystem.BossEventContext eventContext = trackingSystem.getEventContext(bossUuid);
             World world = bossData != null ? bossData.world : (eventContext != null ? eventContext.world : null);
-            if (!isEntityMissing(world, addUuid)) {
+            Vector3d anchor = bossData != null ? bossData.spawnLocation : (eventContext != null ? eventContext.spawnLocation : null);
+            if (!isMissingReconcileEligible(world, anchor)) {
+                missingAddSince.remove(addUuid);
                 continue;
             }
+            if (!isEntityMissing(world, addUuid)) {
+                missingAddSince.remove(addUuid);
+                continue;
+            }
+            long missingSince = missingAddSince.computeIfAbsent(addUuid, ignored -> now);
+            if ((now - missingSince) < MISSING_RECONCILE_GRACE_MS) {
+                continue;
+            }
+            missingAddSince.remove(addUuid);
 
-            BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.handleTrackedAddDeath(addUuid);
+            // Capture context BEFORE marking dead
             eventContext = trackingSystem.getEventContext(bossUuid);
+            BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.handleTrackedAddDeath(addUuid);
 
             if (pendingLoot != null) {
+                // Cleanup all boss markers for the completed event
+                var plugin = BossArenaPlugin.getInstance();
+                if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
+                    for (java.util.UUID buuid : pendingLoot.bossUuids) {
+                        plugin.getTimedBossMapMarkerService().onTimedBossDespawn(pendingLoot.world, buuid);
+                    }
+                }
+
                 BossWaveNotificationService.notifyBossAliveStatus(
                         pendingLoot.world,
-                        pendingLoot.spawnLocation,
+                        pendingLoot.eventCenter != null ? pendingLoot.eventCenter : pendingLoot.spawnLocation,
                         pendingLoot.bossName,
                         0,
                         0,
@@ -133,18 +226,6 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
                         eventContext.remainingCountdownMillis
                 );
             }
-        }
-    }
-
-    private static boolean isEntityMissing(World world, UUID entityUuid) {
-        if (world == null || entityUuid == null) {
-            return true;
-        }
-        try {
-            var entityRef = world.getEntityRef(entityUuid);
-            return entityRef == null || !entityRef.isValid();
-        } catch (Exception ignored) {
-            return true;
         }
     }
 }

@@ -4,8 +4,8 @@ import java.util.Locale;
 
 public final class BossShopItems {
     public static final String[] TIER_ORDER = new String[]{
-            "uncommon",
             "common",
+            "uncommon",
             "rare",
             "epic",
             "legendary"

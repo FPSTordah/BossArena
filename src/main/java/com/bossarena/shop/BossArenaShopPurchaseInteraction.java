@@ -69,14 +69,6 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
             return;
         }
 
-        if (cost > 0) {
-            ChargeResult result = chargeCost(plugin, player, playerRef, cost);
-            if (!result.success()) {
-                player.sendMessage(Message.raw(result.message()));
-                return;
-            }
-        }
-
         World world = player.getWorld();
         if (world == null) {
             player.sendMessage(Message.raw("Could not resolve world."));
@@ -84,7 +76,26 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
         }
 
         world.execute(() -> {
-            var uuid = plugin.getBossSpawnService().spawnBossFromJson(
+            BossSpawnService spawnService = plugin.getBossSpawnService();
+            if (spawnService == null) {
+                player.sendMessage(Message.raw("Boss spawn service is unavailable."));
+                return;
+            }
+
+            if (spawnService.hasAnyEventInProgress()) {
+                player.sendMessage(Message.raw("A boss event is already in progress. Wait for all bosses and waves to be cleared."));
+                return;
+            }
+
+            if (cost > 0) {
+                ChargeResult result = chargeCost(plugin, player, playerRef, cost);
+                if (!result.success()) {
+                    player.sendMessage(Message.raw(result.message()));
+                    return;
+                }
+            }
+
+            var uuid = spawnService.spawnBossFromJson(
                     player,
                     bossId,
                     world,

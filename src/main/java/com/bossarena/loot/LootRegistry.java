@@ -33,6 +33,11 @@ public class LootRegistry {
         } else {
             table.items.removeIf(item -> item == null);
         }
+        if (table.commands == null) {
+            table.commands = new ArrayList<>();
+        } else {
+            table.commands.removeIf(cmd -> cmd == null);
+        }
 
         String key = table.bossName.toLowerCase();
         LOOT_TABLES.put(key, table);
@@ -129,8 +134,7 @@ public class LootRegistry {
         LootTable exampleBossLoot = new LootTable("Example Boss", 40.0);
         exampleBossLoot.addItem(new LootItem("Ingredient_Fibre", 1.0, 4, 10));
         exampleBossLoot.addItem(new LootItem("Ingredient_Stick", 0.85, 2, 6));
-        exampleBossLoot.addItem(new LootItem("Ore_Copper", 0.70, 1, 4));
-        exampleBossLoot.addItem(new LootItem("Plant_Fruit_Berries_Red", 0.60, 2, 5));
+        exampleBossLoot.addItem(new LootItem("cmd:tell {player} You defeated the Example Boss!", 1.0, 1, 1));
         register(exampleBossLoot);
 
         // My_Boss loot table

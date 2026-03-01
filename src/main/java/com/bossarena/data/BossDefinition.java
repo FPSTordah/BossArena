@@ -7,7 +7,7 @@ import java.util.Locale;
 public class BossDefinition {
     public String bossName;
     public String npcId;
-    public String tier = "uncommon";
+    public String tier = "common";
     public int amount;
     // 0 = default RPGLeveling behavior, >=1 forces a specific spawn level.
     public int levelOverride = 0;
@@ -59,155 +59,6 @@ public class BossDefinition {
         public List<WaveAdd> adds = new ArrayList<>();
         // Trigger-based wave schedule. If empty, legacy fields are auto-migrated.
         public List<ScheduledWave> scheduledWaves = new ArrayList<>();
-
-        public static class WaveAdd {
-            public String npcId;
-            public int mobsPerWave = 3;
-            // 1 = every wave, 2 = every 2nd wave, etc.
-            public int everyWave = 1;
-            public float hp = 1.0f;
-            public float damage = 1.0f;
-            public float size = 1.0f;
-        }
-
-        public static class ScheduledWave {
-            public String trigger = TRIGGER_AFTER_SPAWN_SECONDS;
-            // Seconds for time-based triggers, HP percent for hp trigger.
-            public double triggerValue = 0.0d;
-            // Number of executions. -1 = infinite.
-            public int repeatCount = 1;
-            // Repeat period in seconds for repeated schedules.
-            public double repeatEverySeconds = 0.0d;
-            public List<WaveAdd> adds = new ArrayList<>();
-        }
-
-        public void sanitize() {
-            if (timeLimitMs < 0L) {
-                timeLimitMs = 0L;
-            }
-            if (waves < -1) {
-                waves = -1;
-            }
-            if (mobsPerWave < 1) {
-                mobsPerWave = 3;
-            }
-            randomSpawnRadius = sanitizeWaveRandomSpawnRadius(randomSpawnRadius);
-
-            if (adds == null) {
-                adds = new ArrayList<>();
-            }
-            if (scheduledWaves == null) {
-                scheduledWaves = new ArrayList<>();
-            }
-
-            List<WaveAdd> cleaned = new ArrayList<>();
-            for (WaveAdd add : adds) {
-                WaveAdd sanitized = sanitizeWaveAdd(add, true);
-                if (sanitized != null) {
-                    cleaned.add(sanitized);
-                }
-            }
-            adds = cleaned;
-
-            if (!adds.isEmpty()) {
-                // Keep legacy fields in sync with first configured add for UI/backward compatibility.
-                WaveAdd first = adds.get(0);
-                npcId = first.npcId;
-                mobsPerWave = first.mobsPerWave;
-            } else {
-                String legacyNpcId = npcId == null ? "" : npcId.trim();
-                if (!legacyNpcId.isEmpty()) {
-                    WaveAdd legacy = new WaveAdd();
-                    legacy.npcId = legacyNpcId;
-                    legacy.mobsPerWave = Math.max(1, mobsPerWave);
-                    legacy.everyWave = 1;
-                    adds.add(legacy);
-                    npcId = legacy.npcId;
-                    mobsPerWave = legacy.mobsPerWave;
-                }
-            }
-
-            List<ScheduledWave> cleanedWaves = new ArrayList<>();
-            for (ScheduledWave wave : scheduledWaves) {
-                ScheduledWave sanitized = sanitizeScheduledWave(wave);
-                if (sanitized != null) {
-                    cleanedWaves.add(sanitized);
-                }
-            }
-            scheduledWaves = cleanedWaves;
-
-            if (scheduledWaves.isEmpty()) {
-                scheduledWaves = migrateLegacyWaves(adds, waves, timeLimitMs);
-            }
-        }
-
-        public boolean hasConfiguredAdds() {
-            sanitize();
-            if (!adds.isEmpty()) {
-                return true;
-            }
-            for (ScheduledWave wave : scheduledWaves) {
-                if (wave != null && wave.adds != null && !wave.adds.isEmpty()) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        public List<WaveAdd> getConfiguredAdds() {
-            sanitize();
-            return new ArrayList<>(adds);
-        }
-
-        public List<ScheduledWave> getResolvedScheduledWaves() {
-            sanitize();
-            List<ScheduledWave> out = new ArrayList<>();
-            for (ScheduledWave wave : scheduledWaves) {
-                if (wave == null || wave.adds == null || wave.adds.isEmpty()) {
-                    continue;
-                }
-                out.add(copyScheduledWave(wave));
-            }
-            return out;
-        }
-
-        public void setPrimaryAdd(String inputNpcId, int inputMobsPerWave) {
-            String normalizedNpcId = inputNpcId == null ? "" : inputNpcId.trim();
-            npcId = normalizedNpcId;
-            mobsPerWave = Math.max(1, inputMobsPerWave);
-
-            if (adds == null) {
-                adds = new ArrayList<>();
-            }
-            if (normalizedNpcId.isEmpty()) {
-                if (!adds.isEmpty()) {
-                    adds.remove(0);
-                }
-                sanitize();
-                return;
-            }
-
-            WaveAdd primary;
-            if (adds.isEmpty()) {
-                primary = new WaveAdd();
-                adds.add(primary);
-            } else {
-                primary = adds.get(0);
-            }
-
-            primary.npcId = normalizedNpcId;
-            primary.mobsPerWave = Math.max(1, inputMobsPerWave);
-            if (primary.everyWave < 1) {
-                primary.everyWave = 1;
-            }
-
-            sanitize();
-        }
-
-        public double getWaveRandomSpawnRadius() {
-            sanitize();
-            return randomSpawnRadius;
-        }
 
         private static double sanitizeWaveRandomSpawnRadius(double radius) {
             if (!Double.isFinite(radius) || radius < 0.0d) {
@@ -359,9 +210,159 @@ public class BossDefinition {
                     .replace('-', '_')
                     .replace(' ', '_');
             return switch (normalized) {
-                case TRIGGER_BEFORE_BOSS, TRIGGER_ON_SPAWN, TRIGGER_AFTER_SPAWN_SECONDS, TRIGGER_SINCE_LAST_WAVE, TRIGGER_BOSS_HP_PERCENT -> normalized;
+                case TRIGGER_BEFORE_BOSS, TRIGGER_ON_SPAWN, TRIGGER_AFTER_SPAWN_SECONDS, TRIGGER_SINCE_LAST_WAVE,
+                     TRIGGER_BOSS_HP_PERCENT -> normalized;
                 default -> null;
             };
+        }
+
+        public void sanitize() {
+            if (timeLimitMs < 0L) {
+                timeLimitMs = 0L;
+            }
+            if (waves < -1) {
+                waves = -1;
+            }
+            if (mobsPerWave < 1) {
+                mobsPerWave = 3;
+            }
+            randomSpawnRadius = sanitizeWaveRandomSpawnRadius(randomSpawnRadius);
+
+            if (adds == null) {
+                adds = new ArrayList<>();
+            }
+            if (scheduledWaves == null) {
+                scheduledWaves = new ArrayList<>();
+            }
+
+            List<WaveAdd> cleaned = new ArrayList<>();
+            for (WaveAdd add : adds) {
+                WaveAdd sanitized = sanitizeWaveAdd(add, true);
+                if (sanitized != null) {
+                    cleaned.add(sanitized);
+                }
+            }
+            adds = cleaned;
+
+            if (!adds.isEmpty()) {
+                // Keep legacy fields in sync with first configured add for UI/backward compatibility.
+                WaveAdd first = adds.get(0);
+                npcId = first.npcId;
+                mobsPerWave = first.mobsPerWave;
+            } else {
+                String legacyNpcId = npcId == null ? "" : npcId.trim();
+                if (!legacyNpcId.isEmpty()) {
+                    WaveAdd legacy = new WaveAdd();
+                    legacy.npcId = legacyNpcId;
+                    legacy.mobsPerWave = Math.max(1, mobsPerWave);
+                    legacy.everyWave = 1;
+                    adds.add(legacy);
+                    npcId = legacy.npcId;
+                    mobsPerWave = legacy.mobsPerWave;
+                }
+            }
+
+            List<ScheduledWave> cleanedWaves = new ArrayList<>();
+            for (ScheduledWave wave : scheduledWaves) {
+                ScheduledWave sanitized = sanitizeScheduledWave(wave);
+                if (sanitized != null) {
+                    cleanedWaves.add(sanitized);
+                }
+            }
+            scheduledWaves = cleanedWaves;
+
+            if (scheduledWaves.isEmpty()) {
+                scheduledWaves = migrateLegacyWaves(adds, waves, timeLimitMs);
+            }
+        }
+
+        public boolean hasConfiguredAdds() {
+            sanitize();
+            if (!adds.isEmpty()) {
+                return true;
+            }
+            for (ScheduledWave wave : scheduledWaves) {
+                if (wave != null && wave.adds != null && !wave.adds.isEmpty()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public List<WaveAdd> getConfiguredAdds() {
+            sanitize();
+            return new ArrayList<>(adds);
+        }
+
+        public List<ScheduledWave> getResolvedScheduledWaves() {
+            sanitize();
+            List<ScheduledWave> out = new ArrayList<>();
+            for (ScheduledWave wave : scheduledWaves) {
+                if (wave == null || wave.adds == null || wave.adds.isEmpty()) {
+                    continue;
+                }
+                out.add(copyScheduledWave(wave));
+            }
+            return out;
+        }
+
+        public void setPrimaryAdd(String inputNpcId, int inputMobsPerWave) {
+            String normalizedNpcId = inputNpcId == null ? "" : inputNpcId.trim();
+            npcId = normalizedNpcId;
+            mobsPerWave = Math.max(1, inputMobsPerWave);
+
+            if (adds == null) {
+                adds = new ArrayList<>();
+            }
+            if (normalizedNpcId.isEmpty()) {
+                if (!adds.isEmpty()) {
+                    adds.remove(0);
+                }
+                sanitize();
+                return;
+            }
+
+            WaveAdd primary;
+            if (adds.isEmpty()) {
+                primary = new WaveAdd();
+                adds.add(primary);
+            } else {
+                primary = adds.get(0);
+            }
+
+            primary.npcId = normalizedNpcId;
+            primary.mobsPerWave = Math.max(1, inputMobsPerWave);
+            if (primary.everyWave < 1) {
+                primary.everyWave = 1;
+            }
+
+            sanitize();
+        }
+
+        public double getWaveRandomSpawnRadius() {
+            sanitize();
+            return randomSpawnRadius;
+        }
+
+        public static class WaveAdd {
+            public String npcId;
+            public int mobsPerWave = 3;
+            // 1 = every wave, 2 = every 2nd wave, etc.
+            public int everyWave = 1;
+            public float hp = 1.0f;
+            public float damage = 1.0f;
+            public float size = 1.0f;
+        }
+
+        public static class ScheduledWave {
+            public String trigger = TRIGGER_AFTER_SPAWN_SECONDS;
+            // Seconds for time-based triggers, HP percent for hp trigger.
+            public double triggerValue = 0.0d;
+            // Number of executions. -1 = infinite.
+            public int repeatCount = 1;
+            // Repeat period in seconds for repeated schedules.
+            public double repeatEverySeconds = 0.0d;
+            public List<WaveAdd> adds = new ArrayList<>();
         }
     }
 }

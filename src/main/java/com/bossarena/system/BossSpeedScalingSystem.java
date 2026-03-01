@@ -48,6 +48,35 @@ public final class BossSpeedScalingSystem extends TickingSystem<EntityStore> {
         this.trackingSystem = trackingSystem;
     }
 
+    private static float clampMultiplier(float value) {
+        if (!Float.isFinite(value) || value <= 0.0f) {
+            return 1.0f;
+        }
+        return value;
+    }
+
+    private static Field resolveField(Class<?> owner, String name) {
+        try {
+            Field field = owner.getDeclaredField(name);
+            field.setAccessible(true);
+            return field;
+        } catch (Exception e) {
+            LOGGER.warning("Boss scaling support disabled for " + owner.getSimpleName() + "." + name + ".");
+            return null;
+        }
+    }
+
+    private static Field resolveCachedSpeedField() {
+        try {
+            Field field = NPCEntity.class.getDeclaredField("cachedEntityHorizontalSpeedMultiplier");
+            field.setAccessible(true);
+            return field;
+        } catch (Exception e) {
+            LOGGER.warning("Boss speed scaling disabled: unable to access NPC speed cache field.");
+            return null;
+        }
+    }
+
     @Override
     public void tick(float dt, int index, @Nonnull Store<EntityStore> store) {
         if (trackingSystem == null || NPC_CACHED_SPEED_FIELD == null) {
@@ -133,7 +162,12 @@ public final class BossSpeedScalingSystem extends TickingSystem<EntityStore> {
             }
             float desiredSpeed = clampMultiplier(naturalSpeed * speedMultiplier);
             float current = NPC_CACHED_SPEED_FIELD.getFloat(npcEntity);
+
             if (Math.abs(current - desiredSpeed) > EPSILON || current == NPC_SPEED_UNSET) {
+                if (desiredSpeed < 0.1f) {
+                    LOGGER.warning("Setting very low speed (" + desiredSpeed + ") for boss " + entityUuid +
+                            ". Natural: " + naturalSpeed + ", Multiplier: " + speedMultiplier);
+                }
                 NPC_CACHED_SPEED_FIELD.setFloat(npcEntity, desiredSpeed);
             }
         } catch (Exception e) {
@@ -308,35 +342,6 @@ public final class BossSpeedScalingSystem extends TickingSystem<EntityStore> {
             lastHealthByEntity.put(entityUuid, target);
         } catch (Exception e) {
             LOGGER.log(Level.FINE, "Failed to apply regeneration scaling for entity " + entityUuid, e);
-        }
-    }
-
-    private static float clampMultiplier(float value) {
-        if (!Float.isFinite(value) || value <= 0.0f) {
-            return 1.0f;
-        }
-        return value;
-    }
-
-    private static Field resolveField(Class<?> owner, String name) {
-        try {
-            Field field = owner.getDeclaredField(name);
-            field.setAccessible(true);
-            return field;
-        } catch (Exception e) {
-            LOGGER.warning("Boss scaling support disabled for " + owner.getSimpleName() + "." + name + ".");
-            return null;
-        }
-    }
-
-    private static Field resolveCachedSpeedField() {
-        try {
-            Field field = NPCEntity.class.getDeclaredField("cachedEntityHorizontalSpeedMultiplier");
-            field.setAccessible(true);
-            return field;
-        } catch (Exception e) {
-            LOGGER.warning("Boss speed scaling disabled: unable to access NPC speed cache field.");
-            return null;
         }
     }
 }

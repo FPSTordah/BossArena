@@ -16,6 +16,8 @@ import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.util.FillerBlockUtil;
+import com.hypixel.hytale.server.core.command.system.CommandManager;
+import com.hypixel.hytale.server.core.console.ConsoleSender;
 import com.hypixel.hytale.function.consumer.TriIntConsumer;
 
 import java.io.IOException;
@@ -33,23 +35,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class BossLootHandler {
+    public static final Queue<PendingLootSpawn> PENDING_SPAWNS = new ConcurrentLinkedQueue<>();
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int PERSISTENCE_VERSION = 1;
-
-    public static class PendingLootSpawn {
-        public final World world;
-        public final Vector3d location;
-        public final String bossName;
-
-        public PendingLootSpawn(World world, Vector3d location, String bossName) {
-            this.world = world;
-            this.location = new Vector3d(location.x, location.y, location.z);
-            this.bossName = bossName;
-        }
-    }
-
-    public static final Queue<PendingLootSpawn> PENDING_SPAWNS = new ConcurrentLinkedQueue<>();
     private static final Map<Vector3d, Map<UUID, List<GeneratedLoot>>> CHEST_LOOT = new ConcurrentHashMap<>();
     private static final Map<Vector3d, String> CHEST_WORLD = new ConcurrentHashMap<>();
     private static final Map<Vector3d, ScheduledFuture<?>> CHEST_EXPIRY_TASKS = new ConcurrentHashMap<>();
@@ -60,32 +49,10 @@ public class BossLootHandler {
                 t.setDaemon(true);
                 return t;
             });
-    private static final long CHEST_EXPIRY_MS = 30_000L;
+    private static final long CHEST_CLOSE_EXPIRY_MS = 30_000L;
+    private static final long CHEST_UNTOUCHED_EXPIRY_MS = 60_000L;
+    private static final Random RANDOM = new Random();
     private static volatile Path persistencePath;
-
-    private static final class PersistedLootState {
-        int version = PERSISTENCE_VERSION;
-        List<PersistedChest> chests = new ArrayList<>();
-    }
-
-    private static final class PersistedChest {
-        String world;
-        double x;
-        double y;
-        double z;
-        Long expiresAtEpochMs;
-        List<PersistedPlayerLoot> players = new ArrayList<>();
-    }
-
-    private static final class PersistedPlayerLoot {
-        String playerUuid;
-        List<PersistedLootItem> loot = new ArrayList<>();
-    }
-
-    private static final class PersistedLootItem {
-        String itemId;
-        int amount;
-    }
 
     public static synchronized void initializePersistence(Path stateFilePath) {
         persistencePath = stateFilePath;
@@ -144,12 +111,15 @@ public class BossLootHandler {
         }
 
         LOGGER.info("Loot table found. Radius: " + table.lootRadius);
-        if (table.items == null || table.items.isEmpty()) {
-            LOGGER.warning("Loot table has no items for boss: " + bossName);
+        boolean hasItems = table.items != null && !table.items.isEmpty();
+        boolean hasCommands = table.commands != null && !table.commands.isEmpty();
+
+        if (!hasItems && !hasCommands) {
+            LOGGER.warning("Loot table has no items or commands for boss: " + bossName);
             return;
         }
 
-        List<UUID> eligiblePlayers = new ArrayList<>();
+        List<PlayerRef> eligiblePlayers = new ArrayList<>();
         var playerRefs = world.getPlayerRefs();
         LOGGER.info("Total players in world: " + playerRefs.size());
 
@@ -168,7 +138,7 @@ public class BossLootHandler {
             LOGGER.info("Player " + playerUuid + " at " + playerPos + ", distance: " + distance);
 
             if (distance <= table.lootRadius) {
-                eligiblePlayers.add(playerUuid);
+                eligiblePlayers.add(ref);
                 LOGGER.info("  -> Player IS eligible!");
             } else {
                 LOGGER.info("  -> Player too far (radius: " + table.lootRadius + ")");
@@ -182,12 +152,43 @@ public class BossLootHandler {
             return;
         }
 
+        // Execute commands if any
+        if (hasCommands) {
+            for (PlayerRef player : eligiblePlayers) {
+                for (String cmd : table.commands) {
+                    executeConsoleCommand(player, cmd, bossName);
+                }
+            }
+        }
+
+        if (!hasItems) {
+            LOGGER.info("No items in loot table, skipping chest spawn.");
+            return;
+        }
+
         // Generate loot for each player
         Map<UUID, List<GeneratedLoot>> allPlayerLoot = new HashMap<>();
-        for (UUID playerUuid : eligiblePlayers) {
-            List<GeneratedLoot> loot = generateLootForPlayer(table);
-            allPlayerLoot.put(playerUuid, loot);
-            LOGGER.info("Generated loot for " + playerUuid + ": " + loot.size() + " items");
+        for (PlayerRef player : eligiblePlayers) {
+            List<GeneratedLoot> playerLoot = new ArrayList<>();
+            for (LootItem item : table.items) {
+                if (item == null || item.itemId == null) continue;
+                if (RANDOM.nextDouble() <= item.dropChance) {
+                    if (item.itemId.startsWith("cmd:")) {
+                        // Special case: itemId is a console command
+                        String cmd = item.itemId.substring(4).trim();
+                        executeConsoleCommand(player, cmd, bossName);
+                    } else {
+                        // Regular item loot
+                        int amount = item.minAmount + (item.maxAmount > item.minAmount
+                                ? RANDOM.nextInt(item.maxAmount - item.minAmount + 1)
+                                : 0);
+                        playerLoot.add(new GeneratedLoot(item.itemId, amount));
+                        LOGGER.info("  Added item loot for " + player.getUuid() + ": " + amount + "x " + item.itemId);
+                    }
+                }
+            }
+            allPlayerLoot.put(player.getUuid(), playerLoot);
+            LOGGER.info("Generated " + playerLoot.size() + " items for " + player.getUuid());
         }
 
         Vector3d chestCopy = normalizeChestKey(chestLocation);
@@ -199,6 +200,33 @@ public class BossLootHandler {
 
         // Spawn the chest
         spawnLootChest(world, chestCopy);
+        // Hard timeout while untouched: chest is removed if nobody opens it within 60s.
+        scheduleUntouchedChestExpiry(world, chestCopy);
+    }
+
+    private static void executeConsoleCommand(PlayerRef player, String cmd, String bossName) {
+        if (cmd == null || cmd.trim().isEmpty()) return;
+        CommandManager cm = CommandManager.get();
+        if (cm == null) {
+            LOGGER.warning("CommandManager is null, cannot execute command: " + cmd);
+            return;
+        }
+
+        String finalCmd = cmd
+                .replace("{player}", player.getUsername())
+                .replace("$Player", player.getUsername())
+                .replace("{player_uuid}", player.getUuid().toString())
+                .replace("{boss_name}", bossName);
+        // Ensure command doesn't start with /
+        if (finalCmd.startsWith("/")) {
+            finalCmd = finalCmd.substring(1);
+        }
+        try {
+            cm.handleCommand(ConsoleSender.INSTANCE, finalCmd);
+            LOGGER.info("Executed console command for player " + player.getUsername() + ": " + finalCmd);
+        } catch (Exception e) {
+            LOGGER.warning("Failed to execute console command: " + finalCmd + " Error: " + e.getMessage());
+        }
     }
 
     // Store loot at chest location
@@ -319,8 +347,21 @@ public class BossLootHandler {
         if (!isWorldMatch(world, key)) {
             return;
         }
-        long expiresAtEpochMs = System.currentTimeMillis() + CHEST_EXPIRY_MS;
-        scheduleChestExpiryInternal(world, key, CHEST_EXPIRY_MS, expiresAtEpochMs, true);
+        long expiresAtEpochMs = System.currentTimeMillis() + CHEST_CLOSE_EXPIRY_MS;
+        scheduleChestExpiryInternal(world, key, CHEST_CLOSE_EXPIRY_MS, expiresAtEpochMs, true);
+    }
+
+    public static void scheduleUntouchedChestExpiry(World world, Vector3d location) {
+        if (world == null || location == null) {
+            return;
+        }
+
+        Vector3d key = normalizeChestKey(location);
+        if (!isWorldMatch(world, key)) {
+            return;
+        }
+        long expiresAtEpochMs = System.currentTimeMillis() + CHEST_UNTOUCHED_EXPIRY_MS;
+        scheduleChestExpiryInternal(world, key, CHEST_UNTOUCHED_EXPIRY_MS, expiresAtEpochMs, true);
     }
 
     // Check if player has unclaimed loot at a location
@@ -342,51 +383,6 @@ public class BossLootHandler {
         return playerLoot.containsKey(playerUuid);
     }
 
-    // Generate loot for a single player
-    private static List<GeneratedLoot> generateLootForPlayer(LootTable table) {
-        List<GeneratedLoot> loot = new ArrayList<>();
-        Random random = new Random();
-
-        for (LootItem item : table.items) {  // Changed from table.loot to table.items
-            if (item == null) {
-                LOGGER.warning("Skipping null loot item entry in table: " + table.bossName);
-                continue;
-            }
-            if (item.itemId == null || item.itemId.isBlank()) {
-                LOGGER.warning("Skipping loot item with empty itemId in table: " + table.bossName);
-                continue;
-            }
-
-            double dropChance = item.dropChance;
-            if (Double.isNaN(dropChance)) {
-                LOGGER.warning("Skipping loot item with NaN dropChance: " + item.itemId + " in table: " + table.bossName);
-                continue;
-            }
-            if (dropChance < 0.0d) {
-                dropChance = 0.0d;
-            } else if (dropChance > 1.0d) {
-                dropChance = 1.0d;
-            }
-
-            int minAmount = Math.max(1, item.minAmount);
-            int maxAmount = Math.max(minAmount, item.maxAmount);
-            double roll = random.nextDouble();  // Returns 0.0 to 1.0
-
-            if (roll <= dropChance) {  // dropChance is 0.0-1.0
-                int amount = minAmount;
-                if (maxAmount > minAmount) {
-                    amount = random.nextInt(maxAmount - minAmount + 1) + minAmount;
-                }
-
-                loot.add(new GeneratedLoot(item.itemId, amount));
-                LOGGER.info("  Rolled " + roll + " <= " + dropChance + " -> DROP " + amount + "x " + item.itemId);
-            } else {
-                LOGGER.info("  Rolled " + roll + " > " + dropChance + " -> SKIP " + item.itemId);
-            }
-        }
-
-        return loot;
-    }
 
     // Get stored loot for a player at a location (for BossLootChestState)
     public static List<GeneratedLoot> getStoredLootForPlayer(Vector3d location, UUID playerUuid) {
@@ -1022,5 +1018,41 @@ public class BossLootHandler {
             return true;
         }
         return currentId.equalsIgnoreCase(BossArenaPlugin.ASSET_PACK_ID + ":" + baseId);
+    }
+
+    public static class PendingLootSpawn {
+        public final World world;
+        public final Vector3d location;
+        public final String bossName;
+
+        public PendingLootSpawn(World world, Vector3d location, String bossName) {
+            this.world = world;
+            this.location = new Vector3d(location.x, location.y, location.z);
+            this.bossName = bossName;
+        }
+    }
+
+    private static final class PersistedLootState {
+        int version = PERSISTENCE_VERSION;
+        List<PersistedChest> chests = new ArrayList<>();
+    }
+
+    private static final class PersistedChest {
+        String world;
+        double x;
+        double y;
+        double z;
+        Long expiresAtEpochMs;
+        List<PersistedPlayerLoot> players = new ArrayList<>();
+    }
+
+    private static final class PersistedPlayerLoot {
+        String playerUuid;
+        List<PersistedLootItem> loot = new ArrayList<>();
+    }
+
+    private static final class PersistedLootItem {
+        String itemId;
+        int amount;
     }
 }

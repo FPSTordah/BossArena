@@ -37,7 +37,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
     private static final int DEFAULT_VISIBLE_SLOTS_PER_TIER = 4;
     private static final String DEFAULT_TIER = BossShopItems.TIER_ORDER.length > 0
             ? BossShopItems.TIER_ORDER[0]
-            : "uncommon";
+            : "common";
 
 
     private final BossArenaPlugin plugin;
@@ -124,6 +124,209 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
                 tableZ
         );
         player.getPageManager().openCustomPage(ref, store, page);
+    }
+
+    private static String resolveShopArenaId(BossShopConfig.ShopLocation location,
+                                             String worldName,
+                                             int x,
+                                             int y,
+                                             int z) {
+        String configuredArenaId = optional(location != null ? location.arenaId : null);
+        if (!configuredArenaId.isEmpty()) {
+            return configuredArenaId;
+        }
+        String nearestArenaId = findNearestArenaIdForTable(worldName, x, y, z);
+        return nearestArenaId == null ? "" : nearestArenaId;
+    }
+
+    private static List<ShopEntry> resolveLegacyEntriesForTier(BossShopConfig config, String tier) {
+        Map<String, ShopEntry> entries = buildEntriesMap(config);
+        int visibleSlots = resolveVisibleSlotsForTier(config, entries, tier);
+        List<ShopEntry> out = new ArrayList<>();
+        for (int slot = 1; slot <= visibleSlots; slot++) {
+            out.add(normalizeEntry(entries.get(BossShopItems.key(tier, slot)), tier, slot));
+        }
+        return out;
+    }
+
+    private static ShopEntry findConfiguredEntry(List<ShopEntry> entries, String bossId, String tier) {
+        if (entries == null || entries.isEmpty()) {
+            return null;
+        }
+        for (ShopEntry entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            if (!tier.equalsIgnoreCase(optional(entry.tier))) {
+                continue;
+            }
+            if (bossId.equalsIgnoreCase(optional(entry.bossId))) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private static String optional(String value) {
+        return value == null ? "" : value.trim();
+    }
+
+    private static String normalizeTier(String input) {
+        if (input == null) {
+            return DEFAULT_TIER;
+        }
+        String tier = input.trim().toLowerCase(Locale.ROOT);
+        return BossShopItems.isValidTier(tier) ? tier : DEFAULT_TIER;
+    }
+
+    private static Integer findLocationContractCost(BossShopConfig.ShopLocation location, String bossId) {
+        if (location == null || location.contractPrices == null || location.contractPrices.isEmpty() || isBlank(bossId)) {
+            return null;
+        }
+        for (BossShopConfig.ContractPrice entry : location.contractPrices) {
+            if (entry == null || isBlank(entry.bossId)) {
+                continue;
+            }
+            if (bossId.equalsIgnoreCase(entry.bossId)) {
+                return Math.max(0, entry.cost);
+            }
+        }
+        return null;
+    }
+
+    private static boolean isStrictContractPricing(BossShopConfig config) {
+        return config != null && config.strictContractPricing;
+    }
+
+    private static int defaultCostForTier(String tier) {
+        return switch (normalizeTier(tier)) {
+            case "common" -> 250;
+            case "rare" -> 500;
+            case "epic" -> 900;
+            case "legendary" -> 1500;
+            default -> 100;
+        };
+    }
+
+    private static String findNearestArenaIdForTable(String worldName, int x, int y, int z) {
+        Arena best = null;
+        double bestDistanceSq = Double.MAX_VALUE;
+        for (Arena arena : ArenaRegistry.getAll()) {
+            if (arena == null || arena.worldName == null) {
+                continue;
+            }
+            if (!arena.worldName.equalsIgnoreCase(worldName)) {
+                continue;
+            }
+            double dx = arena.x - x;
+            double dy = arena.y - y;
+            double dz = arena.z - z;
+            double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                best = arena;
+            }
+        }
+        return best != null ? best.arenaId : null;
+    }
+
+    private static Map<String, ShopEntry> buildEntriesMap(BossShopConfig config) {
+        Map<String, ShopEntry> map = new HashMap<>();
+        List<ShopEntry> entries = config != null && config.entries != null ? config.entries : List.of();
+
+        for (ShopEntry entry : entries) {
+            if (entry == null) {
+                continue;
+            }
+            if (!BossShopItems.isValidTier(entry.tier) || entry.slot < 1) {
+                continue;
+            }
+            map.putIfAbsent(BossShopItems.key(entry.tier, entry.slot), entry);
+        }
+        return map;
+    }
+
+    private static int resolveVisibleSlotsForTier(BossShopConfig config, Map<String, ShopEntry> entries, String tier) {
+        int inferred = inferVisibleSlotsFromEntries(entries, tier);
+        if (inferred > 0) {
+            return clampVisibleSlots(inferred);
+        }
+        return DEFAULT_VISIBLE_SLOTS_PER_TIER;
+    }
+
+    private static int inferVisibleSlotsFromEntries(Map<String, ShopEntry> entries, String tier) {
+        int max = 0;
+        for (int slot = 1; slot <= BossShopItems.SLOTS_PER_TIER; slot++) {
+            ShopEntry entry = entries.get(BossShopItems.key(tier, slot));
+            if (entry == null) {
+                continue;
+            }
+            if (entry.enabled || !isBlank(entry.bossId) || !isBlank(entry.arenaId)) {
+                max = slot;
+            }
+        }
+        return max;
+    }
+
+    private static int clampVisibleSlots(int value) {
+        return Math.max(1, Math.min(value, BossShopItems.SLOTS_PER_TIER));
+    }
+
+    private static String buildCostText(int cost, String currencyItemId, String provider) {
+        if (cost <= 0) {
+            return "Price: Free";
+        }
+        if (ShopCurrencySupport.PROVIDER_HYMARKET.equals(provider)) {
+            return "Price: " + ShopCurrencySupport.formatHyMarketCost(cost);
+        }
+        if (ShopCurrencySupport.PROVIDER_ECONOMY_SYSTEM.equals(provider)) {
+            return "Price: " + ShopCurrencySupport.formatEconomySystemCost(cost);
+        }
+        if (currencyItemId == null || currencyItemId.isBlank()) {
+            return "Price: " + cost;
+        }
+        return "Price: " + cost + " " + ItemNameResolver.resolveCommonName(currencyItemId);
+    }
+
+    private static ShopEntry normalizeEntry(ShopEntry source, String tier, int slot) {
+        ShopEntry out = new ShopEntry();
+        out.tier = tier;
+        out.slot = slot;
+
+        if (source != null) {
+            out.enabled = source.enabled;
+            out.bossId = source.bossId;
+            out.arenaId = source.arenaId;
+            out.cost = Math.max(source.cost, 0);
+            out.displayName = source.displayName;
+            out.description = source.description;
+            out.icon = source.icon;
+        } else {
+            out.enabled = false;
+            out.cost = 0;
+            out.bossId = "";
+            out.arenaId = "";
+            out.icon = "";
+        }
+
+        if (isBlank(out.displayName)) {
+            out.displayName = BossShopItems.displayTier(tier) + " Contract " + slot;
+        }
+        if (isBlank(out.description)) {
+            out.description = "Summon boss " + slot + " from the " + BossShopItems.displayTier(tier) + " tier.";
+        }
+        if (out.bossId == null) {
+            out.bossId = "";
+        }
+        if (out.arenaId == null) {
+            out.arenaId = "";
+        }
+
+        return out;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     @Override
@@ -285,13 +488,28 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
                     }
 
                     ShopEntry configured = findConfiguredEntry(config.entries, boss.bossName, tier);
+                    Integer locationCost = findLocationContractCost(location, boss.bossName);
+                    if (locationCost == null) {
+                        locationCost = findLocationContractCost(location, bossId);
+                    }
+                    Integer configuredCost = configured != null ? Math.max(0, configured.cost) : null;
+                    boolean missingConfiguredCost = locationCost == null && configuredCost == null;
                     ShopEntry out = new ShopEntry();
                     out.enabled = true;
                     out.tier = tier;
                     out.slot = tableEntries.size() + 1;
                     out.bossId = boss.bossName;
                     out.arenaId = tableArenaId;
-                    out.cost = configured != null ? Math.max(0, configured.cost) : defaultCostForTier(tier);
+                    if (locationCost != null) {
+                        out.cost = locationCost;
+                    } else if (configuredCost != null) {
+                        out.cost = configuredCost;
+                    } else if (isStrictContractPricing(config)) {
+                        out.cost = 0;
+                        out.enabled = false;
+                    } else {
+                        out.cost = defaultCostForTier(tier);
+                    }
                     out.displayName = configured != null && !isBlank(configured.displayName)
                             ? configured.displayName
                             : boss.bossName;
@@ -300,6 +518,9 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
                             : (isBlank(out.arenaId)
                             ? "Summon " + boss.bossName + ". Configure the shop arena in /ba config."
                             : "Summon " + boss.bossName + " at " + out.arenaId);
+                    if (missingConfiguredCost && isStrictContractPricing(config)) {
+                        out.description = "Set price in mods/BossArena/shop.json shops[].contractPrices[] for " + boss.bossName + ".";
+                    }
                     out.icon = configured != null ? configured.icon : "";
 
                     tableEntries.add(out);
@@ -312,133 +533,6 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         }
 
         return resolveLegacyEntriesForTier(config, tier);
-    }
-
-    private static String resolveShopArenaId(BossShopConfig.ShopLocation location,
-                                             String worldName,
-                                             int x,
-                                             int y,
-                                             int z) {
-        String configuredArenaId = optional(location != null ? location.arenaId : null);
-        if (!configuredArenaId.isEmpty()) {
-            return configuredArenaId;
-        }
-        String nearestArenaId = findNearestArenaIdForTable(worldName, x, y, z);
-        return nearestArenaId == null ? "" : nearestArenaId;
-    }
-
-    private static List<ShopEntry> resolveLegacyEntriesForTier(BossShopConfig config, String tier) {
-        Map<String, ShopEntry> entries = buildEntriesMap(config);
-        int visibleSlots = resolveVisibleSlotsForTier(config, entries, tier);
-        List<ShopEntry> out = new ArrayList<>();
-        for (int slot = 1; slot <= visibleSlots; slot++) {
-            out.add(normalizeEntry(entries.get(BossShopItems.key(tier, slot)), tier, slot));
-        }
-        return out;
-    }
-
-    private static ShopEntry findConfiguredEntry(List<ShopEntry> entries, String bossId, String tier) {
-        if (entries == null || entries.isEmpty()) {
-            return null;
-        }
-        for (ShopEntry entry : entries) {
-            if (entry == null) {
-                continue;
-            }
-            if (!tier.equalsIgnoreCase(optional(entry.tier))) {
-                continue;
-            }
-            if (bossId.equalsIgnoreCase(optional(entry.bossId))) {
-                return entry;
-            }
-        }
-        return null;
-    }
-
-    private static String optional(String value) {
-        return value == null ? "" : value.trim();
-    }
-
-    private static String normalizeTier(String input) {
-        if (input == null) {
-            return DEFAULT_TIER;
-        }
-        String tier = input.trim().toLowerCase(Locale.ROOT);
-        return BossShopItems.isValidTier(tier) ? tier : DEFAULT_TIER;
-    }
-
-    private static int defaultCostForTier(String tier) {
-        return switch (normalizeTier(tier)) {
-            case "common" -> 250;
-            case "rare" -> 500;
-            case "epic" -> 900;
-            case "legendary" -> 1500;
-            default -> 100;
-        };
-    }
-
-    private static String findNearestArenaIdForTable(String worldName, int x, int y, int z) {
-        Arena best = null;
-        double bestDistanceSq = Double.MAX_VALUE;
-        for (Arena arena : ArenaRegistry.getAll()) {
-            if (arena == null || arena.worldName == null) {
-                continue;
-            }
-            if (!arena.worldName.equalsIgnoreCase(worldName)) {
-                continue;
-            }
-            double dx = arena.x - x;
-            double dy = arena.y - y;
-            double dz = arena.z - z;
-            double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
-            if (distanceSq < bestDistanceSq) {
-                bestDistanceSq = distanceSq;
-                best = arena;
-            }
-        }
-        return best != null ? best.arenaId : null;
-    }
-
-    private static Map<String, ShopEntry> buildEntriesMap(BossShopConfig config) {
-        Map<String, ShopEntry> map = new HashMap<>();
-        List<ShopEntry> entries = config != null && config.entries != null ? config.entries : List.of();
-
-        for (ShopEntry entry : entries) {
-            if (entry == null) {
-                continue;
-            }
-            if (!BossShopItems.isValidTier(entry.tier) || entry.slot < 1) {
-                continue;
-            }
-            map.putIfAbsent(BossShopItems.key(entry.tier, entry.slot), entry);
-        }
-        return map;
-    }
-
-    private static int resolveVisibleSlotsForTier(BossShopConfig config, Map<String, ShopEntry> entries, String tier) {
-        int inferred = inferVisibleSlotsFromEntries(entries, tier);
-        if (inferred > 0) {
-            return clampVisibleSlots(inferred);
-        }
-        return DEFAULT_VISIBLE_SLOTS_PER_TIER;
-    }
-
-    private static int inferVisibleSlotsFromEntries(Map<String, ShopEntry> entries, String tier) {
-        int max = 0;
-        for (int slot = 1; slot <= BossShopItems.SLOTS_PER_TIER; slot++) {
-            ShopEntry entry = entries.get(BossShopItems.key(tier, slot));
-            if (entry == null) {
-                continue;
-            }
-            if (entry.enabled || !isBlank(entry.bossId) || !isBlank(entry.arenaId)) {
-                max = slot;
-            }
-        }
-        return max;
-    }
-
-    private static int clampVisibleSlots(int value) {
-        return Math.max(1, Math.min(value, BossShopItems.SLOTS_PER_TIER));
     }
 
     private String resolveItemCurrencyItemId() {
@@ -466,66 +560,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         return provider;
     }
 
-    private static String buildCostText(int cost, String currencyItemId, String provider) {
-        if (cost <= 0) {
-            return "Price: Free";
-        }
-        if (ShopCurrencySupport.PROVIDER_HYMARKET.equals(provider)) {
-            return "Price: " + ShopCurrencySupport.formatHyMarketCost(cost);
-        }
-        if (ShopCurrencySupport.PROVIDER_ECONOMY_SYSTEM.equals(provider)) {
-            return "Price: " + ShopCurrencySupport.formatEconomySystemCost(cost);
-        }
-        if (currencyItemId == null || currencyItemId.isBlank()) {
-            return "Price: " + cost;
-        }
-        return "Price: " + cost + " " + ItemNameResolver.resolveCommonName(currencyItemId);
-    }
-
-    private static ShopEntry normalizeEntry(ShopEntry source, String tier, int slot) {
-        ShopEntry out = new ShopEntry();
-        out.tier = tier;
-        out.slot = slot;
-
-        if (source != null) {
-            out.enabled = source.enabled;
-            out.bossId = source.bossId;
-            out.arenaId = source.arenaId;
-            out.cost = Math.max(source.cost, 0);
-            out.displayName = source.displayName;
-            out.description = source.description;
-            out.icon = source.icon;
-        } else {
-            out.enabled = false;
-            out.cost = 0;
-            out.bossId = "";
-            out.arenaId = "";
-            out.icon = "";
-        }
-
-        if (isBlank(out.displayName)) {
-            out.displayName = BossShopItems.displayTier(tier) + " Contract " + slot;
-        }
-        if (isBlank(out.description)) {
-            out.description = "Summon boss " + slot + " from the " + BossShopItems.displayTier(tier) + " tier.";
-        }
-        if (out.bossId == null) {
-            out.bossId = "";
-        }
-        if (out.arenaId == null) {
-            out.arenaId = "";
-        }
-
-        return out;
-    }
-
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
     public static final class ShopEventData {
-        public String action;
-
         public static final BuilderCodec<ShopEventData> CODEC = BuilderCodec.builder(
                         ShopEventData.class,
                         ShopEventData::new
@@ -536,5 +571,6 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
                         data -> data.action
                 ).add()
                 .build();
+        public String action;
     }
 }

@@ -1,6 +1,7 @@
 package com.bossarena.system;
 
 import com.bossarena.BossArenaConfig;
+import com.bossarena.BossArenaPlugin;
 import com.hypixel.hytale.math.vector.Transform;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.server.core.Message;
@@ -13,6 +14,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.logging.Logger;
 
 public final class BossWaveNotificationService {
@@ -24,6 +27,8 @@ public final class BossWaveNotificationService {
     private static final float WORLD_ALERT_DURATION_SECONDS = 10.0f;
     private static final long WORLD_ALERT_DURATION_MILLIS = (long) (WORLD_ALERT_DURATION_SECONDS * 1000f);
     private static final Map<UUID, Long> TIMED_ALERT_SUPPRESS_UNTIL = new ConcurrentHashMap<>();
+    private static final Pattern PLACEHOLDER_PATTERN =
+            Pattern.compile("\\$([A-Za-z][A-Za-z0-9_]*)|\\{([A-Za-z][A-Za-z0-9_]*)\\}");
 
     private BossWaveNotificationService() {
     }
@@ -34,7 +39,7 @@ public final class BossWaveNotificationService {
                                              int aliveBossCount,
                                              int activeAdds,
                                              String context) {
-        notifyBossAliveStatus(world, eventCenter, bossName, aliveBossCount, activeAdds, context, -1L);
+        notifyBossAliveStatus(world, eventCenter, bossName, aliveBossCount, activeAdds, context, -1L, false, true);
     }
 
     public static void notifyBossAliveStatus(World world,
@@ -44,21 +49,122 @@ public final class BossWaveNotificationService {
                                              int activeAdds,
                                              String context,
                                              long remainingCountdownMillis) {
+        notifyBossAliveStatus(
+                world,
+                eventCenter,
+                bossName,
+                aliveBossCount,
+                activeAdds,
+                context,
+                remainingCountdownMillis,
+                false,
+                true
+        );
+    }
+
+    public static void notifyBossAliveStatus(World world,
+                                             Vector3d eventCenter,
+                                             String bossName,
+                                             int aliveBossCount,
+                                             int activeAdds,
+                                             String context,
+                                             long remainingCountdownMillis,
+                                             boolean forceActiveState) {
+        notifyBossAliveStatus(
+                world,
+                eventCenter,
+                bossName,
+                aliveBossCount,
+                activeAdds,
+                context,
+                remainingCountdownMillis,
+                forceActiveState,
+                true
+        );
+    }
+
+    public static void notifyBossAliveStatus(World world,
+                                             Vector3d eventCenter,
+                                             String bossName,
+                                             int aliveBossCount,
+                                             int activeAdds,
+                                             String context,
+                                             long remainingCountdownMillis,
+                                             boolean forceActiveState,
+                                             boolean showVictoryOnFinish) {
         if (world == null || eventCenter == null) {
             return;
         }
         String contextText = context == null || context.isBlank() ? "" : (context.trim() + " | ");
-        String countdownText = formatCountdownPrefix(remainingCountdownMillis);
+        String countdownValue = formatCountdownValue(remainingCountdownMillis);
+        String countdownLabel = countdownValue.isEmpty() ? "" : "Time left: " + countdownValue;
+        String countdownText = countdownLabel.isEmpty() ? "" : (countdownLabel + " | ");
         int bossesAlive = Math.max(0, aliveBossCount);
         int addsAlive = Math.max(0, activeAdds);
-        boolean eventFinished = bossesAlive <= 0 && addsAlive <= 0;
-        Message title = eventFinished
-                ? Message.raw("VICTORY! Claim your spoils!")
-                : Message.raw("The Shadows Stir—" + safeBossName(bossName) + " Approaches!");
-        Message subtitle = eventFinished
-                ? Message.raw("Boss alive: 0 | Wave mobs alive: 0")
-                : Message.raw(contextText + countdownText + "Boss alive: " + bossesAlive + " | Wave mobs alive: " + addsAlive);
-        float duration = (bossesAlive > 0 || addsAlive > 0)
+        boolean eventFinished = !forceActiveState && bossesAlive <= 0 && addsAlive <= 0;
+        BossArenaConfig.EventBannerTemplates templates = resolveEventBannerTemplates();
+        String bossDisplay = safeBossDisplayName(bossName);
+
+        String titleText = "";
+        String subtitleText = "";
+
+        if (eventFinished) {
+            if (showVictoryOnFinish) {
+                titleText = applyEventBannerPlaceholders(
+                        templates.victoryTitle,
+                        bossDisplay,
+                        bossesAlive,
+                        addsAlive,
+                        context,
+                        contextText,
+                        countdownValue,
+                        countdownLabel,
+                        countdownText,
+                        true
+                );
+                subtitleText = applyEventBannerPlaceholders(
+                        templates.victorySubtitle,
+                        bossDisplay,
+                        bossesAlive,
+                        addsAlive,
+                        context,
+                        contextText,
+                        countdownValue,
+                        countdownLabel,
+                        countdownText,
+                        true
+                );
+            }
+        } else {
+            titleText = applyEventBannerPlaceholders(
+                    templates.activeTitle,
+                    bossDisplay,
+                    bossesAlive,
+                    addsAlive,
+                    context,
+                    contextText,
+                    countdownValue,
+                    countdownLabel,
+                    countdownText,
+                    false
+            );
+            subtitleText = applyEventBannerPlaceholders(
+                    templates.activeSubtitle,
+                    bossDisplay,
+                    bossesAlive,
+                    addsAlive,
+                    context,
+                    contextText,
+                    countdownValue,
+                    countdownLabel,
+                    countdownText,
+                    false
+            );
+        }
+
+        Message title = titleText == null || titleText.isEmpty() ? null : Message.raw(titleText);
+        Message subtitle = subtitleText == null || subtitleText.isEmpty() ? null : Message.raw(subtitleText);
+        float duration = (forceActiveState || bossesAlive > 0 || addsAlive > 0)
                 ? PERSISTENT_DURATION_SECONDS
                 : FINAL_CLEAR_DURATION_SECONDS;
         showToNearbyPlayers(world, eventCenter, title, subtitle, duration);
@@ -184,19 +290,24 @@ public final class BossWaveNotificationService {
             }
 
             try {
+                // Always hide the previous title first to ensure a clean transition or a clear end state.
                 EventTitleUtil.hideEventTitleFromPlayer(playerRef, 0f);
-                EventTitleUtil.showEventTitleToPlayer(
-                        playerRef,
-                        title,
-                        subtitle,
-                        true,
-                        null,
-                        durationSeconds,
-                        0f,
-                        0f
-                );
+
+                // If both are null, we don't show any new title, so it stays hidden.
+                if (title != null || subtitle != null) {
+                    EventTitleUtil.showEventTitleToPlayer(
+                            playerRef,
+                            title,
+                            subtitle,
+                            true,
+                            null,
+                            durationSeconds,
+                            0f,
+                            0f
+                    );
+                }
             } catch (Exception e) {
-                LOGGER.fine(() -> "Failed to show wave notification: " + e.getMessage());
+                LOGGER.fine(() -> "Failed to update wave notification visibility: " + e.getMessage());
             }
         }
     }
@@ -259,17 +370,15 @@ public final class BossWaveNotificationService {
         if (template == null || template.isBlank()) {
             return "";
         }
-        String resolved = template;
-        resolved = resolved.replace("$Boss", bossDisplay);
-        resolved = resolved.replace("$boss", bossDisplay);
-        resolved = resolved.replace("$Arena", arenaDisplay);
-        resolved = resolved.replace("$arena", arenaDisplay);
-        resolved = resolved.replace("$World", worldDisplay);
-        resolved = resolved.replace("$world", worldDisplay);
-        return resolved;
+        Map<String, String> values = Map.of(
+                "boss", defaultIfBlank(bossDisplay, "Boss"),
+                "arena", defaultIfBlank(arenaDisplay, "Arena"),
+                "world", defaultIfBlank(worldDisplay, "World")
+        );
+        return renderTemplate(template, values);
     }
 
-    private static String formatCountdownPrefix(long remainingCountdownMillis) {
+    private static String formatCountdownValue(long remainingCountdownMillis) {
         if (remainingCountdownMillis < 0L) {
             return "";
         }
@@ -277,6 +386,79 @@ public final class BossWaveNotificationService {
         long totalSeconds = Math.max(0L, remainingCountdownMillis / 1000L);
         long minutes = totalSeconds / 60L;
         long seconds = totalSeconds % 60L;
-        return "Time left: " + String.format(Locale.ROOT, "%02d:%02d", minutes, seconds) + " | ";
+        return String.format(Locale.ROOT, "%02d:%02d", minutes, seconds);
+    }
+
+    private static BossArenaConfig.EventBannerTemplates resolveEventBannerTemplates() {
+        BossArenaConfig.EventBannerTemplates out = new BossArenaConfig.EventBannerTemplates();
+        BossArenaPlugin plugin = BossArenaPlugin.getInstance();
+        BossArenaConfig config = plugin != null ? plugin.getConfigHandle() : null;
+        if (config == null || config.eventBanner == null) {
+            return out;
+        }
+        BossArenaConfig.EventBannerTemplates loaded = config.eventBanner;
+        out.activeTitle = defaultIfBlank(loaded.activeTitle, BossArenaConfig.DEFAULT_EVENT_ACTIVE_TITLE_TEMPLATE);
+        out.activeSubtitle = defaultIfBlank(loaded.activeSubtitle, BossArenaConfig.DEFAULT_EVENT_ACTIVE_SUBTITLE_TEMPLATE);
+        out.victoryTitle = defaultIfBlank(loaded.victoryTitle, BossArenaConfig.DEFAULT_EVENT_VICTORY_TITLE_TEMPLATE);
+        out.victorySubtitle = defaultIfBlank(loaded.victorySubtitle, BossArenaConfig.DEFAULT_EVENT_VICTORY_SUBTITLE_TEMPLATE);
+        return out;
+    }
+
+    private static String applyEventBannerPlaceholders(String template,
+                                                       String bossDisplay,
+                                                       int bossesAlive,
+                                                       int addsAlive,
+                                                       String contextRaw,
+                                                       String contextPrefix,
+                                                       String countdown,
+                                                       String countdownLabel,
+                                                       String countdownPrefix,
+                                                       boolean eventFinished) {
+        String resolved = defaultIfBlank(template, "");
+        String context = contextRaw == null || contextRaw.isBlank() ? "" : contextRaw.trim();
+        String state = eventFinished ? "victory" : "active";
+        Map<String, String> values = Map.ofEntries(
+                Map.entry("boss", defaultIfBlank(bossDisplay, "Boss")),
+                Map.entry("bossupper", safeBossName(bossDisplay)),
+                Map.entry("bossalive", Integer.toString(Math.max(0, bossesAlive))),
+                Map.entry("addsalive", Integer.toString(Math.max(0, addsAlive))),
+                Map.entry("context", context),
+                Map.entry("contextraw", context),
+                // Clearer aliases for user-facing templates.
+                Map.entry("contextline", defaultIfBlank(contextPrefix, "")),
+                // Backwards-compatible legacy alias.
+                Map.entry("contextprefix", defaultIfBlank(contextPrefix, "")),
+                Map.entry("countdown", defaultIfBlank(countdown, "")),
+                Map.entry("countdownlabel", defaultIfBlank(countdownLabel, "")),
+                // Clearer aliases for user-facing templates.
+                Map.entry("countdownline", defaultIfBlank(countdownPrefix, "")),
+                // Backwards-compatible legacy alias.
+                Map.entry("countdownprefix", defaultIfBlank(countdownPrefix, "")),
+                Map.entry("state", state)
+        );
+        return renderTemplate(resolved, values);
+    }
+
+    private static String renderTemplate(String template, Map<String, String> values) {
+        if (template == null || template.isEmpty()) {
+            return "";
+        }
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(template);
+        StringBuffer out = new StringBuffer();
+        while (matcher.find()) {
+            String key = matcher.group(1) != null ? matcher.group(1) : matcher.group(2);
+            String normalized = key == null ? "" : key.trim().toLowerCase(Locale.ROOT);
+            String replacement = values.getOrDefault(normalized, "");
+            matcher.appendReplacement(out, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private static String defaultIfBlank(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value.trim();
     }
 }
