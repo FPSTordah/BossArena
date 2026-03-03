@@ -14,23 +14,52 @@
     }
   },
   "BlockType": {
-    "Material": "Solid",
-    "DrawType": "Model",
-    "Flags": {
-      "IsUsable": true
-    },
-    "Interactions": {
-      "Use": "BossArena_OpenChest"
-    },
-    "State": {
-      "Id": "BossLootChestState"
-    },
+    "BlockParticleSetId": "Wood",
+    "BlockSoundSetId": "Wood",
     "CustomModel": "Blocks/Boss_Arena_Chest_Legendary.blockymodel",
     "CustomModelTexture": [
       {
         "Texture": "Blocks/Boss_Arena_Chest_Legendary_Texture.png",
         "Weight": 1
       }
-    ]
+    ],
+    "DrawType": "Model",
+    "Flags": {
+      "IsUsable": true
+    },
+    "HitboxType": "Chest_Large_Legendary",
+    "Material": "Solid",
+    "Opacity": "Transparent",
+    "State": {
+      "Id": "BossLootChestState",
+      "Definitions": {
+        "CloseWindow": {
+          "InteractionSoundEventId": "SFX_Chest_Wooden_Close",
+          "CustomModelAnimation": "Blocks/Animations/Chest/Chest_Close.blockyanim"
+        },
+        "OpenWindow": {
+          "InteractionSoundEventId": "SFX_Chest_Wooden_Open",
+          "CustomModelAnimation": "Blocks/Animations/Chest/Chest_Open.blockyanim"
+        }
+      }
+    },
+    "Supporting": {
+      "Up": [
+        {
+          "FaceType": "Full"
+        }
+      ]
+    },
+    "Support": {
+      "Down": [
+        {
+          "FaceType": "Full"
+        }
+      ]
+    },
+    "VariantRotation": "NESW",
+    "Interactions": {
+      "Use": "BossArena_OpenChest"
+    }
   }
 }

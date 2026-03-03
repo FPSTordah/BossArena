@@ -891,7 +891,7 @@ public final class BossArenaPlugin extends JavaPlugin {
                 return;
             }
             world.execute(() -> {
-                int rebound = rebindShopInteractions(world);
+                int rebound = rebindShopInteractions(world, attempt);
                 if (rebound == 0 && attempt < 3) {
                     scheduleShopRebind(world, attempt + 1);
                 }
@@ -899,7 +899,7 @@ public final class BossArenaPlugin extends JavaPlugin {
         }, delayMs, TimeUnit.MILLISECONDS);
     }
 
-    private int rebindShopInteractions(World world) {
+    private int rebindShopInteractions(World world, int attempt) {
         if (world == null || shopConfig == null || shopConfig.shops == null || shopConfig.shops.isEmpty()) {
             return 0;
         }
@@ -933,8 +933,12 @@ public final class BossArenaPlugin extends JavaPlugin {
             }
 
             if (ref == null) {
-                // If the shop NPC is missing, respawn it.
-                respawnShopNpc(world, location);
+                // On early attempts, just wait for chunks/NPCs to finish loading.
+                // Only treat the shop NPC as truly missing on later retries.
+                if (attempt >= 2) {
+                    // If the shop NPC is still not found after multiple retries, respawn it.
+                    respawnShopNpc(world, location);
+                }
                 continue;
             }
 
@@ -962,6 +966,8 @@ public final class BossArenaPlugin extends JavaPlugin {
         return rebound;
     }
 
+    private static final double SHOP_NPC_SEARCH_RADIUS_BLOCKS = 4.0d;
+
     private Ref<EntityStore> findShopNpcRefNearLocation(Store<EntityStore> store,
                                                         BossShopConfig.ShopLocation location,
                                                         String configuredShopNpcId) {
@@ -971,6 +977,7 @@ public final class BossArenaPlugin extends JavaPlugin {
 
         final Ref<EntityStore>[] nearestRef = new Ref[]{null};
         final double[] nearestDistanceSq = new double[]{Double.MAX_VALUE};
+        final double maxDistanceSq = SHOP_NPC_SEARCH_RADIUS_BLOCKS * SHOP_NPC_SEARCH_RADIUS_BLOCKS;
 
         store.forEachChunk(
                 com.hypixel.hytale.component.query.Query.and(
@@ -993,7 +1000,7 @@ public final class BossArenaPlugin extends JavaPlugin {
                         double dy = pos.y - location.y;
                         double dz = pos.z - location.z;
                         double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
-                        if (distanceSq > 16.0d || distanceSq >= nearestDistanceSq[0]) {
+                        if (distanceSq > maxDistanceSq || distanceSq >= nearestDistanceSq[0]) {
                             continue;
                         }
                         nearestDistanceSq[0] = distanceSq;
@@ -1190,11 +1197,69 @@ public final class BossArenaPlugin extends JavaPlugin {
         if (world == null || location == null) return;
 
         String shopNpcId = resolveShopNpcId();
-        Vector3d spawnPos = new Vector3d(location.x + 0.5d, location.y, location.z + 0.5d);
+        int baseX = location.x;
+        int baseY = location.y;
+        int baseZ = location.z;
+        double spawnY = baseY;
+        try {
+            com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType at =
+                    world.getBlockType(baseX, baseY, baseZ);
+            com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType below =
+                    world.getBlockType(baseX, baseY - 1, baseZ);
+            if ((at != null && at.getId() != null && at.getId().toLowerCase(java.util.Locale.ROOT).contains("snow"))
+                    || (below != null && below.getId() != null && below.getId().toLowerCase(java.util.Locale.ROOT).contains("snow"))) {
+                // If the saved anchor is on or just above snow, lift the spawn Y so the guard
+                // doesn't sink one block lower than when it was placed.
+                spawnY = baseY + 1.0d;
+            }
+        } catch (Exception ignored) {
+            // If anything goes wrong, fall back to the raw saved Y.
+        }
+
+        Vector3d spawnPos = new Vector3d(baseX + 0.5d, spawnY, baseZ + 0.5d);
         // Face south by default for respawn if we don't know the original rotation.
         com.hypixel.hytale.math.vector.Vector3f rotation = new com.hypixel.hytale.math.vector.Vector3f(0, (float) Math.PI, 0);
 
         world.execute(() -> {
+            // Best-effort cleanup: remove any existing shop NPCs of this type very close to the saved location
+            // so we never stack multiple guards at the same shop.
+            Store<EntityStore> store = world.getEntityStore() != null ? world.getEntityStore().getStore() : null;
+            if (store != null) {
+                store.forEachChunk(
+                        com.hypixel.hytale.component.query.Query.and(
+                                TransformComponent.getComponentType(),
+                                NPCEntity.getComponentType()
+                        ),
+                        (chunk, ignored) -> {
+                            for (int i = 0; i < chunk.size(); i++) {
+                                NPCEntity npc = chunk.getComponent(i, NPCEntity.getComponentType());
+                                if (npc == null || !isShopNpcTypeId(npc.getNPCTypeId(), shopNpcId)) {
+                                    continue;
+                                }
+                                TransformComponent transform = chunk.getComponent(i, TransformComponent.getComponentType());
+                                if (transform == null) {
+                                    continue;
+                                }
+                                Vector3d pos = transform.getPosition();
+                                double dx = pos.x - location.x;
+                                double dy = pos.y - location.y;
+                                double dz = pos.z - location.z;
+                                double distanceSq = (dx * dx) + (dy * dy) + (dz * dz);
+                                double maxSq = SHOP_NPC_SEARCH_RADIUS_BLOCKS * SHOP_NPC_SEARCH_RADIUS_BLOCKS;
+                                if (distanceSq > maxSq) {
+                                    continue;
+                                }
+                                Ref<EntityStore> ref = chunk.getReferenceTo(i);
+                                try {
+                                    world.getEntityStore().getStore().removeEntity(ref, com.hypixel.hytale.component.RemoveReason.REMOVE);
+                                } catch (Exception ignoredRemoval) {
+                                    // Best-effort; if removal fails we still attempt to spawn a fresh guard.
+                                }
+                            }
+                        }
+                );
+            }
+
             var result = com.hypixel.hytale.server.npc.NPCPlugin.get().spawnNPC(
                     world.getEntityStore().getStore(),
                     shopNpcId,

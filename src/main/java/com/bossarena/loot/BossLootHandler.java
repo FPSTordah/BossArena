@@ -192,7 +192,6 @@ public class BossLootHandler {
         }
 
         Vector3d chestCopy = normalizeChestKey(chestLocation);
-        chestCopy = applySnowZOffset(world, chestCopy);
         LOGGER.info("Using boss event center block for chest spawn: " + chestCopy + " (requested: " + chestLocation + ")");
 
         // Store the loot at this location
@@ -493,33 +492,6 @@ public class BossLootHandler {
             fallbackY++;
         }
         return new Vector3d(x, fallbackY, z);
-    }
-
-    private static Vector3d applySnowZOffset(World world, Vector3d chestLocation) {
-        if (world == null || chestLocation == null) {
-            return chestLocation;
-        }
-
-        int x = (int) Math.floor(chestLocation.x);
-        int y = (int) Math.floor(chestLocation.y);
-        int z = (int) Math.floor(chestLocation.z);
-
-        BlockType at = world.getBlockType(x, y, z);
-        BlockType below = world.getBlockType(x, y - 1, z);
-        if (!isSnowBlock(at) && !isSnowBlock(below)) {
-            return chestLocation;
-        }
-
-        Vector3d shifted = new Vector3d(x, y, z + 1);
-        LOGGER.info("Snow detected at chest location, applying +1 Z offset: " + chestLocation + " -> " + shifted);
-        return shifted;
-    }
-
-    private static boolean isSnowBlock(BlockType type) {
-        if (type == null || type.getId() == null) {
-            return false;
-        }
-        return type.getId().toLowerCase(Locale.ROOT).contains("snow");
     }
 
     private static boolean isValidChestSupport(World world, int x, int supportY, int z) {

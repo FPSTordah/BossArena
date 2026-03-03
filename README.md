@@ -4,7 +4,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `2.0.2`
+- Current project version: `2.0.3`
 
 ## Changelog
 
@@ -52,6 +52,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 - Persistent boss event notification while tracked boss/add entities are alive.
 - Per-player loot chest generation after boss encounter completion.
 - Loot chest persistence across restarts with state recovery.
+- Loot chests are designed for solid ground placement; **do not place arenas or loot chests on top of snow blocks**, as snow is not treated as stable ground for chest spawning.
 
 ## Permissions (LuckPerms)
 
@@ -372,4 +373,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-2.0.2.jar`
+- `target/BossArena-2.0.3.jar`
