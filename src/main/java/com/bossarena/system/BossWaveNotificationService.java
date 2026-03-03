@@ -20,7 +20,7 @@ import java.util.logging.Logger;
 
 public final class BossWaveNotificationService {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
-    private static final double NOTIFY_RADIUS = 100.0d;
+    private static final double DEFAULT_NOTIFY_RADIUS = 100.0d;
     private static final float TRANSIENT_DURATION_SECONDS = 3.0f;
     private static final float PERSISTENT_DURATION_SECONDS = 999.0f;
     private static final float FINAL_CLEAR_DURATION_SECONDS = 8.0f;
@@ -31,6 +31,12 @@ public final class BossWaveNotificationService {
             Pattern.compile("\\$([A-Za-z][A-Za-z0-9_]*)|\\{([A-Za-z][A-Za-z0-9_]*)\\}");
 
     private BossWaveNotificationService() {
+    }
+
+    private static double resolveNotificationRadius() {
+        BossArenaPlugin plugin = BossArenaPlugin.getInstance();
+        BossArenaConfig config = plugin != null ? plugin.getConfigHandle() : null;
+        return config != null ? config.getNotificationRadius() : DEFAULT_NOTIFY_RADIUS;
     }
 
     public static void notifyBossAliveStatus(World world,
@@ -92,6 +98,21 @@ public final class BossWaveNotificationService {
                                              long remainingCountdownMillis,
                                              boolean forceActiveState,
                                              boolean showVictoryOnFinish) {
+        notifyBossAliveStatus(world, eventCenter, bossName, aliveBossCount, activeAdds, context,
+                remainingCountdownMillis, forceActiveState, showVictoryOnFinish, -1.0d);
+    }
+
+    /** Same as above but with per-arena notification radius (blocks). Use -1 or invalid to fall back to config default. */
+    public static void notifyBossAliveStatus(World world,
+                                             Vector3d eventCenter,
+                                             String bossName,
+                                             int aliveBossCount,
+                                             int activeAdds,
+                                             String context,
+                                             long remainingCountdownMillis,
+                                             boolean forceActiveState,
+                                             boolean showVictoryOnFinish,
+                                             double notificationRadiusBlocks) {
         if (world == null || eventCenter == null) {
             return;
         }
@@ -167,7 +188,7 @@ public final class BossWaveNotificationService {
         float duration = (forceActiveState || bossesAlive > 0 || addsAlive > 0)
                 ? PERSISTENT_DURATION_SECONDS
                 : FINAL_CLEAR_DURATION_SECONDS;
-        showToNearbyPlayers(world, eventCenter, title, subtitle, duration);
+        showToNearbyPlayers(world, eventCenter, title, subtitle, duration, notificationRadiusBlocks);
     }
 
     public static void notifyWaveSpawn(World world,
@@ -263,7 +284,11 @@ public final class BossWaveNotificationService {
                                             Vector3d center,
                                             Message title,
                                             Message subtitle,
-                                            float durationSeconds) {
+                                            float durationSeconds,
+                                            double notificationRadiusBlocks) {
+        double radius = (Double.isFinite(notificationRadiusBlocks) && notificationRadiusBlocks > 0)
+                ? notificationRadiusBlocks
+                : resolveNotificationRadius();
         long now = System.currentTimeMillis();
         for (PlayerRef playerRef : world.getPlayerRefs()) {
             if (playerRef == null) {
@@ -279,7 +304,7 @@ public final class BossWaveNotificationService {
                 continue;
             }
 
-            if (playerPosition.distanceTo(center) > NOTIFY_RADIUS) {
+            if (playerPosition.distanceTo(center) > radius) {
                 try {
                     // Clear any previously shown BossArena title once the player leaves range.
                     EventTitleUtil.hideEventTitleFromPlayer(playerRef, 0f);

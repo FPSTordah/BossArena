@@ -29,9 +29,14 @@ public final class BossArenaConfig {
     private static final String DEFAULT_CURRENCY_ITEM_ID = "Coin";
     private static final String DEFAULT_FALLBACK_CURRENCY_ITEM_ID = "Ingredient_Bar_Iron";
     private static final int MIN_COUNTDOWN_MINUTES = 1;
+    private static final double DEFAULT_NOTIFICATION_RADIUS = 100.0d;
+    private static final double MIN_NOTIFICATION_RADIUS = 10.0d;
+    private static final double MAX_NOTIFICATION_RADIUS = 500.0d;
     private static final Path CONFIG_PATH = Path.of("mods", "BossArena", "config.json");
 
     public ArenaDef[] arenas = new ArenaDef[0];
+    /** Distance (blocks) within which players see boss event title/subtitle. */
+    public double notificationRadius = DEFAULT_NOTIFICATION_RADIUS;
     public String currencyItemId = DEFAULT_CURRENCY_ITEM_ID;
     public String fallbackCurrencyItemId = DEFAULT_FALLBACK_CURRENCY_ITEM_ID;
     public Map<String, Integer> bossTierCountdownMinutes = createDefaultBossTierCountdownMinutes();
@@ -352,6 +357,7 @@ public final class BossArenaConfig {
 
     private void applyLoadedConfig(BossArenaConfig loaded) {
         this.arenas = loaded.arenas != null ? loaded.arenas : new ArenaDef[0];
+        this.notificationRadius = sanitizeNotificationRadius(loaded.notificationRadius);
         this.currencyItemId = sanitizeItemId(loaded.currencyItemId, DEFAULT_CURRENCY_ITEM_ID);
         this.fallbackCurrencyItemId = sanitizeItemId(
                 loaded.fallbackCurrencyItemId,
@@ -364,8 +370,21 @@ public final class BossArenaConfig {
         this._comment_placeholders = sanitizePlaceholderDocs(loaded._comment_placeholders);
     }
 
+    private static double sanitizeNotificationRadius(double value) {
+        if (!Double.isFinite(value) || value < MIN_NOTIFICATION_RADIUS) {
+            return DEFAULT_NOTIFICATION_RADIUS;
+        }
+        return Math.min(value, MAX_NOTIFICATION_RADIUS);
+    }
+
+    /** Returns the configured notification radius (blocks), clamped to valid range. */
+    public double getNotificationRadius() {
+        return sanitizeNotificationRadius(notificationRadius);
+    }
+
     private void applyDefaultConfig() {
         this.arenas = new ArenaDef[0];
+        this.notificationRadius = DEFAULT_NOTIFICATION_RADIUS;
         this.currencyItemId = DEFAULT_CURRENCY_ITEM_ID;
         this.fallbackCurrencyItemId = DEFAULT_FALLBACK_CURRENCY_ITEM_ID;
         this.bossTierCountdownMinutes = createDefaultBossTierCountdownMinutes();

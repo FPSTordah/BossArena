@@ -275,17 +275,17 @@ public final class BossSpawnService {
         );
     }
 
-    private UUID spawnBossNow(World world,
-                              BossDefinition def,
-                              Vector3d spawnPos,
-                              String arenaId,
-                              BossModifiers mods,
-                              long countdownDurationMs,
-                              List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves,
-                              List<UUID> pendingPreBossAdds,
-                              AtomicInteger nextWaveNumber,
-                              UUID existingEventId,
-                              Consumer<UUID> onPrimaryBossSpawned) {
+    public UUID spawnBossNow(World world,
+                             BossDefinition def,
+                             Vector3d spawnPos,
+                             String arenaId,
+                             BossModifiers mods,
+                             long countdownDurationMs,
+                             List<BossDefinition.ExtraMobs.ScheduledWave> resolvedWaves,
+                             List<UUID> pendingPreBossAdds,
+                             AtomicInteger nextWaveNumber,
+                             UUID existingEventId,
+                             Consumer<UUID> onPrimaryBossSpawned) {
         UUID primaryBossUuid = null;
         UUID bossEventId = existingEventId;
 

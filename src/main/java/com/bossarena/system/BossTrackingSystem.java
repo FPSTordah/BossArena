@@ -46,6 +46,7 @@ public class BossTrackingSystem {
     private volatile Path persistencePath;
     private volatile boolean persistenceDirty;
     private volatile PersistedState pendingRestoreState;
+    private volatile MissingEntityHandler missingEntityHandler;
     private ScheduledExecutorService persistenceExecutor;
 
     private static long resolveChunkIndex(Vector3d location) {
@@ -329,6 +330,10 @@ public class BossTrackingSystem {
         return event.awaitingPrimaryBossSpawn || !event.aliveBosses.isEmpty() || !event.activeAdds.isEmpty();
     }
 
+    public void setMissingEntityHandler(MissingEntityHandler handler) {
+        this.missingEntityHandler = handler;
+    }
+
     public synchronized void initializePersistence(Path stateFilePath) {
         persistencePath = stateFilePath;
         if (persistencePath == null) {
@@ -545,7 +550,8 @@ public class BossTrackingSystem {
                     pendingRestoreState = null;
                     return;
                 }
-                restorePersistedState(state, true);
+                pendingRestoreState = state;
+                retryPendingRestore();
             } catch (Exception e) {
                 LOGGER.warning("Failed to load boss tracking state: " + e.getMessage());
                 clearRuntimeState();
@@ -646,268 +652,207 @@ public class BossTrackingSystem {
         return false;
     }
 
-    public synchronized int retryPendingRestore() {
+    public synchronized int retryPendingRestore(World world) {
+        if (world == null) return 0;
         PersistedState pending = pendingRestoreState;
         if (!hasPendingEntries(pending)) {
             return 0;
         }
-        int before = pendingEntryCount(pending);
-        int restored = restorePersistedState(pending, false);
-        int after = pendingEntryCount(pendingRestoreState);
-        if (restored > 0 || after < before) {
+        int restored = restorePersistedStateForWorld(pending, world);
+        if (restored > 0) {
             markDirty();
-            LOGGER.info("Boss tracking retry restored " + restored + " entity link(s); "
-                    + after + " unresolved link(s) remain.");
+            LOGGER.info("Boss tracking retry restored " + restored + " entity link(s) for world " + world.getName());
         }
         return restored;
+    }
+
+    private int restorePersistedStateForWorld(PersistedState state, World world) {
+        if (state == null || world == null) {
+            return 0;
+        }
+
+        int restoredLinks = 0;
+        String worldName = world.getName();
+
+        // 1. Process Events for this world
+        for (PersistedEvent persisted : safeList(state.events)) {
+            if (!worldName.equalsIgnoreCase(persisted.world)) continue;
+
+            UUID eventId = parseUuid(persisted.eventId);
+            if (eventId == null) continue;
+
+            if (!eventsById.containsKey(eventId)) {
+                Vector3d center = new Vector3d(persisted.centerX, persisted.centerY, persisted.centerZ);
+                EventData event = new EventData(
+                        eventId,
+                        world,
+                        center,
+                        optional(persisted.bossName),
+                        optional(persisted.bossTier),
+                        Math.max(0L, persisted.countdownDurationMs),
+                        sanitizeStartEpoch(persisted.countdownStartEpochMs),
+                        persisted.awaitingPrimaryBossSpawn
+                );
+                eventsById.put(eventId, event);
+            }
+        }
+
+        // 2. Process Bosses for this world
+        List<PersistedBoss> remainingBosses = new ArrayList<>();
+        for (PersistedBoss persistedBoss : safeList(state.bosses)) {
+            if (!worldName.equalsIgnoreCase(persistedBoss.world)) {
+                remainingBosses.add(persistedBoss);
+                continue;
+            }
+
+            UUID bossUuid = parseUuid(persistedBoss.uuid);
+            UUID eventId = parseUuid(persistedBoss.eventId);
+            if (bossUuid == null || eventId == null) continue;
+
+            if (trackedBosses.containsKey(bossUuid)) {
+                continue;
+            }
+
+            if (isEntityAlive(world, bossUuid)) {
+                // Found it! Re-track.
+                retrackBoss(world, persistedBoss, bossUuid, eventId);
+                restoredLinks++;
+            } else if (isChunkLoaded(world, persistedBoss.spawnX, persistedBoss.spawnZ)) {
+                // Chunk is loaded but entity is missing -> trigger restoration handler
+                MissingEntityHandler handler = missingEntityHandler;
+                if (handler != null && handler.handleMissingBoss(persistedBoss)) {
+                    restoredLinks++;
+                } else {
+                    remainingBosses.add(persistedBoss);
+                }
+            } else {
+                remainingBosses.add(persistedBoss);
+            }
+        }
+
+        // 3. Process Adds for this world
+        List<PersistedAddLink> remainingAdds = new ArrayList<>();
+        for (PersistedAddLink persistedLink : safeList(state.addLinks)) {
+            UUID addUuid = parseUuid(persistedLink.addUuid);
+            UUID bossUuid = parseUuid(persistedLink.bossUuid);
+            if (addUuid == null || bossUuid == null) continue;
+
+            BossData bossData = trackedBosses.get(bossUuid);
+            if (bossData == null || bossData.world == null || !worldName.equalsIgnoreCase(bossData.world.getName())) {
+                remainingAdds.add(persistedLink);
+                continue;
+            }
+
+            if (addToBoss.containsKey(addUuid)) continue;
+
+            if (isEntityAlive(world, addUuid)) {
+                retrackAdd(world, persistedLink, addUuid, bossUuid);
+                restoredLinks++;
+            } else if (isChunkLoaded(world, bossData.spawnLocation.x, bossData.spawnLocation.z)) {
+                MissingEntityHandler handler = missingEntityHandler;
+                if (handler != null && handler.handleMissingAdd(persistedLink)) {
+                    restoredLinks++;
+                } else {
+                    remainingAdds.add(persistedLink);
+                }
+            } else {
+                remainingAdds.add(persistedLink);
+            }
+        }
+
+        // Update pending state with ONLY what's left (removes what we just restored)
+        PersistedState newState = new PersistedState();
+        newState.bosses.addAll(remainingBosses);
+        newState.addLinks.addAll(remainingAdds);
+        // Also keep events that still have associated bosses/adds in pending
+        Set<String> neededEvents = new HashSet<>();
+        for (PersistedBoss b : remainingBosses) neededEvents.add(b.eventId);
+        for (PersistedAddLink a : remainingAdds) {
+            PersistedBoss b = findPersistedBoss(state, a.bossUuid);
+            if (b != null) neededEvents.add(b.eventId);
+        }
+        for (PersistedEvent e : safeList(state.events)) {
+            if (neededEvents.contains(e.eventId) || !worldName.equalsIgnoreCase(e.world)) {
+                newState.events.add(e);
+            }
+        }
+        pendingRestoreState = newState;
+
+        return restoredLinks;
+    }
+
+    private PersistedBoss findPersistedBoss(PersistedState state, String bossUuid) {
+        for (PersistedBoss b : safeList(state.bosses)) {
+            if (bossUuid.equals(b.uuid)) return b;
+        }
+        return null;
+    }
+
+    private void retrackBoss(World world, PersistedBoss persisted, UUID bossUuid, UUID eventId) {
+        BossModifiers mods = new BossModifiers(
+                persisted.hpMultiplier, persisted.damageMultiplier, persisted.speedMultiplier,
+                persisted.scaleMultiplier, persisted.attackRateMultiplier, persisted.abilityCooldownMultiplier,
+                persisted.knockbackGivenMultiplier, persisted.knockbackTakenMultiplier, persisted.turnRateMultiplier,
+                persisted.regenMultiplier
+        );
+        BossData data = new BossData(
+                optional(persisted.bossName),
+                mods,
+                optional(persisted.arenaId),
+                world,
+                new Vector3d(persisted.spawnX, persisted.spawnY, persisted.spawnZ),
+                optional(persisted.bossTier),
+                persisted.levelOverride,
+                eventId,
+                persisted.spawnedAtEpochMs
+        );
+        trackedBosses.put(bossUuid, data);
+        bossToEvent.put(bossUuid, eventId);
+        EventData event = eventsById.get(eventId);
+        if (event != null) {
+            event.bossUuids.add(bossUuid);
+            event.aliveBosses.add(bossUuid);
+            if (event.world == null) event.world = world;
+        }
+    }
+
+    private void retrackAdd(World world, PersistedAddLink persisted, UUID addUuid, UUID bossUuid) {
+        addToBoss.put(addUuid, bossUuid);
+        trackedAddsByBoss.computeIfAbsent(bossUuid, k -> ConcurrentHashMap.newKeySet()).add(addUuid);
+        addModifiers.put(addUuid, new BossModifiers(
+                persisted.hpMultiplier, persisted.damageMultiplier, persisted.speedMultiplier,
+                persisted.scaleMultiplier, persisted.attackRateMultiplier, persisted.abilityCooldownMultiplier,
+                persisted.knockbackGivenMultiplier, persisted.knockbackTakenMultiplier, persisted.turnRateMultiplier,
+                persisted.regenMultiplier
+        ));
+        EventData event = getEventForBoss(bossUuid);
+        if (event != null) {
+            event.activeAdds.add(addUuid);
+        }
+    }
+
+    public synchronized int retryPendingRestore() {
+        // Fallback for global retry: iterate all worlds and schedule
+        Universe universe = Universe.get();
+        if (universe == null) return 0;
+        int count = 0;
+        for (World world : universe.getWorlds().values()) {
+            world.execute(() -> retryPendingRestore(world));
+            count++;
+        }
+        return count;
     }
 
     public synchronized boolean hasPendingRestore() {
         return hasPendingEntries(pendingRestoreState);
     }
 
-    private int restorePersistedState(PersistedState state, boolean clearExisting) {
-        if (clearExisting) {
-            clearRuntimeState();
-        }
-
-        if (state == null) {
-            pendingRestoreState = null;
-            return 0;
-        }
-
-        int restoredLinks = 0;
-        Map<UUID, EventData> restoredEvents = new HashMap<>();
-        for (Map.Entry<UUID, EventData> entry : eventsById.entrySet()) {
-            if (entry.getKey() != null && entry.getValue() != null) {
-                restoredEvents.put(entry.getKey(), entry.getValue());
-            }
-        }
-
-        for (PersistedEvent persisted : safeList(state.events)) {
-            UUID eventId = parseUuid(persisted.eventId);
-            if (eventId == null) {
-                continue;
-            }
-            EventData existing = restoredEvents.get(eventId);
-            if (existing != null) {
-                if (existing.world == null) {
-                    existing.world = resolveWorld(persisted.world);
-                }
-                continue;
-            }
-            Vector3d center = new Vector3d(persisted.centerX, persisted.centerY, persisted.centerZ);
-            World world = resolveWorld(persisted.world);
-            EventData event = new EventData(
-                    eventId,
-                    world,
-                    center,
-                    optional(persisted.bossName),
-                    optional(persisted.bossTier),
-                    Math.max(0L, persisted.countdownDurationMs),
-                    sanitizeStartEpoch(persisted.countdownStartEpochMs),
-                    persisted.awaitingPrimaryBossSpawn
-            );
-            restoredEvents.put(eventId, event);
-            eventsById.put(eventId, event);
-        }
-
-        List<PersistedBoss> unresolvedBosses = new ArrayList<>();
-        Set<UUID> unresolvedBossUuids = new HashSet<>();
-        Set<UUID> unresolvedEventIds = new HashSet<>();
-        Map<UUID, UUID> eventByBossUuid = new HashMap<>();
-
-        for (PersistedBoss persistedBoss : safeList(state.bosses)) {
-            UUID bossUuid = parseUuid(persistedBoss.uuid);
-            UUID eventId = parseUuid(persistedBoss.eventId);
-            if (bossUuid == null || eventId == null) {
-                continue;
-            }
-            eventByBossUuid.put(bossUuid, eventId);
-
-            EventData event = restoredEvents.get(eventId);
-            if (event == null) {
-                Vector3d center = new Vector3d(persistedBoss.spawnX, persistedBoss.spawnY, persistedBoss.spawnZ);
-                event = new EventData(
-                        eventId,
-                        resolveWorld(persistedBoss.world),
-                        center,
-                        optional(persistedBoss.bossName),
-                        optional(persistedBoss.bossTier),
-                        0L
-                );
-                restoredEvents.put(eventId, event);
-                eventsById.put(eventId, event);
-            }
-
-            if (trackedBosses.containsKey(bossUuid)) {
-                bossToEvent.put(bossUuid, eventId);
-                BossData existingBoss = trackedBosses.get(bossUuid);
-                if (event.world == null && existingBoss != null && existingBoss.world != null) {
-                    event.world = existingBoss.world;
-                }
-                event.bossUuids.add(bossUuid);
-                event.aliveBosses.add(bossUuid);
-                continue;
-            }
-
-            World world = resolveWorld(persistedBoss.world);
-            if (world == null) {
-                unresolvedBosses.add(copyPersistedBoss(persistedBoss));
-                unresolvedBossUuids.add(bossUuid);
-                unresolvedEventIds.add(eventId);
-                continue;
-            }
-            if (!isEntityAlive(world, bossUuid)) {
-                // Keep unresolved links so we can reattach once the entity/chunk is loaded.
-                unresolvedBosses.add(copyPersistedBoss(persistedBoss));
-                unresolvedBossUuids.add(bossUuid);
-                unresolvedEventIds.add(eventId);
-                continue;
-            }
-
-            Vector3d spawn = new Vector3d(persistedBoss.spawnX, persistedBoss.spawnY, persistedBoss.spawnZ);
-            BossModifiers mods = new BossModifiers(
-                    clampModifier(persistedBoss.hpMultiplier),
-                    clampModifier(persistedBoss.damageMultiplier),
-                    clampModifier(persistedBoss.speedMultiplier),
-                    clampModifier(persistedBoss.scaleMultiplier),
-                    clampModifier(persistedBoss.attackRateMultiplier),
-                    clampModifier(persistedBoss.abilityCooldownMultiplier),
-                    clampModifier(persistedBoss.knockbackGivenMultiplier),
-                    clampModifier(persistedBoss.knockbackTakenMultiplier),
-                    clampModifier(persistedBoss.turnRateMultiplier),
-                    clampModifier(persistedBoss.regenMultiplier)
-            );
-
-            BossData data = new BossData(
-                    optional(persistedBoss.bossName),
-                    mods,
-                    optional(persistedBoss.arenaId),
-                    world,
-                    spawn,
-                    optional(persistedBoss.bossTier),
-                    Math.max(0, persistedBoss.levelOverride),
-                    eventId,
-                    Math.max(0L, persistedBoss.spawnedAtEpochMs)
-            );
-            trackedBosses.put(bossUuid, data);
-            bossToEvent.put(bossUuid, eventId);
-            if (event.world == null) {
-                event.world = world;
-            }
-            event.bossUuids.add(bossUuid);
-            event.aliveBosses.add(bossUuid);
-            restoredLinks++;
-        }
-
-        List<PersistedAddLink> unresolvedAddLinks = new ArrayList<>();
-        for (PersistedAddLink persistedLink : safeList(state.addLinks)) {
-            UUID addUuid = parseUuid(persistedLink.addUuid);
-            UUID bossUuid = parseUuid(persistedLink.bossUuid);
-            if (addUuid == null || bossUuid == null) {
-                continue;
-            }
-
-            if (addToBoss.containsKey(addUuid)) {
-                continue;
-            }
-
-            BossData bossData = trackedBosses.get(bossUuid);
-            if (bossData == null) {
-                if (unresolvedBossUuids.contains(bossUuid)) {
-                    unresolvedAddLinks.add(copyPersistedAddLink(persistedLink));
-                    UUID eventId = eventByBossUuid.get(bossUuid);
-                    if (eventId != null) {
-                        unresolvedEventIds.add(eventId);
-                    }
-                }
-                continue;
-            }
-            if (bossData.world == null) {
-                unresolvedAddLinks.add(copyPersistedAddLink(persistedLink));
-                if (bossData.eventId != null) {
-                    unresolvedEventIds.add(bossData.eventId);
-                }
-                continue;
-            }
-            if (!isEntityAlive(bossData.world, addUuid)) {
-                // Adds can load after their parent boss/chunk; retry on future restore passes.
-                unresolvedAddLinks.add(copyPersistedAddLink(persistedLink));
-                if (bossData.eventId != null) {
-                    unresolvedEventIds.add(bossData.eventId);
-                }
-                continue;
-            }
-
-            trackedAddsByBoss.computeIfAbsent(bossUuid, ignored -> ConcurrentHashMap.newKeySet()).add(addUuid);
-            addToBoss.put(addUuid, bossUuid);
-            addModifiers.put(addUuid, new BossModifiers(
-                    clampModifier(persistedLink.hpMultiplier),
-                    clampModifier(persistedLink.damageMultiplier),
-                    clampModifier(persistedLink.speedMultiplier),
-                    clampModifier(persistedLink.scaleMultiplier),
-                    clampModifier(persistedLink.attackRateMultiplier),
-                    clampModifier(persistedLink.abilityCooldownMultiplier),
-                    clampModifier(persistedLink.knockbackGivenMultiplier),
-                    clampModifier(persistedLink.knockbackTakenMultiplier),
-                    clampModifier(persistedLink.turnRateMultiplier),
-                    clampModifier(persistedLink.regenMultiplier)
-            ));
-
-            EventData event = getEventForBoss(bossUuid);
-            if (event != null) {
-                event.activeAdds.add(addUuid);
-            }
-            restoredLinks++;
-        }
-
-        for (Map.Entry<UUID, EventData> entry : new ArrayList<>(eventsById.entrySet())) {
-            UUID eventId = entry.getKey();
-            EventData event = entry.getValue();
-            if (event == null) {
-                eventsById.remove(eventId);
-                continue;
-            }
-
-            event.bossUuids.removeIf(bossUuid -> {
-                UUID mappedEvent = bossToEvent.get(bossUuid);
-                return mappedEvent == null || !mappedEvent.equals(eventId);
-            });
-            event.aliveBosses.retainAll(event.bossUuids);
-            event.activeAdds.removeIf(addUuid -> !addToBoss.containsKey(addUuid));
-
-            if (event.bossUuids.isEmpty()
-                    && event.activeAdds.isEmpty()
-                    && !event.awaitingPrimaryBossSpawn
-                    && !unresolvedEventIds.contains(eventId)) {
-                eventsById.remove(eventId);
-            }
-        }
-        addModifiers.keySet().retainAll(addToBoss.keySet());
-
-        PersistedState pending = null;
-        if (!unresolvedBosses.isEmpty() || !unresolvedAddLinks.isEmpty()) {
-            pending = new PersistedState();
-            for (PersistedEvent persistedEvent : safeList(state.events)) {
-                UUID eventId = parseUuid(persistedEvent.eventId);
-                if (eventId != null && unresolvedEventIds.contains(eventId)) {
-                    pending.events.add(copyPersistedEvent(persistedEvent));
-                }
-            }
-            pending.bosses.addAll(unresolvedBosses);
-            pending.addLinks.addAll(unresolvedAddLinks);
-        }
-        pendingRestoreState = pending;
-        refreshEventChunkRetention();
-
-        LOGGER.info("Restored boss fight tracking state: "
-                + trackedBosses.size() + " boss(es), "
-                + addToBoss.size() + " add(s), "
-                + eventsById.size() + " event(s), "
-                + pendingEntryCount(pendingRestoreState) + " pending link(s).");
-        return restoredLinks;
+    private boolean isChunkLoaded(World world, double x, double z) {
+        if (world == null) return false;
+        long index = com.hypixel.hytale.math.util.ChunkUtil.indexChunkFromBlock((int) Math.floor(x), (int) Math.floor(z));
+        return world.getChunkIfInMemory(index) != null;
     }
+
 
     private String resolveEventWorldName(EventData event) {
         if (event == null) {
@@ -1112,6 +1057,14 @@ public class BossTrackingSystem {
             if (!isEventInProgress(event)) {
                 continue;
             }
+            String arenaId = null;
+            for (UUID bossUuid : event.bossUuids) {
+                BossData b = trackedBosses.get(bossUuid);
+                if (b != null && b.arenaId != null && !b.arenaId.isBlank()) {
+                    arenaId = b.arenaId;
+                    break;
+                }
+            }
             World resolvedWorld = resolveEventWorld(event);
             out.add(new ActiveEventStatus(
                     resolvedWorld,
@@ -1121,7 +1074,8 @@ public class BossTrackingSystem {
                     alive,
                     adds,
                     getRemainingCountdownMillis(event),
-                    event.awaitingPrimaryBossSpawn
+                    event.awaitingPrimaryBossSpawn,
+                    arenaId
             ));
         }
         return out;
@@ -1460,6 +1414,22 @@ public class BossTrackingSystem {
         );
     }
 
+    public interface MissingEntityHandler {
+        /**
+         * Called when a tracked boss is missing from a loaded chunk.
+         *
+         * @return true if the handler will attempt to respawn/restore the boss.
+         */
+        boolean handleMissingBoss(PersistedBoss boss);
+
+        /**
+         * Called when a tracked add is missing from a loaded chunk.
+         *
+         * @return true if the handler will attempt to respawn/restore the add.
+         */
+        boolean handleMissingAdd(PersistedAddLink add);
+    }
+
     public static class BossData {
         public String bossName;
         public BossModifiers modifiers;
@@ -1545,6 +1515,8 @@ public class BossTrackingSystem {
         public final int activeAddCount;
         public final long remainingCountdownMillis;
         public final boolean awaitingPrimaryBossSpawn;
+        /** Arena id for this event (may be null); used to resolve per-arena notification radius. */
+        public final String arenaId;
 
         public ActiveEventStatus(World world,
                                  Vector3d eventCenter,
@@ -1553,7 +1525,8 @@ public class BossTrackingSystem {
                                  int aliveBossCount,
                                  int activeAddCount,
                                  long remainingCountdownMillis,
-                                 boolean awaitingPrimaryBossSpawn) {
+                                 boolean awaitingPrimaryBossSpawn,
+                                 String arenaId) {
             this.world = world;
             this.eventCenter = eventCenter == null ? null : new Vector3d(eventCenter.x, eventCenter.y, eventCenter.z);
             this.bossName = bossName;
@@ -1562,6 +1535,7 @@ public class BossTrackingSystem {
             this.activeAddCount = activeAddCount;
             this.remainingCountdownMillis = remainingCountdownMillis;
             this.awaitingPrimaryBossSpawn = awaitingPrimaryBossSpawn;
+            this.arenaId = arenaId;
         }
     }
 
@@ -1676,42 +1650,42 @@ public class BossTrackingSystem {
         List<String> activeAdds = new ArrayList<>();
     }
 
-    private static final class PersistedBoss {
-        String uuid;
-        String eventId;
-        String bossName;
-        String arenaId;
-        String world;
-        double spawnX;
-        double spawnY;
-        double spawnZ;
-        String bossTier;
-        int levelOverride;
-        long spawnedAtEpochMs;
-        float hpMultiplier;
-        float damageMultiplier;
-        float speedMultiplier;
-        float scaleMultiplier;
-        float attackRateMultiplier;
-        float abilityCooldownMultiplier;
-        float knockbackGivenMultiplier;
-        float knockbackTakenMultiplier;
-        float turnRateMultiplier;
-        float regenMultiplier;
+    public static final class PersistedBoss {
+        public String uuid;
+        public String eventId;
+        public String bossName;
+        public String arenaId;
+        public String world;
+        public double spawnX;
+        public double spawnY;
+        public double spawnZ;
+        public String bossTier;
+        public int levelOverride;
+        public long spawnedAtEpochMs;
+        public float hpMultiplier;
+        public float damageMultiplier;
+        public float speedMultiplier;
+        public float scaleMultiplier;
+        public float attackRateMultiplier;
+        public float abilityCooldownMultiplier;
+        public float knockbackGivenMultiplier;
+        public float knockbackTakenMultiplier;
+        public float turnRateMultiplier;
+        public float regenMultiplier;
     }
 
-    private static final class PersistedAddLink {
-        String addUuid;
-        String bossUuid;
-        float hpMultiplier;
-        float damageMultiplier;
-        float speedMultiplier;
-        float scaleMultiplier;
-        float attackRateMultiplier;
-        float abilityCooldownMultiplier;
-        float knockbackGivenMultiplier;
-        float knockbackTakenMultiplier;
-        float turnRateMultiplier;
-        float regenMultiplier;
+    public static final class PersistedAddLink {
+        public String addUuid;
+        public String bossUuid;
+        public float hpMultiplier;
+        public float damageMultiplier;
+        public float speedMultiplier;
+        public float scaleMultiplier;
+        public float attackRateMultiplier;
+        public float abilityCooldownMultiplier;
+        public float knockbackGivenMultiplier;
+        public float knockbackTakenMultiplier;
+        public float turnRateMultiplier;
+        public float regenMultiplier;
     }
 }

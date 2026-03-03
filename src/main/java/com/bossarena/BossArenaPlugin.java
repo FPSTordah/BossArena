@@ -33,6 +33,8 @@ import com.hypixel.hytale.server.core.asset.type.model.config.ModelAsset;
 import com.hypixel.hytale.server.core.event.events.entity.LivingEntityUseBlockEvent;
 import com.hypixel.hytale.server.core.event.events.player.AddPlayerToWorldEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerInteractEvent;
+import com.hypixel.hytale.server.core.event.events.ShutdownEvent;
+import com.hypixel.hytale.event.EventPriority;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
 import com.hypixel.hytale.server.core.command.system.CommandManager;
@@ -93,6 +95,7 @@ public final class BossArenaPlugin extends JavaPlugin {
                 return t;
             });
     private static BossArenaPlugin INSTANCE;
+    private final java.util.concurrent.atomic.AtomicBoolean cleanedUp = new java.util.concurrent.atomic.AtomicBoolean(false);
     private BossTrackingSystem trackingSystem;
     private BossArenaConfig config = new BossArenaConfig();
     private BossShopConfig shopConfig = new BossShopConfig();
@@ -347,7 +350,12 @@ public final class BossArenaPlugin extends JavaPlugin {
                 AddPlayerToWorldEvent.class,
                 this::onAddPlayerToWorld
         );
-        getLogger().atInfo().log("Registered world-entry listener");
+        getLogger().atInfo().log("Registered world player add listener");
+        this.getEventRegistry().registerGlobal(EventPriority.FIRST, ShutdownEvent.class, event -> {
+            getLogger().atInfo().log("ShutdownEvent received (priority FIRST)");
+            handleShutdown();
+        });
+        getLogger().atInfo().log("Registered shutdown listener (priority FIRST)");
 
         config.load();
         if (config.timedMapMarker != null) {
@@ -923,7 +931,10 @@ public final class BossArenaPlugin extends JavaPlugin {
             if (ref == null) {
                 ref = findShopNpcRefNearLocation(store, location, resolveShopNpcId());
             }
+
             if (ref == null) {
+                // If the shop NPC is missing, respawn it.
+                respawnShopNpc(world, location);
                 continue;
             }
 
@@ -1067,6 +1078,7 @@ public final class BossArenaPlugin extends JavaPlugin {
             BossLootHandler.initializePersistence(lootChestStatePath);
             getLogger().atInfo().log("Loot chest persistence initialized at " + lootChestStatePath);
             trackingSystem.initializePersistence(bossFightStatePath);
+            trackingSystem.setMissingEntityHandler(new MissingEntityRestorationHandler());
             getLogger().atInfo().log("Boss fight persistence initialized at " + bossFightStatePath);
             if (timedSpawnScheduler != null) {
                 timedSpawnScheduler.initializePersistence(timedSpawnStatePath);
@@ -1113,8 +1125,10 @@ public final class BossArenaPlugin extends JavaPlugin {
 
     @Override
     protected void shutdown() {
+        handleShutdown();
+
         try {
-            // Shutdown all executors to prevent thread leaks and IllegalStateExceptions during reload
+            // Shutdown all executors and services.
             if (SHOP_REBIND_EXECUTOR != null) {
                 SHOP_REBIND_EXECUTOR.shutdown();
                 try {
@@ -1134,18 +1148,150 @@ public final class BossArenaPlugin extends JavaPlugin {
                 timedSpawnScheduler.shutdown();
             }
 
-            if (trackingSystem != null) {
-                trackingSystem.shutdownPersistence();
-            }
-
             if (timedBossMapMarkerService != null) {
                 timedBossMapMarkerService.clearAllMarkers();
             }
 
-            BossLootHandler.flushPersistence();
-            getLogger().atInfo().log("BossArena disabled and executors shut down.");
+            getLogger().atInfo().log("BossArena disabled and mod entities cleaned up.");
         } catch (Exception e) {
             getLogger().atWarning().withCause(e).log("Failed to safely shutdown BossArena");
+        }
+    }
+
+    private void handleShutdown() {
+        if (!cleanedUp.compareAndSet(false, true)) {
+            getLogger().atInfo().log("handleShutdown() called but already cleaned up.");
+            return;
+        }
+
+        getLogger().atInfo().log("handleShutdown() sequence initiated...");
+        try {
+            // 1. Save all current state BEFORE removing entities.
+            // This ensures we know what to restore on the next startup.
+            if (trackingSystem != null) {
+                trackingSystem.shutdownPersistence();
+            }
+            if (shopConfig != null) {
+                saveShopConfig().join();
+            }
+            BossLootHandler.flushPersistence();
+
+            // 2. Automated Cleanup for Safe Uninstallation.
+            // Remove mod-specific entities (bosses, shops) from all worlds.
+            cleanupModEntities();
+
+            getLogger().atInfo().log("BossArena cleanup completed.");
+        } catch (Exception e) {
+            getLogger().atWarning().withCause(e).log("Failed to safely shutdown BossArena");
+        }
+    }
+
+    private void respawnShopNpc(World world, BossShopConfig.ShopLocation location) {
+        if (world == null || location == null) return;
+
+        String shopNpcId = resolveShopNpcId();
+        Vector3d spawnPos = new Vector3d(location.x + 0.5d, location.y, location.z + 0.5d);
+        // Face south by default for respawn if we don't know the original rotation.
+        com.hypixel.hytale.math.vector.Vector3f rotation = new com.hypixel.hytale.math.vector.Vector3f(0, (float) Math.PI, 0);
+
+        world.execute(() -> {
+            var result = com.hypixel.hytale.server.npc.NPCPlugin.get().spawnNPC(
+                    world.getEntityStore().getStore(),
+                    shopNpcId,
+                    null,
+                    spawnPos,
+                    rotation
+            );
+
+            if (result != null) {
+                bindShopNpcInteraction(world.getEntityStore().getStore(), result.first());
+                Object uuidObj = world.getEntityStore().getStore().getComponent(result.first(), UUIDComponent.getComponentType());
+                if (uuidObj instanceof UUIDComponent uuidComp) {
+                    location.uuid = uuidComp.getUuid() != null ? uuidComp.getUuid().toString() : "";
+                    saveShopConfig();
+                }
+                getLogger().atInfo().log("Respawned missing shop NPC at " + location.x + ", " + location.y + ", " + location.z);
+            }
+        });
+    }
+
+    private void cleanupModEntities() {
+        getLogger().atInfo().log("Starting automated cleanup of mod entities for all worlds...");
+        BossTrackingSystem tracking = getTrackingSystem();
+        java.util.Set<UUID> trackedUuids = new java.util.HashSet<>();
+        if (tracking != null) {
+            trackedUuids.addAll(tracking.snapshotTrackedBosses().keySet());
+            trackedUuids.addAll(tracking.snapshotTrackedAdds().keySet());
+        }
+
+        com.hypixel.hytale.server.core.universe.Universe universe = com.hypixel.hytale.server.core.universe.Universe.get();
+        if (universe == null) return;
+
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+
+        for (World world : universe.getWorlds().values()) {
+            CompletableFuture<Void> future = new CompletableFuture<>();
+            futures.add(future);
+
+            world.execute(() -> {
+                getLogger().atInfo().log("Executing cleanup for world: " + world.getName());
+                try {
+                    Store<EntityStore> store = world.getEntityStore().getStore();
+                    com.hypixel.hytale.component.query.Query<EntityStore> uuidQuery = UUIDComponent.getComponentType();
+
+                    final java.util.concurrent.atomic.AtomicInteger removedCount = new java.util.concurrent.atomic.AtomicInteger(0);
+                    // Sweep all chunks for BossArena specific entities
+                    store.forEachChunk(uuidQuery, (chunk, buffer) -> {
+                        for (int i = 0; i < chunk.size(); i++) {
+                            Ref<EntityStore> ref = chunk.getReferenceTo(i);
+                            UUIDComponent uuidComp = (UUIDComponent) chunk.getComponent(i, UUIDComponent.getComponentType());
+                            UUID uuid = uuidComp != null ? uuidComp.getUuid() : null;
+
+                            boolean shouldRemove = false;
+                            if (uuid != null && trackedUuids.contains(uuid)) {
+                                shouldRemove = true;
+                            } else {
+                                Interactions interactions = (Interactions) chunk.getComponent(i, Interactions.getComponentType());
+                                if (interactions != null) {
+                                    String deathId = interactions.getInteractionId(InteractionType.Death);
+                                    String interactId = interactions.getInteractionId(InteractionType.Use);
+
+                                    if (NO_DEATH_DROPS_INTERACTION_ID.equals(deathId) ||
+                                            SHOP_OPEN_INTERACTION_ID.equals(interactId)) {
+                                        shouldRemove = true;
+                                    }
+                                }
+                            }
+
+                            if (shouldRemove) {
+                                buffer.removeEntity(ref, com.hypixel.hytale.component.RemoveReason.REMOVE);
+                                removedCount.incrementAndGet();
+                            }
+                        }
+                    });
+
+                    // Also cleanup loot chests
+                    BossLootHandler.cleanupAllChests(world);
+
+                    if (removedCount.get() > 0) {
+                        getLogger().atInfo().log("Cleaned up " + removedCount.get() + " mod entities in world: " + world.getName());
+                    } else {
+                        getLogger().atInfo().log("No mod entities found for cleanup in world: " + world.getName());
+                    }
+                    future.complete(null);
+                } catch (Exception e) {
+                    getLogger().atSevere().withCause(e).log("Cleanup failed for world: " + world.getName());
+                    future.completeExceptionally(e);
+                }
+            });
+        }
+
+        try {
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                    .get(10, TimeUnit.SECONDS);
+            getLogger().atInfo().log("Mod entity and chest cleanup completed successfully.");
+        } catch (Exception e) {
+            getLogger().atWarning().log("Cleanup did not complete in time: " + e.getMessage());
         }
     }
 
@@ -1436,5 +1582,56 @@ public final class BossArenaPlugin extends JavaPlugin {
         Files.createDirectories(bossesJsonPath.getParent());
         Files.writeString(bossesJsonPath, prettyJson, StandardCharsets.UTF_8);
         getLogger().atInfo().log("Created default bosses.json");
+    }
+
+    private final class MissingEntityRestorationHandler implements BossTrackingSystem.MissingEntityHandler {
+        @Override
+        public boolean handleMissingBoss(BossTrackingSystem.PersistedBoss persisted) {
+            if (persisted == null || bossSpawnService == null) return false;
+
+            World world = com.hypixel.hytale.server.core.universe.Universe.get().getWorld(persisted.world);
+            if (world == null) return false;
+
+            BossDefinition def = BossRegistry.get(persisted.bossName);
+            if (def == null) return false;
+
+            Vector3d spawnPos = new Vector3d(persisted.spawnX, persisted.spawnY, persisted.spawnZ);
+            com.bossarena.boss.BossModifiers mods = new com.bossarena.boss.BossModifiers(
+                    persisted.hpMultiplier, persisted.damageMultiplier, persisted.speedMultiplier,
+                    persisted.scaleMultiplier, persisted.attackRateMultiplier, persisted.abilityCooldownMultiplier,
+                    persisted.knockbackGivenMultiplier, persisted.knockbackTakenMultiplier, persisted.turnRateMultiplier,
+                    persisted.regenMultiplier
+            );
+
+            UUID eventId = null;
+            try {
+                eventId = UUID.fromString(persisted.eventId);
+            } catch (Exception ignored) {
+            }
+
+            getLogger().atInfo().log("Restoring missing boss: " + persisted.bossName + " at " + spawnPos);
+
+            // This is now called on the World Thread via retryPendingRestore(world)
+            bossSpawnService.spawnBossNow(
+                    world,
+                    def,
+                    spawnPos,
+                    persisted.arenaId,
+                    mods,
+                    0,
+                    new java.util.ArrayList<>(),
+                    new java.util.ArrayList<>(),
+                    new java.util.concurrent.atomic.AtomicInteger(0),
+                    eventId,
+                    null
+            );
+
+            return true;
+        }
+
+        @Override
+        public boolean handleMissingAdd(BossTrackingSystem.PersistedAddLink persisted) {
+            return false;
+        }
     }
 }

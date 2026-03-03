@@ -1513,7 +1513,9 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
         if (action.startsWith("arena_save_")) {
             handleArenaSave(action.substring("arena_save_".length()), data);
+            return;
         }
+
     }
 
     private void buildArenasTab(UICommandBuilder cmd, UIEventBuilder events) {
@@ -1550,6 +1552,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             cmd.set("#ArenaX" + suffix + ".Value", formatCoord(arena.x));
             cmd.set("#ArenaY" + suffix + ".Value", formatCoord(arena.y));
             cmd.set("#ArenaZ" + suffix + ".Value", formatCoord(arena.z));
+            cmd.set("#ArenaNotificationRadius" + suffix + ".Value", formatCoord(arena.getNotificationRadius()));
 
             events.addEventBinding(CustomUIEventBindingType.Activating, "#ArenaDelete" + suffix, EventData.of("Action", "arena_delete_" + row));
             events.addEventBinding(
@@ -1561,6 +1564,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                             .append("@ArenaX", "#ArenaX" + suffix + ".Value")
                             .append("@ArenaY", "#ArenaY" + suffix + ".Value")
                             .append("@ArenaZ", "#ArenaZ" + suffix + ".Value")
+                            .append("@ArenaNotificationRadius" + suffix, "#ArenaNotificationRadius" + suffix + ".Value")
             );
         }
     }
@@ -1651,6 +1655,18 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return;
         }
 
+        String radiusRaw = optionalText(data.getArenaNotificationRadius(row));
+        double notificationRadius = arena.getNotificationRadius();
+        if (!radiusRaw.isEmpty()) {
+            try {
+                notificationRadius = parseRequiredDouble(radiusRaw, "Invalid notification radius.", 10.0d, 500.0d);
+            } catch (IllegalArgumentException e) {
+                arenaStatusText = e.getMessage() + " Use 10–500 blocks.";
+                rebuild();
+                return;
+            }
+        }
+
         String oldArenaId = arena.arenaId;
         boolean nameChanged = oldArenaId == null || !oldArenaId.equalsIgnoreCase(requestedId);
         if (nameChanged && ArenaRegistry.exists(requestedId)) {
@@ -1667,6 +1683,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         arena.x = x;
         arena.y = y;
         arena.z = z;
+        arena.notificationRadius = notificationRadius;
         ArenaRegistry.register(arena);
 
         plugin.saveArenas();
@@ -3281,6 +3298,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append(new KeyedCodec<>("@ArenaX", Codec.STRING), (d, v) -> d.arenaX = v, d -> d.arenaX).add()
                 .append(new KeyedCodec<>("@ArenaY", Codec.STRING), (d, v) -> d.arenaY = v, d -> d.arenaY).add()
                 .append(new KeyedCodec<>("@ArenaZ", Codec.STRING), (d, v) -> d.arenaZ = v, d -> d.arenaZ).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius1", Codec.STRING), (d, v) -> d.arenaNotificationRadius1 = v, d -> d.arenaNotificationRadius1).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius2", Codec.STRING), (d, v) -> d.arenaNotificationRadius2 = v, d -> d.arenaNotificationRadius2).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius3", Codec.STRING), (d, v) -> d.arenaNotificationRadius3 = v, d -> d.arenaNotificationRadius3).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius4", Codec.STRING), (d, v) -> d.arenaNotificationRadius4 = v, d -> d.arenaNotificationRadius4).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius5", Codec.STRING), (d, v) -> d.arenaNotificationRadius5 = v, d -> d.arenaNotificationRadius5).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius6", Codec.STRING), (d, v) -> d.arenaNotificationRadius6 = v, d -> d.arenaNotificationRadius6).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius7", Codec.STRING), (d, v) -> d.arenaNotificationRadius7 = v, d -> d.arenaNotificationRadius7).add()
+                .append(new KeyedCodec<>("@ArenaNotificationRadius8", Codec.STRING), (d, v) -> d.arenaNotificationRadius8 = v, d -> d.arenaNotificationRadius8).add()
                 .append(new KeyedCodec<>("@ShopEditArenaId", Codec.STRING), (d, v) -> d.shopEditArenaId = v, d -> d.shopEditArenaId).add()
 
                 .append(new KeyedCodec<>("@BossEditName", Codec.STRING), (d, v) -> d.bossEditName = v, d -> d.bossEditName).add()
@@ -3421,6 +3446,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String arenaX;
         public String arenaY;
         public String arenaZ;
+        public String arenaNotificationRadius1;
+        public String arenaNotificationRadius2;
+        public String arenaNotificationRadius3;
+        public String arenaNotificationRadius4;
+        public String arenaNotificationRadius5;
+        public String arenaNotificationRadius6;
+        public String arenaNotificationRadius7;
+        public String arenaNotificationRadius8;
         public String shopEditArenaId;
         public String bossEditName;
         public String bossEditNpcId;
@@ -3706,6 +3739,20 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 case 4 -> bossWaveSize4;
                 case 5 -> bossWaveSize5;
                 case 6 -> bossWaveSize6;
+                default -> "";
+            };
+        }
+
+        public String getArenaNotificationRadius(int row) {
+            return switch (row) {
+                case 1 -> arenaNotificationRadius1;
+                case 2 -> arenaNotificationRadius2;
+                case 3 -> arenaNotificationRadius3;
+                case 4 -> arenaNotificationRadius4;
+                case 5 -> arenaNotificationRadius5;
+                case 6 -> arenaNotificationRadius6;
+                case 7 -> arenaNotificationRadius7;
+                case 8 -> arenaNotificationRadius8;
                 default -> "";
             };
         }

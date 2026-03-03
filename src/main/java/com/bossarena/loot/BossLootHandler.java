@@ -706,35 +706,55 @@ public class BossLootHandler {
         });
     }
 
+    public static void cleanupAllChests(World world) {
+        if (world == null) return;
+        String worldName = world.getName();
+        List<Vector3d> toRemove = new ArrayList<>();
+        for (Map.Entry<Vector3d, String> entry : CHEST_WORLD.entrySet()) {
+            if (worldName.equals(entry.getValue())) {
+                toRemove.add(entry.getKey());
+            }
+        }
+        for (Vector3d loc : toRemove) {
+            CHEST_LOOT.remove(loc);
+            CHEST_WORLD.remove(loc);
+            cancelChestExpiry(loc, false);
+            removeChestBlockDirectly(world, loc);
+        }
+        persistStateSafe();
+    }
+
     private static void removeChestBlock(World world, Vector3d location) {
         if (world == null) {
             LOGGER.warning("Cannot remove chest block: world is null");
             return;
         }
-        world.execute(() -> {
-            try {
-                int x = (int) Math.floor(location.x);
-                int y = (int) Math.floor(location.y);
-                int z = (int) Math.floor(location.z);
+        world.execute(() -> removeChestBlockDirectly(world, location));
+    }
 
-                removeChestBlockAt(world, x, y, z);
+    private static void removeChestBlockDirectly(World world, Vector3d location) {
+        try {
+            int x = (int) Math.floor(location.x);
+            int y = (int) Math.floor(location.y);
+            int z = (int) Math.floor(location.z);
 
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        int bx = x + dx;
-                        int bz = z + dz;
-                        BlockType type = world.getBlockType(bx, y, bz);
-                        if (isChestBlockType(type)) {
-                            removeChestBlockAt(world, bx, y, bz);
-                        }
+            removeChestBlockAt(world, x, y, z);
+
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    int bx = x + dx;
+                    int bz = z + dz;
+                    BlockType type = world.getBlockType(bx, y, bz);
+                    if (isChestBlockType(type)) {
+                        removeChestBlockAt(world, bx, y, bz);
                     }
                 }
-
-                LOGGER.info("Removed chest block at: " + x + ", " + y + ", " + z);
-            } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "Error removing chest block", e);
             }
-        });
+
+            LOGGER.info("Removed chest block at: " + x + ", " + y + ", " + z);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Error removing chest block", e);
+        }
     }
 
     private static void removeChestBlockAt(World world, int x, int y, int z) {

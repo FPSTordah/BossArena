@@ -3,6 +3,10 @@
 /target/
 /libs/
 /dev-notes/
-*.log
+/logs/
+/.aiassistant/
+.prism.json
+Assets.zip
+/workspace/
 /BossShopGUI.java
 CHANGELOG.md

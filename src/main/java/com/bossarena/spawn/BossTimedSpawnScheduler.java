@@ -41,6 +41,8 @@ public final class BossTimedSpawnScheduler {
     private static final long SCHEDULER_TICK_SECONDS = 5L;
     private static final long WORLD_LOOKUP_RETRY_MINUTES = 1L;
     private static final long PENDING_SPAWN_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(30L);
+    // When no players are online in the target world, defer timed spawns and retry soon.
+    private static final long NO_PLAYER_RETRY_SECONDS = 30L;
     private final BossSpawnService bossSpawnService;
     private final BossTrackingSystem trackingSystem;
     private final Map<String, PendingSpawnState> pendingSpawnByKey = new ConcurrentHashMap<>();
@@ -312,16 +314,17 @@ public final class BossTimedSpawnScheduler {
     private boolean evaluateSpawn(TimedSpawnState state, long now) {
         BossArenaConfig.TimedBossSpawn rule = state.rule;
         long intervalMs = minutesToMillis(resolveSpawnIntervalMinutes(rule));
-        state.nextSpawnEpochMs = now + intervalMs;
 
         if (rule.preventDuplicateWhileAlive) {
             if (hasAliveBossForRule(rule)) {
                 clearPendingSpawnForRule(rule);
                 LOGGER.info("Timed spawn skipped for '" + state.label + "' because a matching boss is already alive.");
+                state.nextSpawnEpochMs = now + intervalMs;
                 return true;
             }
             if (isSpawnPendingForRule(rule, now)) {
                 LOGGER.info("Timed spawn skipped for '" + state.label + "' because a matching spawn is already pending.");
+                state.nextSpawnEpochMs = now + intervalMs;
                 return true;
             }
         }
@@ -342,6 +345,7 @@ public final class BossTimedSpawnScheduler {
         Arena arena = ArenaRegistry.get(configuredArenaId);
         if (arena == null) {
             LOGGER.warning("Timed spawn rule '" + state.label + "' references missing arena '" + configuredArenaId + "'.");
+            state.nextSpawnEpochMs = now + intervalMs;
             return true;
         }
 
@@ -349,6 +353,14 @@ public final class BossTimedSpawnScheduler {
         if (world == null) {
             state.nextSpawnEpochMs = now + minutesToMillis(WORLD_LOOKUP_RETRY_MINUTES);
             LOGGER.warning("Timed spawn rule '" + state.label + "' could not resolve world '" + arena.worldName + "'. Retrying soon.");
+            return true;
+        }
+
+        // If there are no players online in the target world, defer this spawn until players are present.
+        if (!hasAnyOnlinePlayer(world)) {
+            state.nextSpawnEpochMs = now + TimeUnit.SECONDS.toMillis(NO_PLAYER_RETRY_SECONDS);
+            LOGGER.info("Timed spawn for '" + state.label + "' deferred because no players are online in world '"
+                    + world.getName() + "'.");
             return true;
         }
 
@@ -394,7 +406,24 @@ public final class BossTimedSpawnScheduler {
                 LOGGER.info("Timed spawn created boss '" + configuredBossId + "' for rule '" + state.label + "' (uuid=" + result + ").");
             }
         });
+        state.nextSpawnEpochMs = now + intervalMs;
         return true;
+    }
+
+    private static boolean hasAnyOnlinePlayer(World world) {
+        if (world == null) {
+            return false;
+        }
+        try {
+            for (var playerRef : world.getPlayerRefs()) {
+                if (playerRef != null && playerRef.isValid()) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+            // If this fails for any reason, fall back to treating as no players.
+        }
+        return false;
     }
 
     private void enforceTimedDespawn(TimedSpawnState state, long now) {

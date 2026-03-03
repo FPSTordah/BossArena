@@ -1,6 +1,9 @@
 package com.bossarena.system;
 
+import com.bossarena.BossArenaConfig;
 import com.bossarena.BossArenaPlugin;
+import com.bossarena.data.Arena;
+import com.bossarena.data.ArenaRegistry;
 import com.bossarena.loot.BossLootHandler;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.component.Store;
@@ -80,6 +83,17 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
             if (event == null) {
                 continue;
             }
+            double notificationRadius = -1.0d;
+            if (event.arenaId != null && !event.arenaId.isBlank()) {
+                Arena arena = ArenaRegistry.get(event.arenaId);
+                if (arena != null) {
+                    notificationRadius = arena.getNotificationRadius();
+                }
+            }
+            if (!Double.isFinite(notificationRadius) || notificationRadius <= 0) {
+                BossArenaConfig config = BossArenaPlugin.getInstance() != null ? BossArenaPlugin.getInstance().getConfigHandle() : null;
+                notificationRadius = (config != null) ? config.getNotificationRadius() : 100.0d;
+            }
             BossWaveNotificationService.notifyBossAliveStatus(
                     event.world,
                     event.eventCenter,
@@ -88,7 +102,9 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
                     event.activeAddCount,
                     event.awaitingPrimaryBossSpawn ? "Preparing encounter" : null,
                     event.remainingCountdownMillis,
-                    true
+                    true,
+                    true,
+                    notificationRadius
             );
         }
     }

@@ -4,7 +4,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `2.0.0`
+- Current project version: `2.0.2`
 
 ## Changelog
 
@@ -149,6 +149,7 @@ Fields per arena:
 - `x`
 - `y`
 - `z`
+- `notificationRadius` (blocks; distance within which players see boss event title/subtitle for this arena; 10–500, default `100`)
 
 ### `loot_tables.json`
 
@@ -247,6 +248,7 @@ Global config fields:
 
 - `currencyItemId`
 - `fallbackCurrencyItemId`
+- `notificationRadius` (blocks; fallback when an arena has no per-arena value; 10–500, default `100`)
 - `arenas` (legacy)
 - `eventBanner` (custom event-title banner templates)
 - `timedMapMarker` (world map marker settings for active timed bosses)
@@ -370,4 +372,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-2.0.0.jar`
+- `target/BossArena-2.0.2.jar`
