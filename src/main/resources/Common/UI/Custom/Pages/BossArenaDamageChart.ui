@@ -1,0 +1,247 @@
+Group {
+  Anchor: (Left: 0, Top: 0, Width: 1920, Height: 1080);
+
+  Panel #Panel {
+    Anchor: (Left: 24, Top: 120, Width: 320, Height: 480);
+    Background: #1a2332;
+  }
+
+  Panel #Accent {
+    Anchor: (Left: 24, Top: 120, Width: 4, Height: 480);
+    Background: #c94a4a;
+  }
+
+  Label #TitleLabel {
+    Anchor: (Left: 40, Top: 132, Width: 280, Height: 28);
+    Text: "Damage Dealt";
+    Style: (FontSize: 18, TextColor: #f3f7ff, RenderBold: true);
+  }
+
+  Label #Level {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+
+  ProgressBar #ProgressBar {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+  }
+
+  ProgressBar #ProgressBarEffect {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+  }
+
+  Label #InfoRaceValue {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+  Label #InfoRacePrefix {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+  Label #InfoMobLevelValue {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+  Label #InfoMobLevelPrefix {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+  Label #PrimaryClass {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+  Label #SecondaryClass {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+    Text: "";
+  }
+
+  ItemIcon #PrimaryIcon {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+  }
+
+  ItemIcon #SecondaryIcon {
+    Anchor: (Left: 0, Top: 0, Width: 0, Height: 0);
+    Visible: false;
+  }
+
+  Label #Row1Rank {
+    Anchor: (Left: 36, Top: 168, Width: 28, Height: 22);
+    Text: "1";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row1Name {
+    Anchor: (Left: 68, Top: 168, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row1Damage {
+    Anchor: (Left: 232, Top: 168, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row2Rank {
+    Anchor: (Left: 36, Top: 192, Width: 28, Height: 22);
+    Text: "2";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row2Name {
+    Anchor: (Left: 68, Top: 192, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row2Damage {
+    Anchor: (Left: 232, Top: 192, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row3Rank {
+    Anchor: (Left: 36, Top: 216, Width: 28, Height: 22);
+    Text: "3";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row3Name {
+    Anchor: (Left: 68, Top: 216, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row3Damage {
+    Anchor: (Left: 232, Top: 216, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row4Rank {
+    Anchor: (Left: 36, Top: 240, Width: 28, Height: 22);
+    Text: "4";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row4Name {
+    Anchor: (Left: 68, Top: 240, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row4Damage {
+    Anchor: (Left: 232, Top: 240, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row5Rank {
+    Anchor: (Left: 36, Top: 264, Width: 28, Height: 22);
+    Text: "5";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row5Name {
+    Anchor: (Left: 68, Top: 264, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row5Damage {
+    Anchor: (Left: 232, Top: 264, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row6Rank {
+    Anchor: (Left: 36, Top: 288, Width: 28, Height: 22);
+    Text: "6";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row6Name {
+    Anchor: (Left: 68, Top: 288, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row6Damage {
+    Anchor: (Left: 232, Top: 288, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row7Rank {
+    Anchor: (Left: 36, Top: 312, Width: 28, Height: 22);
+    Text: "7";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row7Name {
+    Anchor: (Left: 68, Top: 312, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row7Damage {
+    Anchor: (Left: 232, Top: 312, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row8Rank {
+    Anchor: (Left: 36, Top: 336, Width: 28, Height: 22);
+    Text: "8";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row8Name {
+    Anchor: (Left: 68, Top: 336, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row8Damage {
+    Anchor: (Left: 232, Top: 336, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row9Rank {
+    Anchor: (Left: 36, Top: 360, Width: 28, Height: 22);
+    Text: "9";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row9Name {
+    Anchor: (Left: 68, Top: 360, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row9Damage {
+    Anchor: (Left: 232, Top: 360, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  Label #Row10Rank {
+    Anchor: (Left: 36, Top: 384, Width: 28, Height: 22);
+    Text: "10";
+    Style: (FontSize: 13, TextColor: #b2c0d2);
+  }
+  Label #Row10Name {
+    Anchor: (Left: 68, Top: 384, Width: 160, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #e6eefc);
+  }
+  Label #Row10Damage {
+    Anchor: (Left: 232, Top: 384, Width: 100, Height: 22);
+    Text: "";
+    Style: (FontSize: 13, TextColor: #8fb7ff, RenderBold: true);
+  }
+
+  TextButton #CloseButton {
+    Anchor: (Left: 272, Top: 564, Width: 72, Height: 28);
+    Visible: true;
+    Text: "Close";
+    Style: TextButtonStyle(
+      Default: (Background: #2a3d58, LabelStyle: (FontSize: 12, TextColor: #e6eefc, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Hovered: (Background: #c94a4a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center)),
+      Pressed: (Background: #a03a3a, LabelStyle: (FontSize: 12, TextColor: #ffffff, RenderBold: true, HorizontalAlignment: Center, VerticalAlignment: Center))
+    );
+  }
+}

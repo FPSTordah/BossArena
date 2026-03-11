@@ -40,12 +40,20 @@ public final class BossTimedSpawnScheduler {
     private static final int PERSISTENCE_VERSION = 1;
     private static final long SCHEDULER_TICK_SECONDS = 5L;
     private static final long WORLD_LOOKUP_RETRY_MINUTES = 1L;
-    private static final long PENDING_SPAWN_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(30L);
+    private static final long PENDING_SPAWN_TIMEOUT_MS = TimeUnit.MINUTES.toMillis(10L);
+    /** If no matching boss is alive and pending is older than this, treat as stale and clear (boss died/crate gone). */
+    private static final long STALE_PENDING_WHEN_NO_BOSS_MS = TimeUnit.MINUTES.toMillis(2L);
     // When no players are online in the target world, defer timed spawns and retry soon.
     private static final long NO_PLAYER_RETRY_SECONDS = 30L;
+    /** When waiting for a player within proximity radius, re-check this often so walking into range triggers quickly. */
+    private static final long PROXIMITY_RETRY_SECONDS = 10L;
+    /** Cooldown between proximity-triggered spawns for the same boss/arena combination. */
+    private static final long PROXIMITY_RESPAWN_COOLDOWN_SECONDS = 60L;
     private final BossSpawnService bossSpawnService;
     private final BossTrackingSystem trackingSystem;
     private final Map<String, PendingSpawnState> pendingSpawnByKey = new ConcurrentHashMap<>();
+    /** Last time (epoch ms) a proximity-based spawn fired for a given boss/arena key. */
+    private final Map<String, Long> lastProximitySpawnByKey = new ConcurrentHashMap<>();
     private final Set<UUID> spawnedTimedBossUuids = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService executor =
             Executors.newSingleThreadScheduledExecutor(r -> {
@@ -136,7 +144,16 @@ public final class BossTimedSpawnScheduler {
         if (universe == null) {
             return null;
         }
-        return universe.getWorld(worldName);
+        World w = universe.getWorld(worldName);
+        if (w != null) {
+            return w;
+        }
+        for (World candidate : universe.getWorlds().values()) {
+            if (candidate != null && worldName.equalsIgnoreCase(candidate.getName())) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private static long resolveSpawnIntervalMinutes(BossArenaConfig.TimedBossSpawn rule) {
@@ -256,6 +273,22 @@ public final class BossTimedSpawnScheduler {
                     continue;
                 }
                 BossArenaConfig.TimedBossSpawn snapshot = copyRule(rule);
+
+                // If the referenced boss is configured for proximity spawning, ignore this timed rule.
+                String bossId = optional(snapshot.bossId);
+                if (!bossId.isEmpty()) {
+                    BossDefinition def = BossRegistry.get(bossId);
+                    if (def != null && def.extraMobs != null) {
+                        def.extraMobs.sanitize();
+                        if (def.extraMobs.timedProximityEnabled && def.extraMobs.getTimedProximityRadius() > 0.0d) {
+                            String skippedLabel = resolveRuleLabel(snapshot, index);
+                            LOGGER.info("Timed spawn rule '" + skippedLabel + "' skipped because boss '" + bossId
+                                    + "' has proximity spawning enabled.");
+                            continue;
+                        }
+                    }
+                }
+
                 long intervalMs = minutesToMillis(resolveSpawnIntervalMinutes(snapshot));
                 String label = resolveRuleLabel(snapshot, index);
                 long firstAt = sanitizeNextSpawnEpoch(persistedMap.get(label), now, intervalMs);
@@ -286,24 +319,27 @@ public final class BossTimedSpawnScheduler {
         trackingSystem.retryPendingRestore();
 
         List<TimedSpawnState> current = states;
-        if (current.isEmpty()) {
-            return;
-        }
-
         boolean changed = false;
         long now = System.currentTimeMillis();
         pruneExpiredPendingSpawns(now);
-        for (TimedSpawnState state : current) {
-            if (state == null || state.rule == null) {
-                continue;
+        if (!current.isEmpty()) {
+            for (TimedSpawnState state : current) {
+                if (state == null || state.rule == null) {
+                    continue;
+                }
+                enforceTimedDespawn(state, now);
+                if (now < state.nextSpawnEpochMs) {
+                    continue;
+                }
+                if (evaluateSpawn(state, now)) {
+                    changed = true;
+                }
             }
-            enforceTimedDespawn(state, now);
-            if (now < state.nextSpawnEpochMs) {
-                continue;
-            }
-            if (evaluateSpawn(state, now)) {
-                changed = true;
-            }
+        }
+
+        // Also evaluate pure proximity-based spawns (no timed rule required).
+        if (evaluateProximitySpawns(now)) {
+            changed = true;
         }
 
         if (changed) {
@@ -322,6 +358,8 @@ public final class BossTimedSpawnScheduler {
                 state.nextSpawnEpochMs = now + intervalMs;
                 return true;
             }
+            // No matching boss alive: clear stale pending so we don't block forever after boss/crate gone
+            clearStalePendingForRuleIfNoAliveBoss(rule, now);
             if (isSpawnPendingForRule(rule, now)) {
                 LOGGER.info("Timed spawn skipped for '" + state.label + "' because a matching spawn is already pending.");
                 state.nextSpawnEpochMs = now + intervalMs;
@@ -364,6 +402,45 @@ public final class BossTimedSpawnScheduler {
             return true;
         }
 
+        // Per-boss proximity: if enabled on the boss, wait until at least one player is within the
+        // configured radius of the chosen proximity arena center before spawning. Re-fetch from registry so we see latest save.
+        BossDefinition latestDef = BossRegistry.get(configuredBossId);
+        if (latestDef != null) {
+            def = latestDef;
+            if (def.extraMobs != null) def.extraMobs.sanitize();
+        }
+        boolean proximityEnabled = def.extraMobs != null && def.extraMobs.timedProximityEnabled;
+        double proximityRadius = def.extraMobs != null ? def.extraMobs.getTimedProximityRadius() : 0.0d;
+        String configuredProximityArenaId = (def.extraMobs != null && def.extraMobs.timedProximityArenaId != null)
+                ? def.extraMobs.timedProximityArenaId.trim()
+                : "";
+        if (proximityEnabled && proximityRadius > 0.0d) {
+            String proximityArenaId = !configuredProximityArenaId.isEmpty() ? configuredProximityArenaId : configuredArenaId;
+            Arena proximityArena = ArenaRegistry.get(proximityArenaId);
+            if (proximityArena != null) {
+                World proximityWorld = resolveWorld(proximityArena.worldName);
+                if (proximityWorld == null) {
+                    state.nextSpawnEpochMs = now + TimeUnit.SECONDS.toMillis(PROXIMITY_RETRY_SECONDS);
+                    LOGGER.warning("Timed spawn '" + state.label + "' proximity arena '" + proximityArenaId + "' world '" + proximityArena.worldName + "' not loaded. Retrying in " + PROXIMITY_RETRY_SECONDS + "s.");
+                    return true;
+                }
+                Vector3d center = proximityArena.getPosition();
+                if (!hasPlayerWithinRadius(proximityWorld, center, proximityRadius)) {
+                    state.nextSpawnEpochMs = now + TimeUnit.SECONDS.toMillis(PROXIMITY_RETRY_SECONDS);
+                    double closest = closestPlayerDistance(proximityWorld, center);
+                    LOGGER.info("Timed spawn '" + state.label + "' waiting for player within "
+                            + proximityRadius + " blocks of arena '" + proximityArenaId + "' (center "
+                            + String.format("%.0f, %.0f, %.0f", center.x, center.y, center.z) + " in " + proximityWorld.getName()
+                            + "). Closest player: " + (closest < Double.MAX_VALUE ? String.format("%.0f blocks", closest) : "none") + ". Re-checking in " + PROXIMITY_RETRY_SECONDS + "s.");
+                    return true;
+                }
+                LOGGER.info("Timed spawn '" + state.label + "': player in proximity of arena '" + proximityArenaId + "', spawning boss.");
+            } else {
+                LOGGER.warning("Timed spawn rule '" + state.label + "' has proximity enabled for boss '"
+                        + configuredBossId + "' but arena '" + proximityArenaId + "' does not exist; spawning without proximity.");
+            }
+        }
+
         if (rule.preventDuplicateWhileAlive) {
             markSpawnPending(rule, state.label, now);
         }
@@ -382,6 +459,8 @@ public final class BossTimedSpawnScheduler {
                         if (mapMarkerService != null) {
                             mapMarkerService.onTimedBossSpawn(world, uuid);
                         }
+                        // Clear pending when boss actually spawns (critical for deferred spawns after pre-boss waves)
+                        clearPendingSpawnForRule(rule);
                     }
             );
             if (result == null) {
@@ -389,6 +468,7 @@ public final class BossTimedSpawnScheduler {
                 LOGGER.warning("Timed spawn failed for rule '" + state.label + "'.");
                 return;
             }
+            // Immediate spawn: clear now; deferred spawn: cleared in callback when boss spawns
             if (!BossSpawnService.DEFERRED_SPAWN_UUID.equals(result)) {
                 clearPendingSpawnForRule(rule);
             }
@@ -424,6 +504,180 @@ public final class BossTimedSpawnScheduler {
             // If this fails for any reason, fall back to treating as no players.
         }
         return false;
+    }
+
+    /** Returns distance of closest player to center, or Double.MAX_VALUE if no players. */
+    private static double closestPlayerDistance(World world, Vector3d center) {
+        if (world == null || center == null) {
+            return Double.MAX_VALUE;
+        }
+        double minDistSq = Double.MAX_VALUE;
+        try {
+            for (var playerRef : world.getPlayerRefs()) {
+                if (playerRef == null || !playerRef.isValid()) {
+                    continue;
+                }
+                var transform = playerRef.getTransform();
+                if (transform == null) {
+                    continue;
+                }
+                Vector3d pos = transform.getPosition();
+                if (pos == null) {
+                    continue;
+                }
+                double dx = pos.x - center.x;
+                double dy = pos.y - center.y;
+                double dz = pos.z - center.z;
+                double distSq = (dx * dx) + (dy * dy) + (dz * dz);
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return minDistSq < Double.MAX_VALUE ? Math.sqrt(minDistSq) : Double.MAX_VALUE;
+    }
+
+    private static boolean hasPlayerWithinRadius(World world, Vector3d center, double radius) {
+        if (world == null || center == null || radius <= 0.0d) {
+            return false;
+        }
+        double radiusSq = radius * radius;
+        try {
+            for (var playerRef : world.getPlayerRefs()) {
+                if (playerRef == null || !playerRef.isValid()) {
+                    continue;
+                }
+                var transform = playerRef.getTransform();
+                if (transform == null) {
+                    continue;
+                }
+                Vector3d pos = transform.getPosition();
+                if (pos == null) {
+                    continue;
+                }
+                double dx = pos.x - center.x;
+                double dy = pos.y - center.y;
+                double dz = pos.z - center.z;
+                double distSq = (dx * dx) + (dy * dy) + (dz * dz);
+                if (distSq <= radiusSq) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private boolean evaluateProximitySpawns(long now) {
+        boolean spawnedAny = false;
+
+        for (BossDefinition def : BossRegistry.getAll().values()) {
+            if (def == null || def.extraMobs == null) {
+                continue;
+            }
+            def.extraMobs.sanitize();
+            if (!def.extraMobs.timedProximityEnabled) {
+                continue;
+            }
+            double radius = def.extraMobs.getTimedProximityRadius();
+            if (radius <= 0.0d) {
+                continue;
+            }
+            String arenaId = optional(def.extraMobs.timedProximityArenaId);
+            if (arenaId.isEmpty()) {
+                continue;
+            }
+
+            Arena arena = ArenaRegistry.get(arenaId);
+            if (arena == null) {
+                LOGGER.warning("Proximity spawn skipped for boss '" + def.bossName + "' because arena '" + arenaId + "' does not exist.");
+                continue;
+            }
+
+            World world = resolveWorld(arena.worldName);
+            if (world == null) {
+                LOGGER.warning("Proximity spawn skipped for boss '" + def.bossName + "' because world '" + arena.worldName + "' is not loaded.");
+                continue;
+            }
+
+            Vector3d center = arena.getPosition();
+            if (!hasPlayerWithinRadius(world, center, radius)) {
+                continue;
+            }
+
+            // Avoid spawning if there's already a boss alive in this arena.
+            if (hasAliveBossInArena(arena.arenaId)) {
+                continue;
+            }
+
+            String key = resolveProximitySpawnKey(def.bossName, arena.arenaId);
+            long lastAt = lastProximitySpawnByKey.getOrDefault(key, 0L);
+            long cooldownSeconds = def.extraMobs.getTimedProximityCooldownSeconds(PROXIMITY_RESPAWN_COOLDOWN_SECONDS);
+            long cooldownMs = TimeUnit.SECONDS.toMillis(cooldownSeconds);
+            if (lastAt > 0L && now - lastAt < cooldownMs) {
+                continue;
+            }
+
+            String label = def.bossName + "@" + arena.arenaId;
+            LOGGER.info("Proximity spawn '" + label + "': player in proximity of arena '" + arena.arenaId
+                    + "' (center " + String.format("%.1f, %.1f, %.1f", center.x, center.y, center.z)
+                    + " in " + world.getName() + "), radius " + radius + ".");
+
+            world.execute(() -> {
+                UUID result = bossSpawnService.spawnBossFromJson(
+                        null,
+                        def.bossName,
+                        world,
+                        center,
+                        arena.arenaId,
+                        0L,
+                        uuid -> {
+                            spawnedTimedBossUuids.add(uuid);
+                            if (mapMarkerService != null) {
+                                mapMarkerService.onTimedBossSpawn(world, uuid);
+                            }
+                        }
+                );
+                if (result == null) {
+                    LOGGER.warning("Proximity spawn failed for boss '" + def.bossName + "' at arena '" + arena.arenaId + "'.");
+                } else {
+                    LOGGER.info("Proximity spawn created boss '" + def.bossName + "' (uuid=" + result + ") at arena '" + arena.arenaId + "'.");
+                }
+            });
+
+            lastProximitySpawnByKey.put(key, now);
+            spawnedAny = true;
+        }
+
+        return spawnedAny;
+    }
+
+    private boolean hasAliveBossInArena(String arenaId) {
+        if (arenaId == null || arenaId.isBlank()) {
+            return false;
+        }
+        try {
+            for (BossTrackingSystem.BossData data : trackingSystem.snapshotTrackedBosses().values()) {
+                if (data == null || data.arenaId == null) {
+                    continue;
+                }
+                if (arenaId.equalsIgnoreCase(data.arenaId)) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
+    }
+
+    private static String resolveProximitySpawnKey(String bossName, String arenaId) {
+        String boss = optional(bossName);
+        String arena = optional(arenaId);
+        if (boss.isEmpty() || arena.isEmpty()) {
+            return "";
+        }
+        return boss + "@" + arena;
     }
 
     private void enforceTimedDespawn(TimedSpawnState state, long now) {
@@ -564,6 +818,31 @@ public final class BossTimedSpawnScheduler {
             return;
         }
         pendingSpawnByKey.remove(key);
+    }
+
+    /**
+     * When no matching boss is alive but pending exists and is older than {@link #STALE_PENDING_WHEN_NO_BOSS_MS},
+     * clear it so the next spawn can run (avoids "already pending" forever after boss/crate are gone).
+     */
+    private void clearStalePendingForRuleIfNoAliveBoss(BossArenaConfig.TimedBossSpawn rule, long now) {
+        if (hasAliveBossForRule(rule)) {
+            return;
+        }
+        String key = resolveSpawnKey(rule);
+        if (key.isEmpty()) {
+            return;
+        }
+        PendingSpawnState pending = pendingSpawnByKey.get(key);
+        if (pending == null) {
+            return;
+        }
+        if ((now - pending.startedAtEpochMs) < STALE_PENDING_WHEN_NO_BOSS_MS) {
+            return;
+        }
+        if (pendingSpawnByKey.remove(key, pending)) {
+            LOGGER.info("Cleared stale pending timed spawn '" + pending.ruleLabel
+                    + "' (no matching boss alive for " + (STALE_PENDING_WHEN_NO_BOSS_MS / 60_000L) + " min).");
+        }
     }
 
     private void pruneExpiredPendingSpawns(long now) {

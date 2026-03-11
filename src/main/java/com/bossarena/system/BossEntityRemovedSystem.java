@@ -22,9 +22,11 @@ import java.util.logging.Logger;
 public final class BossEntityRemovedSystem extends RefSystem<EntityStore> {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private final BossTrackingSystem trackingSystem;
+    private final BossArenaPlugin plugin;
 
-    public BossEntityRemovedSystem(BossTrackingSystem trackingSystem) {
+    public BossEntityRemovedSystem(BossTrackingSystem trackingSystem, BossArenaPlugin plugin) {
         this.trackingSystem = trackingSystem;
+        this.plugin = plugin;
     }
 
     @Override
@@ -59,6 +61,12 @@ public final class BossEntityRemovedSystem extends RefSystem<EntityStore> {
             return;
         }
 
+        if (trackingSystem.isPendingPreBossAdd(entityUuid)) {
+            trackingSystem.onPendingPreBossAddRemoved(entityUuid);
+            LOGGER.info("Pending pre-boss add removed: " + entityUuid);
+            return;
+        }
+
         boolean isBoss = trackingSystem.isTracked(entityUuid);
         boolean isAdd = trackingSystem.isTrackedAdd(entityUuid);
         if (!isBoss && !isAdd) {
@@ -70,8 +78,6 @@ public final class BossEntityRemovedSystem extends RefSystem<EntityStore> {
         if (reason != RemoveReason.REMOVE) {
             return;
         }
-
-        var plugin = BossArenaPlugin.getInstance();
 
         if (isBoss) {
             // Snapshot event members before canceling to clean up everything.

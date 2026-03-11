@@ -1,6 +1,8 @@
 package com.bossarena.loot;
 
 import com.bossarena.BossArenaPlugin;
+import com.bossarena.damagechart.BossDamageChartTracker;
+import com.bossarena.damagechart.DamageChartOpener;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
@@ -14,6 +16,8 @@ import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
+import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.universe.world.meta.BlockState;
 import com.hypixel.hytale.server.core.util.FillerBlockUtil;
 import com.hypixel.hytale.server.core.command.system.CommandManager;
@@ -53,6 +57,14 @@ public class BossLootHandler {
     private static final long CHEST_UNTOUCHED_EXPIRY_MS = 60_000L;
     private static final Random RANDOM = new Random();
     private static volatile Path persistencePath;
+    private static volatile BossDamageChartTracker damageChartTracker;
+    private static volatile DamageChartOpener damageChartOpener;
+
+    /** Set by plugin for damage chart; null disables chart. */
+    public static void setDamageChartDependencies(BossDamageChartTracker tracker, DamageChartOpener opener) {
+        damageChartTracker = tracker;
+        damageChartOpener = opener;
+    }
 
     public static synchronized void initializePersistence(Path stateFilePath) {
         persistencePath = stateFilePath;
@@ -79,6 +91,10 @@ public class BossLootHandler {
 
     // Queue a loot spawn
     public static void queueLootSpawn(World world, Vector3d location, String bossName) {
+        queueLootSpawn(world, location, bossName, null);
+    }
+
+    public static void queueLootSpawn(World world, Vector3d location, String bossName, UUID eventId) {
         if (world == null) {
             LOGGER.warning("Skipping loot spawn queue for '" + bossName + "' because world is null.");
             return;
@@ -87,12 +103,16 @@ public class BossLootHandler {
             LOGGER.warning("Skipping loot spawn queue for '" + bossName + "' because location is null.");
             return;
         }
-        PENDING_SPAWNS.add(new PendingLootSpawn(world, location, bossName));
+        PENDING_SPAWNS.add(new PendingLootSpawn(world, location, bossName, eventId));
         LOGGER.info("Queued loot spawn for: " + bossName + " at " + location);
     }
 
     // Main handler called from LootSpawnSystem
     public static void handleBossDeath(World world, Vector3d chestLocation, String bossName) {
+        handleBossDeath(world, chestLocation, bossName, null, null);
+    }
+
+    public static void handleBossDeath(World world, Vector3d chestLocation, String bossName, UUID eventId, Store<EntityStore> store) {
         LOGGER.info("=== BOSS LOOT DEBUG ===");
         LOGGER.info("Boss: " + bossName + " died at: " + chestLocation);
         if (world == null) {
@@ -152,6 +172,19 @@ public class BossLootHandler {
             return;
         }
 
+        // Damage chart: take snapshot for this event and show to eligible players
+        if (eventId != null && damageChartTracker != null && damageChartOpener != null && store != null) {
+            var snapshot = damageChartTracker.takeSnapshotAndRemove(eventId);
+            if (!snapshot.isEmpty()) {
+                List<DamageChartOpener.DisplayRow> rows = new ArrayList<>();
+                for (BossDamageChartTracker.DamageEntry e : snapshot) {
+                    String name = resolveDisplayName(e.playerUuid(), eligiblePlayers);
+                    rows.add(new DamageChartOpener.DisplayRow(name, e.damage()));
+                }
+                damageChartOpener.openChart(world, eligiblePlayers, rows, bossName, store);
+            }
+        }
+
         // Execute commands if any
         if (hasCommands) {
             for (PlayerRef player : eligiblePlayers) {
@@ -201,6 +234,19 @@ public class BossLootHandler {
         spawnLootChest(world, chestCopy);
         // Hard timeout while untouched: chest is removed if nobody opens it within 60s.
         scheduleUntouchedChestExpiry(world, chestCopy);
+    }
+
+    private static String resolveDisplayName(UUID playerUuid, List<PlayerRef> eligiblePlayers) {
+        if (playerUuid == null) {
+            return "Unknown";
+        }
+        for (PlayerRef ref : eligiblePlayers) {
+            if (ref != null && playerUuid.equals(ref.getUuid())) {
+                String name = ref.getUsername();
+                return (name != null && !name.isBlank()) ? name : playerUuid.toString();
+            }
+        }
+        return playerUuid.toString();
     }
 
     private static void executeConsoleCommand(PlayerRef player, String cmd, String bossName) {
@@ -1016,11 +1062,18 @@ public class BossLootHandler {
         public final World world;
         public final Vector3d location;
         public final String bossName;
+        /** Event ID when loot is from a completed event; null for lone-boss. Used for damage chart. */
+        public final UUID eventId;
 
         public PendingLootSpawn(World world, Vector3d location, String bossName) {
+            this(world, location, bossName, null);
+        }
+
+        public PendingLootSpawn(World world, Vector3d location, String bossName, UUID eventId) {
             this.world = world;
             this.location = new Vector3d(location.x, location.y, location.z);
             this.bossName = bossName;
+            this.eventId = eventId;
         }
     }
 

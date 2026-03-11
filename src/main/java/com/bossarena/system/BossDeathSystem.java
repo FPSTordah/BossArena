@@ -25,9 +25,11 @@ import java.util.logging.Logger;
 public class BossDeathSystem extends DeathSystems.OnDeathSystem {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private final BossTrackingSystem trackingSystem;
+    private final BossArenaPlugin plugin;
 
-    public BossDeathSystem(BossTrackingSystem trackingSystem) {
+    public BossDeathSystem(BossTrackingSystem trackingSystem, BossArenaPlugin plugin) {
         this.trackingSystem = trackingSystem;
+        this.plugin = plugin;
     }
 
     @Nonnull
@@ -56,6 +58,13 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
 
         UUIDComponent uuidComp = (UUIDComponent) uuidCompObj;
         UUID entityUuid = uuidComp.getUuid();
+
+        if (trackingSystem.isPendingPreBossAdd(entityUuid)) {
+            component.setItemsLossMode(DeathConfig.ItemsLossMode.NONE);
+            trackingSystem.onPendingPreBossAddRemoved(entityUuid);
+            return;
+        }
+
         boolean trackedBoss = trackingSystem.isTracked(entityUuid);
         boolean trackedAdd = trackingSystem.isTrackedAdd(entityUuid);
 
@@ -78,7 +87,6 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
         LOGGER.info("🎯 BOSS DIED! UUID: " + bossUuid);
 
         // Cleanup map marker
-        var plugin = BossArenaPlugin.getInstance();
         if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
             BossTrackingSystem.BossData data = trackingSystem.getBossData(bossUuid);
             if (data != null) {
@@ -113,7 +121,7 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
                     null,
                     0L
             );
-            BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
+            BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName, pendingLoot.eventId);
             return;
         }
 
@@ -142,7 +150,6 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
             LOGGER.info("All bosses and tracked adds are dead for '" + pendingLoot.bossName + "', spawning one loot chest.");
 
             // Cleanup all boss markers for the completed event
-            var plugin = BossArenaPlugin.getInstance();
             if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
                 for (java.util.UUID buuid : pendingLoot.bossUuids) {
                     plugin.getTimedBossMapMarkerService().onTimedBossDespawn(pendingLoot.world, buuid);
@@ -158,7 +165,7 @@ public class BossDeathSystem extends DeathSystems.OnDeathSystem {
                     null,
                     0L
             );
-            BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
+            BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName, pendingLoot.eventId);
             return;
         }
 

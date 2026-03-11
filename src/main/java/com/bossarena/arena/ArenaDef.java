@@ -6,7 +6,11 @@ import com.hypixel.hytale.codec.builder.BuilderCodec;
 import com.hypixel.hytale.codec.codecs.simple.IntegerCodec;
 import com.hypixel.hytale.codec.codecs.simple.StringCodec;
 
-
+/**
+ * Codec-based arena definition (id, world, spawn position, eligibility radius, chest lifetime).
+ * Runtime arena data lives in {@link com.bossarena.data.Arena} and {@link com.bossarena.data.ArenaRegistry};
+ * arenas are loaded from {@code arenas.json}. This class is retained for potential future use (e.g. templates).
+ */
 public final class ArenaDef {
   public String id = "arena_id";
   public String worldId = "";

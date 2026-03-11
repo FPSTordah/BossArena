@@ -22,12 +22,14 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
     private static final double MISSING_RECONCILE_PLAYER_RADIUS = 192.0d;
 
     private final BossTrackingSystem trackingSystem;
+    private final BossArenaPlugin plugin;
     private final Map<UUID, Long> missingBossSince = new ConcurrentHashMap<>();
     private final Map<UUID, Long> missingAddSince = new ConcurrentHashMap<>();
     private float elapsedSeconds;
 
-    public BossEventNotificationSystem(BossTrackingSystem trackingSystem) {
+    public BossEventNotificationSystem(BossTrackingSystem trackingSystem, BossArenaPlugin plugin) {
         this.trackingSystem = trackingSystem;
+        this.plugin = plugin;
     }
 
     private static boolean isEntityMissing(World world, UUID entityUuid) {
@@ -91,7 +93,7 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
                 }
             }
             if (!Double.isFinite(notificationRadius) || notificationRadius <= 0) {
-                BossArenaConfig config = BossArenaPlugin.getInstance() != null ? BossArenaPlugin.getInstance().getConfigHandle() : null;
+                BossArenaConfig config = plugin != null ? plugin.getConfig() : null;
                 notificationRadius = (config != null) ? config.getNotificationRadius() : 100.0d;
             }
             BossWaveNotificationService.notifyBossAliveStatus(
@@ -141,7 +143,6 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
             BossTrackingSystem.PendingLootData pendingLoot = trackingSystem.markBossDead(bossUuid);
 
             // Cleanup map marker
-            var plugin = BossArenaPlugin.getInstance();
             if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
                 plugin.getTimedBossMapMarkerService().onTimedBossDespawn(bossData.world, bossUuid);
             }
@@ -163,7 +164,7 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
                         null,
                         0L
                 );
-                BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
+                BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName, pendingLoot.eventId);
                 continue;
             }
 
@@ -211,7 +212,6 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
 
             if (pendingLoot != null) {
                 // Cleanup all boss markers for the completed event
-                var plugin = BossArenaPlugin.getInstance();
                 if (plugin != null && plugin.getTimedBossMapMarkerService() != null) {
                     for (java.util.UUID buuid : pendingLoot.bossUuids) {
                         plugin.getTimedBossMapMarkerService().onTimedBossDespawn(pendingLoot.world, buuid);
@@ -227,7 +227,7 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
                         null,
                         0L
                 );
-                BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName);
+                BossLootHandler.queueLootSpawn(pendingLoot.world, pendingLoot.spawnLocation, pendingLoot.bossName, pendingLoot.eventId);
                 continue;
             }
 

@@ -1,27 +1,22 @@
-BossArena Mod - Proprietary License
-Copyright (c) 2025 Project42. All Rights Reserved.
+MIT License
 
-By using this software, you agree to the following terms:
+Copyright (c) 2025 Project42
 
-1. Grant of Use
-- You may download and run this mod on Hytale servers.
-- You may view the source code for personal and educational review.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-2. Restrictions
-- You may not modify, adapt, reverse engineer for redistribution, or create derivative works.
-- You may not redistribute this mod, in whole or in part, in original or modified form.
-- You may not sell, sublicense, or commercially exploit this mod.
-- You may not remove or alter copyright, attribution, or license notices.
-- You may not claim authorship or ownership of this mod.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-3. Ownership
-- All rights, title, and interest in and to this mod remain exclusively with Project42.
-- No rights are granted except those expressly stated in this license.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-4. Warranty and Liability
-- This mod is provided "as is", without warranties of any kind, express or implied.
-- The author is not liable for any damages, data loss, downtime, or other issues arising from use.
-
-5. Permission Requests
-- For written permission requests outside this license, contact:
-  `https://discord.gg/r5MBWdzWWW`

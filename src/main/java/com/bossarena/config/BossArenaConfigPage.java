@@ -1,8 +1,14 @@
 package com.bossarena.config;
 
+/**
+ * Config UI for BossArena: bosses, shop locations, and arenas tabs.
+ * Consider splitting into {@code BossesTabHandler}, {@code ShopTabHandler}, and {@code ArenasTabHandler}
+ * (each owning build/handle logic and tab-specific state) to reduce this class size.
+ */
 import com.bossarena.BossArenaConfig;
 import com.bossarena.BossArenaPlugin;
 import com.bossarena.data.Arena;
+import com.bossarena.util.NotificationRadiusConstants;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
@@ -422,7 +428,91 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                     Double.MAX_VALUE
             );
         }
+
+        String resolvedBossSpawnTrigger = resolvedOrFallback(data.bossSpawnTrigger, toBossSpawnTriggerDisplayName(extra.bossSpawnTrigger));
+        if (resolvedBossSpawnTrigger != null && !resolvedBossSpawnTrigger.isBlank()) {
+            String normalized = normalizeBossSpawnTriggerInput(resolvedBossSpawnTrigger);
+            if (normalized != null) {
+                extra.bossSpawnTrigger = normalized;
+            }
+        }
+        String resolvedBossSpawnValue = resolvedOrFallback(data.bossSpawnTriggerValue, formatWaveNumber(extra.bossSpawnTriggerValue));
+        if (resolvedBossSpawnValue != null && !resolvedBossSpawnValue.isBlank()) {
+            extra.bossSpawnTriggerValue = parseRequiredDouble(
+                    resolvedBossSpawnValue,
+                    "Boss spawn trigger value (seconds) must be a number >= 0.",
+                    0.0d,
+                    Double.MAX_VALUE
+            );
+        }
+        String proxEnabledRaw = resolvedOrFallback(
+                data.bossTimedProximityEnabled,
+                extra.timedProximityEnabled ? "true" : "false"
+        );
+        if (!proxEnabledRaw.isEmpty()) {
+            Boolean enabled = parseToggleInput(proxEnabledRaw);
+            if (enabled == null) {
+                throw new IllegalArgumentException("Proximity enabled must be true/false.");
+            }
+            extra.timedProximityEnabled = enabled;
+        }
+        String proxArenaRaw = resolvedOrFallback(
+                data.bossTimedProximityArena,
+                extra.timedProximityArenaId != null ? extra.timedProximityArenaId : ""
+        );
+        if (!proxArenaRaw.isEmpty() && !looksLikeUiBindingExpression(proxArenaRaw)) {
+            extra.timedProximityArenaId = proxArenaRaw.trim();
+        }
+        String proxRadiusRaw = resolvedOrFallback(
+                data.bossTimedProximityRadius,
+                formatWaveNumber(extra.getTimedProximityRadius())
+        );
+        if (!proxRadiusRaw.isEmpty()) {
+            extra.timedProximityRadius = parseRequiredDouble(
+                    proxRadiusRaw,
+                    "Proximity radius must be a number >= 0.",
+                    0.0d,
+                    Double.MAX_VALUE
+            );
+        }
+        String proxCooldownRaw = resolvedOrFallback(
+                data.bossTimedProximityCooldown,
+                Long.toString(extra.getTimedProximityCooldownSeconds(60L))
+        );
+        if (!proxCooldownRaw.isEmpty()) {
+            long cooldown = (long) parseRequiredDouble(
+                    proxCooldownRaw,
+                    "Proximity cooldown must be a number >= 0.",
+                    0.0d,
+                    Double.MAX_VALUE
+            );
+            extra.timedProximityCooldownSeconds = cooldown;
+        }
         extra.sanitize();
+    }
+
+    private static String toBossSpawnTriggerDisplayName(String trigger) {
+        if (BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_BEFORE_BOSS.equals(trigger)) {
+            return "After Before Boss";
+        }
+        if (BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_SECONDS.equals(trigger)) {
+            return "After Seconds";
+        }
+        return trigger != null ? trigger : "After Before Boss";
+    }
+
+    private static String normalizeBossSpawnTriggerInput(String input) {
+        if (input == null || input.isBlank()) {
+            return null;
+        }
+        String normalized = input.trim().toLowerCase(Locale.ROOT).replace('-', ' ').replace('_', ' ');
+        if (normalized.contains("before") && normalized.contains("boss")) {
+            return BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_BEFORE_BOSS;
+        }
+        if (normalized.contains("second")) {
+            return BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_SECONDS;
+        }
+        return null;
     }
 
     private static Boolean parseToggleInput(String raw) {
@@ -766,6 +856,11 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             out.extraMobs.mobsPerWave = source.extraMobs.mobsPerWave;
             out.extraMobs.useRandomSpawnLocations = source.extraMobs.useRandomSpawnLocations;
             out.extraMobs.randomSpawnRadius = source.extraMobs.randomSpawnRadius;
+            out.extraMobs.bossSpawnTrigger = source.extraMobs.bossSpawnTrigger != null ? source.extraMobs.bossSpawnTrigger : BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_BEFORE_BOSS;
+            out.extraMobs.bossSpawnTriggerValue = source.extraMobs.bossSpawnTriggerValue;
+            out.extraMobs.timedProximityEnabled = source.extraMobs.timedProximityEnabled;
+            out.extraMobs.timedProximityArenaId = source.extraMobs.timedProximityArenaId;
+            out.extraMobs.timedProximityRadius = source.extraMobs.timedProximityRadius;
             out.extraMobs.adds = new ArrayList<>();
             if (source.extraMobs.adds != null) {
                 for (BossDefinition.ExtraMobs.WaveAdd add : source.extraMobs.adds) {
@@ -1659,7 +1754,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         double notificationRadius = arena.getNotificationRadius();
         if (!radiusRaw.isEmpty()) {
             try {
-                notificationRadius = parseRequiredDouble(radiusRaw, "Invalid notification radius.", 10.0d, 500.0d);
+                notificationRadius = parseRequiredDouble(radiusRaw, "Invalid notification radius.", NotificationRadiusConstants.MIN, NotificationRadiusConstants.MAX);
             } catch (IllegalArgumentException e) {
                 arenaStatusText = e.getMessage() + " Use 10–500 blocks.";
                 rebuild();
@@ -1992,13 +2087,19 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         if (bossWavesOverlayOpen) {
             BossDefinition.ExtraMobs extra = boss.extraMobs != null ? boss.extraMobs : new BossDefinition.ExtraMobs();
             extra.sanitize();
+            cmd.set("#BossSpawnTrigger.Value", toBossSpawnTriggerDisplayName(extra.bossSpawnTrigger));
+            cmd.set("#BossSpawnTriggerValue.Value", formatWaveNumber(extra.bossSpawnTriggerValue));
             cmd.set("#BossWaveRandomLocations.Value", extra.useRandomSpawnLocations ? "true" : "false");
             cmd.set("#BossWaveRandomRadius.Value", formatWaveNumber(extra.getWaveRandomSpawnRadius()));
+            cmd.set("#BossTimedProximityEnabled.Value", extra.timedProximityEnabled ? "true" : "false");
+            cmd.set("#BossTimedProximityArena.Value", safeText(extra.timedProximityArenaId));
+            cmd.set("#BossTimedProximityRadius.Value", formatWaveNumber(extra.getTimedProximityRadius()));
+            cmd.set("#BossTimedProximityCooldown.Value", Long.toString(extra.getTimedProximityCooldownSeconds(60L)));
             List<WaveScheduleRow> scheduleRows = flattenScheduleRows(extra);
-            boolean usingWaveDefaults = scheduleRows.isEmpty();
+            boolean noWavesConfigured = scheduleRows.isEmpty();
             int visibleWaveRows;
-            if (usingWaveDefaults) {
-                visibleWaveRows = Math.min(MAX_WAVE_ADD_ROWS, 2);
+            if (noWavesConfigured) {
+                visibleWaveRows = 1;
             } else {
                 visibleWaveRows = Math.max(1, Math.min(MAX_WAVE_ADD_ROWS, scheduleRows.size() + 1));
             }
@@ -2014,15 +2115,27 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
                 WaveScheduleRow scheduleRow = row <= scheduleRows.size() ? scheduleRows.get(row - 1) : null;
                 if (scheduleRow == null) {
-                    cmd.set("#BossWaveEvery" + suffix + ".Value", defaultWaveTriggerInput(row, usingWaveDefaults));
-                    cmd.set("#BossWaveValue" + suffix + ".Value", Integer.toString(defaultWaveValueSeconds(row, usingWaveDefaults)));
-                    cmd.set("#BossWaveRepeatCount" + suffix + ".Value", "1");
-                    cmd.set("#BossWaveRepeatSec" + suffix + ".Value", "0");
-                    cmd.set("#BossWaveNpc" + suffix + ".Value", defaultWaveNpcId(row, usingWaveDefaults));
-                    cmd.set("#BossWaveAmount" + suffix + ".Value", "1");
-                    cmd.set("#BossWaveHp" + suffix + ".Value", "1.00");
-                    cmd.set("#BossWaveDamage" + suffix + ".Value", "1.00");
-                    cmd.set("#BossWaveSize" + suffix + ".Value", "1.00");
+                    if (noWavesConfigured) {
+                        cmd.set("#BossWaveEvery" + suffix + ".Value", "After Spawn");
+                        cmd.set("#BossWaveValue" + suffix + ".Value", "");
+                        cmd.set("#BossWaveRepeatCount" + suffix + ".Value", "1");
+                        cmd.set("#BossWaveRepeatSec" + suffix + ".Value", "0");
+                        cmd.set("#BossWaveNpc" + suffix + ".Value", "");
+                        cmd.set("#BossWaveAmount" + suffix + ".Value", "1");
+                        cmd.set("#BossWaveHp" + suffix + ".Value", "1.00");
+                        cmd.set("#BossWaveDamage" + suffix + ".Value", "1.00");
+                        cmd.set("#BossWaveSize" + suffix + ".Value", "1.00");
+                    } else {
+                        cmd.set("#BossWaveEvery" + suffix + ".Value", defaultWaveTriggerInput(row, false));
+                        cmd.set("#BossWaveValue" + suffix + ".Value", Integer.toString(defaultWaveValueSeconds(row, false)));
+                        cmd.set("#BossWaveRepeatCount" + suffix + ".Value", "1");
+                        cmd.set("#BossWaveRepeatSec" + suffix + ".Value", "0");
+                        cmd.set("#BossWaveNpc" + suffix + ".Value", defaultWaveNpcId(row, false));
+                        cmd.set("#BossWaveAmount" + suffix + ".Value", "1");
+                        cmd.set("#BossWaveHp" + suffix + ".Value", "1.00");
+                        cmd.set("#BossWaveDamage" + suffix + ".Value", "1.00");
+                        cmd.set("#BossWaveSize" + suffix + ".Value", "1.00");
+                    }
                 } else {
                     BossDefinition.ExtraMobs.WaveAdd add = scheduleRow.add;
                     cmd.set("#BossWaveEvery" + suffix + ".Value", toWaveTriggerDisplayName(scheduleRow.trigger));
@@ -2068,7 +2181,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
     private void buildBossTimedOverlay(UICommandBuilder cmd, UIEventBuilder events) {
         List<BossArenaConfig.TimedBossSpawn> rows = List.of();
-        BossArenaConfig cfg = plugin.getConfigHandle();
+        BossArenaConfig cfg = plugin.getConfig();
         if (cfg != null) {
             rows = cfg.getTimedBossSpawns();
         }
@@ -2146,7 +2259,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
     }
 
     private void handleBossTimedSave(ConfigEventData data) {
-        BossArenaConfig cfg = plugin.getConfigHandle();
+        BossArenaConfig cfg = plugin.getConfig();
         if (cfg == null) {
             bossStatusText = "Config handle unavailable.";
             rebuild();
@@ -2329,8 +2442,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
     private EventData buildBossWavesSnapshotEvent(String action) {
         EventData snapshot = new EventData()
                 .append("Action", action)
+                .append("@BossSpawnTrigger", "#BossSpawnTrigger.Value")
+                .append("@BossSpawnTriggerValue", "#BossSpawnTriggerValue.Value")
                 .append("@BossWaveRandomLocations", "#BossWaveRandomLocations.Value")
-                .append("@BossWaveRandomRadius", "#BossWaveRandomRadius.Value");
+                .append("@BossWaveRandomRadius", "#BossWaveRandomRadius.Value")
+                .append("@BossTimedProximityEnabled", "#BossTimedProximityEnabled.Value")
+                .append("@BossTimedProximityArena", "#BossTimedProximityArena.Value")
+                .append("@BossTimedProximityRadius", "#BossTimedProximityRadius.Value")
+                .append("@BossTimedProximityCooldown", "#BossTimedProximityCooldown.Value");
 
         for (int row = 1; row <= MAX_WAVE_ADD_ROWS; row++) {
             String suffix = Integer.toString(row);
@@ -3340,8 +3459,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append(new KeyedCodec<>("@BossEditExtraMobsPerWave", Codec.STRING), (d, v) -> d.bossEditExtraMobsPerWave = v, d -> d.bossEditExtraMobsPerWave).add()
                 .append(new KeyedCodec<>("@BossEditLootRadius", Codec.STRING), (d, v) -> d.bossEditLootRadius = v, d -> d.bossEditLootRadius).add()
 
+                .append(new KeyedCodec<>("@BossSpawnTrigger", Codec.STRING), (d, v) -> d.bossSpawnTrigger = v, d -> d.bossSpawnTrigger).add()
+                .append(new KeyedCodec<>("@BossSpawnTriggerValue", Codec.STRING), (d, v) -> d.bossSpawnTriggerValue = v, d -> d.bossSpawnTriggerValue).add()
                 .append(new KeyedCodec<>("@BossWaveRandomLocations", Codec.STRING), (d, v) -> d.bossWaveRandomLocations = v, d -> d.bossWaveRandomLocations).add()
                 .append(new KeyedCodec<>("@BossWaveRandomRadius", Codec.STRING), (d, v) -> d.bossWaveRandomRadius = v, d -> d.bossWaveRandomRadius).add()
+                .append(new KeyedCodec<>("@BossTimedProximityEnabled", Codec.STRING), (d, v) -> d.bossTimedProximityEnabled = v, d -> d.bossTimedProximityEnabled).add()
+                .append(new KeyedCodec<>("@BossTimedProximityArena", Codec.STRING), (d, v) -> d.bossTimedProximityArena = v, d -> d.bossTimedProximityArena).add()
+                .append(new KeyedCodec<>("@BossTimedProximityRadius", Codec.STRING), (d, v) -> d.bossTimedProximityRadius = v, d -> d.bossTimedProximityRadius).add()
+                .append(new KeyedCodec<>("@BossTimedProximityCooldown", Codec.STRING), (d, v) -> d.bossTimedProximityCooldown = v, d -> d.bossTimedProximityCooldown).add()
                 .append(new KeyedCodec<>("@BossWaveTimeSec", Codec.STRING), (d, v) -> d.bossWaveTimeSec = v, d -> d.bossWaveTimeSec).add()
                 .append(new KeyedCodec<>("@BossWaveNpc1", Codec.STRING), (d, v) -> d.bossWaveNpc1 = v, d -> d.bossWaveNpc1).add()
                 .append(new KeyedCodec<>("@BossWaveAmount1", Codec.STRING), (d, v) -> d.bossWaveAmount1 = v, d -> d.bossWaveAmount1).add()
@@ -3486,8 +3611,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String bossEditExtraWaves;
         public String bossEditExtraMobsPerWave;
         public String bossEditLootRadius;
+        public String bossSpawnTrigger;
+        public String bossSpawnTriggerValue;
         public String bossWaveRandomLocations;
         public String bossWaveRandomRadius;
+        public String bossTimedProximityEnabled;
+        public String bossTimedProximityArena;
+        public String bossTimedProximityRadius;
+        public String bossTimedProximityCooldown;
         public String bossWaveTimeSec;
         public String bossWaveNpc1;
         public String bossWaveAmount1;

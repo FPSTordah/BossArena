@@ -158,7 +158,7 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
             }
         }
 
-        BossArenaConfig global = plugin.getConfigHandle();
+        BossArenaConfig global = plugin.getConfig();
         if (global != null && global.currencyItemId != null && !global.currencyItemId.isBlank()) {
             return new CurrencySettings(provider, global.currencyItemId);
         }

@@ -4,7 +4,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `2.0.3`
+- Current project version: `3.0.0`
 
 ## Changelog
 
@@ -51,6 +51,11 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 - Shop contracts are filtered by a location-specific enabled boss list.
 - Persistent boss event notification while tracked boss/add entities are alive.
 - Per-player loot chest generation after boss encounter completion.
+- **Boss event damage chart:** when an event ends, eligible players receive a chat summary of the top 10 players by damage dealt (rank, name, damage). No UI window or HUD; players can keep moving while reading it.
+- Optional **timed boss spawns** and **proximity-based boss spawns**:
+  - Timed rules auto-spawn bosses in arenas on a schedule.
+  - Per-boss proximity settings let a boss spawn automatically when a player walks into range of a configured arena, with a configurable per-boss cooldown.
+  - The same per-boss proximity settings also gate manual `/ba spawn` and shop-triggered bosses so they only spawn when a player is in range.
 - Loot chest persistence across restarts with state recovery.
 - Loot chests are designed for solid ground placement; **do not place arenas or loot chests on top of snow blocks**, as snow is not treated as stable ground for chest spawning.
 
@@ -140,6 +145,10 @@ Fields:
 - `extraMobs.adds[].npcId`
 - `extraMobs.adds[].mobsPerWave`
 - `extraMobs.adds[].everyWave`
+- `extraMobs.timedProximityEnabled` (`true|false`, enable per-boss proximity behavior)
+- `extraMobs.timedProximityArenaId` (arena id used as the proximity center; blank = use other spawn context)
+- `extraMobs.timedProximityRadius` (radius in blocks for proximity checks; `<= 0` disables proximity)
+- `extraMobs.timedProximityCooldownSeconds` (cooldown between proximity spawns for this boss in seconds; `0` uses the plugin default)
 
 ### `arenas.json`
 
@@ -373,4 +382,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-2.0.3.jar`
+- `target/BossArena-3.0.0.jar`

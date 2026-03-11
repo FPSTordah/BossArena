@@ -49,6 +49,11 @@ public class BossDefinition {
         public static final String TRIGGER_SINCE_LAST_WAVE = "since_last_wave";
         public static final String TRIGGER_BOSS_HP_PERCENT = "boss_hp_percent";
 
+        /** When to spawn the boss when using before_boss waves. */
+        public static final String BOSS_SPAWN_AFTER_BEFORE_BOSS = "after_before_boss";
+        /** Spawn boss after a fixed delay in seconds (from encounter start). */
+        public static final String BOSS_SPAWN_AFTER_SECONDS = "after_seconds";
+
         public String npcId;
         public long timeLimitMs;
         public int waves;
@@ -59,12 +64,48 @@ public class BossDefinition {
         public List<WaveAdd> adds = new ArrayList<>();
         // Trigger-based wave schedule. If empty, legacy fields are auto-migrated.
         public List<ScheduledWave> scheduledWaves = new ArrayList<>();
+        /** Boss spawn trigger: after_before_boss (wait for pre-boss adds dead) or after_seconds. */
+        public String bossSpawnTrigger = BOSS_SPAWN_AFTER_BEFORE_BOSS;
+        /** Seconds for after_seconds trigger; ignored for after_before_boss. */
+        public double bossSpawnTriggerValue = 0.0d;
+
+        /** Whether timed boss spawns should wait for proximity before spawning. */
+        public boolean timedProximityEnabled = false;
+        /**
+         * Arena id used as the proximity center for timed boss spawns when {@link #timedProximityEnabled} is true.
+         * If empty, the timed spawn rule's arenaId is used.
+         */
+        public String timedProximityArenaId = "";
+        /** Proximity radius in blocks for timed boss spawns; <= 0 disables proximity even when enabled is true. */
+        public double timedProximityRadius = 0.0d;
+        /** Cooldown between proximity spawns for this boss (seconds). 0 uses the plugin default. */
+        public long timedProximityCooldownSeconds = 60L;
 
         private static double sanitizeWaveRandomSpawnRadius(double radius) {
             if (!Double.isFinite(radius) || radius < 0.0d) {
                 return 15.0d;
             }
             return radius;
+        }
+
+        public double getTimedProximityRadius() {
+            if (!Double.isFinite(timedProximityRadius) || timedProximityRadius <= 0.0d) {
+                return 0.0d;
+            }
+            return timedProximityRadius;
+        }
+
+        public long getTimedProximityCooldownSeconds(long defaultSeconds) {
+            if (timedProximityCooldownSeconds <= 0L) {
+                return defaultSeconds;
+            }
+            // Clamp to a reasonable range (1 second to 7 days).
+            long min = 1L;
+            long max = 7L * 24L * 60L * 60L;
+            long value = timedProximityCooldownSeconds;
+            if (value < min) value = min;
+            if (value > max) value = max;
+            return value;
         }
 
         private static WaveAdd sanitizeWaveAdd(WaveAdd add, boolean requireNpcId) {
@@ -227,6 +268,17 @@ public class BossDefinition {
                 mobsPerWave = 3;
             }
             randomSpawnRadius = sanitizeWaveRandomSpawnRadius(randomSpawnRadius);
+            if (!Double.isFinite(timedProximityRadius) || timedProximityRadius < 0.0d) {
+                timedProximityRadius = 0.0d;
+            }
+            if (timedProximityCooldownSeconds < 0L) {
+                timedProximityCooldownSeconds = 0L;
+            }
+            if (timedProximityArenaId == null) {
+                timedProximityArenaId = "";
+            } else {
+                timedProximityArenaId = timedProximityArenaId.trim();
+            }
 
             if (adds == null) {
                 adds = new ArrayList<>();
@@ -274,6 +326,24 @@ public class BossDefinition {
             if (scheduledWaves.isEmpty()) {
                 scheduledWaves = migrateLegacyWaves(adds, waves, timeLimitMs);
             }
+
+            String normalizedBossSpawn = normalizeBossSpawnTrigger(bossSpawnTrigger);
+            bossSpawnTrigger = normalizedBossSpawn != null ? normalizedBossSpawn : BOSS_SPAWN_AFTER_BEFORE_BOSS;
+            bossSpawnTriggerValue = Double.isFinite(bossSpawnTriggerValue) ? Math.max(0.0d, bossSpawnTriggerValue) : 0.0d;
+        }
+
+        private static String normalizeBossSpawnTrigger(String trigger) {
+            if (trigger == null || trigger.isBlank()) {
+                return BOSS_SPAWN_AFTER_BEFORE_BOSS;
+            }
+            String normalized = trigger.trim()
+                    .toLowerCase(Locale.ROOT)
+                    .replace('-', '_')
+                    .replace(' ', '_');
+            if (BOSS_SPAWN_AFTER_BEFORE_BOSS.equals(normalized) || BOSS_SPAWN_AFTER_SECONDS.equals(normalized)) {
+                return normalized;
+            }
+            return null;
         }
 
         public boolean hasConfiguredAdds() {

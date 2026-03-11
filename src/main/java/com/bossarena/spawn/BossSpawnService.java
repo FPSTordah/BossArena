@@ -2,6 +2,8 @@ package com.bossarena.spawn;
 
 import com.bossarena.BossArenaConfig;
 import com.bossarena.BossArenaPlugin;
+import com.bossarena.data.Arena;
+import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
 import com.bossarena.util.BossScaler;
@@ -9,10 +11,13 @@ import com.bossarena.boss.BossModifiers;
 import com.bossarena.boss.PlayerFinder;
 import com.bossarena.system.BossTrackingSystem;
 import com.bossarena.system.BossWaveNotificationService;
+import com.hypixel.hytale.math.util.ChunkUtil;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.math.vector.Vector3f;
+import com.hypixel.hytale.server.core.asset.type.blocktype.config.BlockType;
 import com.hypixel.hytale.server.core.command.system.CommandSender;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.chunk.WorldChunk;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.modules.entitystats.EntityStatMap;
@@ -39,6 +44,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.logging.Level;
@@ -85,6 +91,26 @@ public final class BossSpawnService {
         return out;
     }
 
+    /** Number of before_boss wave executions that will be run (for pending pre-boss spawn). */
+    private static int getBeforeBossExecutionCount(List<BossDefinition.ExtraMobs.ScheduledWave> schedules) {
+        List<BossDefinition.ExtraMobs.ScheduledWave> beforeBoss = filterSchedulesByTrigger(
+                schedules,
+                BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS
+        );
+        int count = 0;
+        for (BossDefinition.ExtraMobs.ScheduledWave wave : beforeBoss) {
+            if (wave == null) {
+                continue;
+            }
+            int repeatCount = Math.max(1, wave.repeatCount);
+            if (wave.repeatCount < 0) {
+                repeatCount = 1;
+            }
+            count += repeatCount;
+        }
+        return count;
+    }
+
     private static double reverseHealthThresholdOrder(BossDefinition.ExtraMobs.ScheduledWave wave) {
         if (wave == null) {
             return Double.MAX_VALUE;
@@ -102,8 +128,68 @@ public final class BossSpawnService {
         return Math.max(0L, Math.round(seconds * 1000.0d));
     }
 
+    private static boolean isProximitySatisfiedForSpawn(World world, String arenaId, BossDefinition def) {
+        if (world == null || def == null || def.extraMobs == null) {
+            return true;
+        }
+        def.extraMobs.sanitize();
+        if (!def.extraMobs.timedProximityEnabled) {
+            return true;
+        }
+        double radius = def.extraMobs.getTimedProximityRadius();
+        if (radius <= 0.0d) {
+            return true;
+        }
+        String configuredArenaId = def.extraMobs.timedProximityArenaId != null
+                ? def.extraMobs.timedProximityArenaId.trim()
+                : "";
+        String proximityArenaId = !configuredArenaId.isEmpty() ? configuredArenaId : (arenaId != null ? arenaId : "");
+        if (proximityArenaId.isEmpty()) {
+            return true;
+        }
+        Arena arena = ArenaRegistry.get(proximityArenaId);
+        if (arena == null) {
+            LOGGER.warning("Proximity spawn for boss '" + def.bossName + "' references missing arena '" + proximityArenaId + "'. "
+                    + "Spawning without proximity gating.");
+            return true;
+        }
+        Vector3d center = arena.getPosition();
+        return hasPlayerWithinRadius(world, center, radius);
+    }
+
     private static String formatSeconds(double value) {
         return String.format("%.2f", value);
+    }
+
+    private static boolean hasPlayerWithinRadius(World world, Vector3d center, double radius) {
+        if (world == null || center == null || radius <= 0.0d) {
+            return false;
+        }
+        double radiusSq = radius * radius;
+        try {
+            for (var playerRef : world.getPlayerRefs()) {
+                if (playerRef == null || !playerRef.isValid()) {
+                    continue;
+                }
+                var transform = playerRef.getTransform();
+                if (transform == null) {
+                    continue;
+                }
+                Vector3d pos = transform.getPosition();
+                if (pos == null) {
+                    continue;
+                }
+                double dx = pos.x - center.x;
+                double dy = pos.y - center.y;
+                double dz = pos.z - center.z;
+                double distSq = (dx * dx) + (dy * dy) + (dz * dz);
+                if (distSq <= radiusSq) {
+                    return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     public void shutdown() {
@@ -150,6 +236,12 @@ public final class BossSpawnService {
         BossDefinition def = BossRegistry.get(bossId);
         if (def == null) {
             LOGGER.warning("Boss definition not found: " + bossId);
+            return null;
+        }
+
+        if (!isProximitySatisfiedForSpawn(world, arenaId, def)) {
+            LOGGER.info("Proximity spawn conditions not met for boss '" + def.bossName
+                    + "' at arena '" + arenaId + "'. Spawn deferred/blocked.");
             return null;
         }
 
@@ -230,33 +322,49 @@ public final class BossSpawnService {
         )
                 : null;
 
+        String bossSpawnTrigger = (def.extraMobs != null && def.extraMobs.bossSpawnTrigger != null)
+                ? def.extraMobs.bossSpawnTrigger
+                : BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_BEFORE_BOSS;
+        double bossSpawnTriggerValue = (def.extraMobs != null && Double.isFinite(def.extraMobs.bossSpawnTriggerValue))
+                ? Math.max(0.0d, def.extraMobs.bossSpawnTriggerValue)
+                : 0.0d;
+
+        Runnable spawnBossRunnable = () -> world.execute(() -> spawnBossNow(
+                world,
+                def,
+                spawnPos,
+                arenaId,
+                mods,
+                countdownDurationMs,
+                resolvedWaves,
+                pendingPreBossAdds,
+                nextWaveNumber,
+                deferredEventId,
+                onPrimaryBossSpawned
+        ));
+
+        if (hasBeforeBossSchedule && BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_BEFORE_BOSS.equals(bossSpawnTrigger)) {
+            int totalExecutions = getBeforeBossExecutionCount(resolvedWaves);
+            tracking.registerPendingPreBossSpawn(deferredEventId, totalExecutions, spawnBossRunnable);
+            LOGGER.info("Boss '" + def.bossName + "' will spawn when all before_boss wave adds are dead (" + totalExecutions + " wave execution(s)).");
+        }
+
         long preBossDelayMs = scheduleBeforeBossWaveTimeline(
                 world,
                 def,
                 spawnPos,
                 resolvedWaves,
                 nextWaveNumber,
-                pendingPreBossAdds
+                pendingPreBossAdds,
+                deferredEventId
         );
+
         if (preBossDelayMs > 0L) {
-            LOGGER.info("Delaying boss spawn for '" + def.bossName + "' by " + preBossDelayMs + "ms due to before_boss schedule.");
-            EXTRA_WAVE_SCHEDULER.schedule(
-                    () -> world.execute(() -> spawnBossNow(
-                            world,
-                            def,
-                            spawnPos,
-                            arenaId,
-                            mods,
-                            countdownDurationMs,
-                            resolvedWaves,
-                            pendingPreBossAdds,
-                            nextWaveNumber,
-                            deferredEventId,
-                            onPrimaryBossSpawned
-                    )),
-                    preBossDelayMs,
-                    TimeUnit.MILLISECONDS
-            );
+            if (!BossDefinition.ExtraMobs.BOSS_SPAWN_AFTER_BEFORE_BOSS.equals(bossSpawnTrigger)) {
+                long delayMs = (long) (bossSpawnTriggerValue * 1000.0d);
+                LOGGER.info("Delaying boss spawn for '" + def.bossName + "' by " + delayMs + "ms (after_seconds=" + bossSpawnTriggerValue + ").");
+                EXTRA_WAVE_SCHEDULER.schedule(spawnBossRunnable, Math.max(0L, delayMs), TimeUnit.MILLISECONDS);
+            }
             return DEFERRED_SPAWN_UUID;
         }
 
@@ -495,7 +603,8 @@ public final class BossSpawnService {
                                                 Vector3d spawnPos,
                                                 List<BossDefinition.ExtraMobs.ScheduledWave> schedules,
                                                 AtomicInteger nextWaveNumber,
-                                                List<UUID> pendingPreBossAdds) {
+                                                List<UUID> pendingPreBossAdds,
+                                                UUID deferredEventId) {
         List<BossDefinition.ExtraMobs.ScheduledWave> beforeBoss = filterSchedulesByTrigger(
                 schedules,
                 BossDefinition.ExtraMobs.TRIGGER_BEFORE_BOSS
@@ -563,6 +672,14 @@ public final class BossSpawnService {
                     synchronized (pendingPreBossAdds) {
                         pendingPreBossAdds.addAll(spawned);
                     }
+                    if (deferredEventId != null) {
+                        for (UUID addUuid : spawned) {
+                            tracking.addPendingPreBossAdd(deferredEventId, addUuid);
+                        }
+                        tracking.markBeforeBossWaveExecuted(deferredEventId);
+                    }
+                } else if (deferredEventId != null) {
+                    tracking.markBeforeBossWaveExecuted(deferredEventId);
                 }
             };
 
@@ -1053,7 +1170,7 @@ public final class BossSpawnService {
             }
             int mobCount = Math.max(1, add.mobsPerWave);
             for (int i = 0; i < mobCount; i++) {
-                Vector3d mobPos = computeWaveSpawnPosition(spawnPos, def.extraMobs);
+                Vector3d mobPos = computeWaveSpawnPosition(world, spawnPos, def.extraMobs);
 
                 var result = NPCPlugin.get().spawnNPC(
                         world.getEntityStore().getStore(),
@@ -1152,7 +1269,7 @@ public final class BossSpawnService {
         }
     }
 
-    private Vector3d computeWaveSpawnPosition(Vector3d origin, BossDefinition.ExtraMobs extraMobs) {
+    private Vector3d computeWaveSpawnPosition(World world, Vector3d origin, BossDefinition.ExtraMobs extraMobs) {
         if (origin == null) {
             return null;
         }
@@ -1171,7 +1288,75 @@ public final class BossSpawnService {
         double distance = Math.sqrt(random.nextDouble()) * radius;
         double x = origin.x + (Math.cos(angle) * distance);
         double z = origin.z + (Math.sin(angle) * distance);
-        return new Vector3d(x, origin.y, z);
+        int refY = (int) Math.floor(origin.y);
+        double y = resolveWaveSpawnY(world, (int) Math.floor(x), (int) Math.floor(z), refY);
+        return new Vector3d(x, y, z);
+    }
+
+    /**
+     * Finds a valid spawn Y at (x, z) so adds do not spawn inside blocks or one block below when
+     * terrain or a ceiling differs from the arena spawn height. Prefers the same level as refY,
+     * then below, then above.
+     */
+    private double resolveWaveSpawnY(World world, int x, int z, int refY) {
+        if (world == null) {
+            return refY;
+        }
+        WorldChunk chunk = world.getChunkIfInMemory(ChunkUtil.indexChunkFromBlock(x, z));
+        if (chunk == null) {
+            return refY;
+        }
+        int maxOffset = 24;
+        for (int offset = 0; offset <= maxOffset; offset++) {
+            int spawnYBelow = refY - offset;
+            if (spawnYBelow >= 1 && isValidMobStand(world, x, spawnYBelow, z)) {
+                return spawnYBelow;
+            }
+            if (offset == 0) {
+                continue;
+            }
+            int spawnYAbove = refY + offset;
+            if (isValidMobStand(world, x, spawnYAbove, z)) {
+                return spawnYAbove;
+            }
+        }
+        return refY;
+    }
+
+    private static boolean isValidMobStand(World world, int x, int spawnY, int z) {
+        if (spawnY < 1) {
+            return false;
+        }
+        BlockType below = world.getBlockType(x, spawnY - 1, z);
+        BlockType at = world.getBlockType(x, spawnY, z);
+        return isSolidSupportBlock(below) && isReplaceableBlock(at);
+    }
+
+    private static boolean isSolidSupportBlock(BlockType type) {
+        return type != null && !isReplaceableBlock(type);
+    }
+
+    private static boolean isReplaceableBlock(BlockType type) {
+        if (type == null) {
+            return true;
+        }
+        String id = type.getId();
+        if (id == null || id.isBlank()) {
+            return true;
+        }
+        String normalized = id.toLowerCase(Locale.ROOT);
+        return normalized.contains("air")
+                || normalized.contains("snow_layer")
+                || normalized.contains("tallgrass")
+                || normalized.contains("tall_grass")
+                || normalized.contains("short_grass")
+                || normalized.contains("grass_plant")
+                || normalized.contains("flower")
+                || normalized.contains("fern")
+                || normalized.contains("leaf")
+                || normalized.contains("vine")
+                || normalized.contains("water")
+                || normalized.contains("lava");
     }
 
     private Vector3d computeBossSpawnPosition(Vector3d center, int index) {

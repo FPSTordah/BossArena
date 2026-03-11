@@ -8,7 +8,7 @@ author: Project42
 
 BossArena is a Hytale server mod that adds configurable boss arenas, an NPC-based contract shop, timed boss events, and per-player loot chests.
 
-**Version:** 2.0.3
+**Version:** 3.0.0
 
 **Group:** `com.bossarena`
 
@@ -157,6 +157,11 @@ Primary namespaces:
   - `arenas.json`
   - `loot_tables.json`
 
+### Cleanup
+
+- `/bossarena cleanup` or `/ba cleanup`  
+  Removes all BossArena-tracked boss and add entities in the current world, and optionally cleans up orphaned loot chest blocks. Use when entities are stuck or after testing.
+
 ---
 
 ## Timed Boss Spawns
@@ -184,6 +189,18 @@ Each entry:
 - This prevents timed bosses from piling up while the server is empty, while still honoring:
   - `preventDuplicateWhileAlive`
   - `despawnAfterHours` / `despawnAfterMinutes`
+
+### Per-Boss Proximity Spawn (3.0.0+)
+
+- Each boss can optionally require players to be within a **proximity radius** before it is allowed to spawn.
+- Configure this in `/ba config` → **Bosses** tab → open a boss → **Waves/Spawn** overlay:
+  - `Timed Proximity Enabled` — `true|false` toggle.
+  - `Proximity ArenaID` — arena id to use as the proximity center (blank = use the rule’s `arenaId`).
+  - `Proximity Radius` — distance in blocks from that arena center.
+- When enabled and radius > 0:
+  - For **all boss spawns** (timed rules, `/ba spawn`, shop contracts), BossArena checks whether at least one player is within the configured radius of the chosen arena at the time the spawn is attempted.
+  - For **timed boss rules**, the timer still controls *how often* a spawn is attempted, but the boss only actually spawns once a player is inside the configured radius.
+  - If the arena id is invalid or missing, proximity is ignored and a warning is logged.
 
 ---
 
@@ -239,6 +256,10 @@ All event banner strings support case-insensitive placeholders using either `$Na
 
 Legacy aliases still work (`$ContextPrefix`, `$CountdownPrefix`) but `ContextLine` / `CountdownLine` are preferred.
 
+### Color codes in templates
+
+The event banner is a fixed UI element and may not support colored text. Any `§` or `&` format codes (e.g. `§7`, `&e`) in your templates are **stripped before display**, so the banner shows plain text only and you won’t see literal codes. You can still use codes in config for structure or future compatibility; they are removed when the title is shown.
+
 ### Example
 
 ```json
@@ -250,7 +271,7 @@ Legacy aliases still work (`$ContextPrefix`, `$CountdownPrefix`) but `ContextLin
 }
 ```
 
-This will show a dramatic title while the boss is alive and a clean victory message once the event is finished.
+Placeholders are replaced with live values; any `§`/`&` codes in templates are stripped so the banner shows plain text.
 
 ---
 
@@ -338,6 +359,18 @@ Behavior:
 
 ---
 
+## Boss event damage chart
+
+When a boss event **ends** and the **loot chest spawns**, every player who was **within the loot radius** receives a **chat summary** of the encounter — a simple list of the top 10 players by damage dealt to the boss and adds.
+
+- **Title line:** e.g. "Damage Dealt" or "Damage Dealt — <Boss name>".
+- **Rows:** Rank (1–10), player name, and total damage (e.g. 1.2K, 500).
+- If more than 10 players participated, an extra line indicates how many more there were.
+
+No custom UI or HUD is opened for the chart; players can keep moving and fighting while the summary is shown in chat.
+
+---
+
 ## Troubleshooting
 
 ### Multiple Bosses in One Arena
@@ -373,6 +406,13 @@ If other plugins or commands directly delete NPCs, BossArena may not see a prope
   - Each player must open their own chest.
 - Do not edit `loot_chests_state.json` by hand:
   - Use normal gameplay and let BossArena clean it up.
+
+### "Timed spawn skipped — already pending"
+
+If the log says a matching spawn is already pending even though the boss and crate are long gone:
+
+- BossArena now clears **stale** pending state when no matching boss is alive and the pending state is older than a couple of minutes, so the next spawn can run.
+- If it still happens, use `/ba cleanup` in that world to remove any stuck entities, or restart the server so timed spawn state can reset.
 
 ---
 

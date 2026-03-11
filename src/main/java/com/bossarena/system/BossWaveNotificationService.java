@@ -29,13 +29,14 @@ public final class BossWaveNotificationService {
     private static final Map<UUID, Long> TIMED_ALERT_SUPPRESS_UNTIL = new ConcurrentHashMap<>();
     private static final Pattern PLACEHOLDER_PATTERN =
             Pattern.compile("\\$([A-Za-z][A-Za-z0-9_]*)|\\{([A-Za-z][A-Za-z0-9_]*)\\}");
+    private static final Pattern COLOR_CODE_PATTERN = Pattern.compile("([§&])([0-9a-fA-FrR])");
 
     private BossWaveNotificationService() {
     }
 
     private static double resolveNotificationRadius() {
         BossArenaPlugin plugin = BossArenaPlugin.getInstance();
-        BossArenaConfig config = plugin != null ? plugin.getConfigHandle() : null;
+        BossArenaConfig config = plugin != null ? plugin.getConfig() : null;
         return config != null ? config.getNotificationRadius() : DEFAULT_NOTIFY_RADIUS;
     }
 
@@ -183,8 +184,9 @@ public final class BossWaveNotificationService {
             );
         }
 
-        Message title = titleText == null || titleText.isEmpty() ? null : Message.raw(titleText);
-        Message subtitle = subtitleText == null || subtitleText.isEmpty() ? null : Message.raw(subtitleText);
+        // Event banner may not render colored text; strip &/§ codes so any displayed text is clean.
+        Message title = toPlainMessage(stripColorCodes(titleText));
+        Message subtitle = toPlainMessage(stripColorCodes(subtitleText));
         float duration = (forceActiveState || bossesAlive > 0 || addsAlive > 0)
                 ? PERSISTENT_DURATION_SECONDS
                 : FINAL_CLEAR_DURATION_SECONDS;
@@ -417,7 +419,7 @@ public final class BossWaveNotificationService {
     private static BossArenaConfig.EventBannerTemplates resolveEventBannerTemplates() {
         BossArenaConfig.EventBannerTemplates out = new BossArenaConfig.EventBannerTemplates();
         BossArenaPlugin plugin = BossArenaPlugin.getInstance();
-        BossArenaConfig config = plugin != null ? plugin.getConfigHandle() : null;
+        BossArenaConfig config = plugin != null ? plugin.getConfig() : null;
         if (config == null || config.eventBanner == null) {
             return out;
         }
@@ -485,5 +487,20 @@ public final class BossWaveNotificationService {
             return fallback;
         }
         return value.trim();
+    }
+
+    /** Removes & and § color codes (e.g. &7, §e) so text displays cleanly when the banner doesn't support formatting. */
+    private static String stripColorCodes(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return COLOR_CODE_PATTERN.matcher(text).replaceAll("");
+    }
+
+    private static Message toPlainMessage(String text) {
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+        return Message.raw(text);
     }
 }

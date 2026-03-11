@@ -114,7 +114,7 @@ public final class TimedBossMapMarkerService {
             return;
         }
 
-        BossArenaConfig config = plugin != null ? plugin.getConfigHandle() : null;
+        BossArenaConfig config = plugin != null ? plugin.getConfig() : null;
         if (config == null || config.timedMapMarker == null || !config.timedMapMarker.enabled) {
             return;
         }
@@ -144,7 +144,7 @@ public final class TimedBossMapMarkerService {
     public void onTimedBossSpawn(World world, UUID bossUuid) {
         if (world == null || bossUuid == null) return;
 
-        BossArenaConfig config = plugin != null ? plugin.getConfigHandle() : null;
+        BossArenaConfig config = plugin != null ? plugin.getConfig() : null;
         if (config == null || config.timedMapMarker == null || !config.timedMapMarker.enabled) {
             return;
         }

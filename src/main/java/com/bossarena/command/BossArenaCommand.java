@@ -2,6 +2,7 @@ package com.bossarena.command;
 
 import com.bossarena.BossArenaPlugin;
 import com.bossarena.config.BossArenaConfigPage;
+import com.bossarena.util.BossArenaCleanup;
 import com.bossarena.data.Arena;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
@@ -44,11 +45,9 @@ import java.util.concurrent.CompletableFuture;
 
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.inventory.container.ItemContainer;
-import com.hypixel.hytale.server.core.modules.interaction.Interactions;
 import com.hypixel.hytale.protocol.InteractionType;
 import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.ArchetypeChunk;
-import com.hypixel.hytale.component.query.Query;
 
 import java.lang.reflect.Method;
 import java.util.logging.Level;
@@ -79,6 +78,7 @@ public final class BossArenaCommand extends AbstractCommand {
         }
     }
 
+    /** Uses reflection to bridge CommandContext/Player APIs that may differ across Hytale versions. */
     @SuppressWarnings("JavaReflectionMemberAccess")
     private static CommandSender getSender(CommandContext ctx) {
         if (ctx == null) return null;
@@ -98,6 +98,7 @@ public final class BossArenaCommand extends AbstractCommand {
         return null;
     }
 
+    /** Uses reflection to resolve PlayerRef and transform for position; fallback (0,0,0) on API mismatch. */
     @SuppressWarnings("SpellCheckingInspection")
     private static Vector3d getPlayerPosition(Player player) {
         if (player == null) return new Vector3d(0, 0, 0);
@@ -121,6 +122,7 @@ public final class BossArenaCommand extends AbstractCommand {
         return new Vector3d(0, 0, 0);
     }
 
+    /** Uses reflection to resolve PlayerRef and transform for rotation; fallback (0,0,0) on API mismatch. */
     @SuppressWarnings("SpellCheckingInspection")
     private static Vector3f getPlayerRotation(Player player) {
         if (player == null) return new Vector3f(0, 0, 0);
@@ -510,8 +512,7 @@ public final class BossArenaCommand extends AbstractCommand {
         @Override
         protected CompletableFuture<Void> execute(@Nonnull CommandContext ctx) {
             try {
-                var config = plugin.getConfigHandle();
-                config.save();
+                var config = plugin.getConfig();
                 config.load();
                 plugin.refreshTimedBossSpawns();
                 plugin.reloadShopConfig();
@@ -809,38 +810,7 @@ public final class BossArenaCommand extends AbstractCommand {
             // 4. Process worlds for deep entity sweep and items
             for (World world : Universe.get().getWorlds().values()) {
                 world.execute(() -> {
-                    Store<EntityStore> store = world.getEntityStore().getStore();
-                    Query<EntityStore> uuidQuery = UUIDComponent.getComponentType();
-
-                    int removedCount = 0;
-                    // Deep sweep: using CommandBuffer provided by forEachChunk
-                    store.forEachChunk(uuidQuery, (chunk, buffer) -> {
-                        for (int i = 0; i < chunk.size(); i++) {
-                            Ref<EntityStore> ref = chunk.getReferenceTo(i);
-                            UUIDComponent uuidComp = (UUIDComponent) chunk.getComponent(i, UUIDComponent.getComponentType());
-                            UUID uuid = uuidComp != null ? uuidComp.getUuid() : null;
-
-                            boolean shouldRemove = false;
-                            if (uuid != null && trackedUuids.contains(uuid)) {
-                                shouldRemove = true;
-                            } else {
-                                Interactions interactions = (Interactions) chunk.getComponent(i, Interactions.getComponentType());
-                                if (interactions != null) {
-                                    String deathId = interactions.getInteractionId(InteractionType.Death);
-                                    String interactId = interactions.getInteractionId(InteractionType.Use);
-
-                                    if (BossArenaPlugin.NO_DEATH_DROPS_INTERACTION_ID.equals(deathId) ||
-                                            BossArenaPlugin.SHOP_OPEN_INTERACTION_ID.equals(interactId)) {
-                                        shouldRemove = true;
-                                    }
-                                }
-                            }
-
-                            if (shouldRemove) {
-                                buffer.removeEntity(ref, RemoveReason.REMOVE);
-                            }
-                        }
-                    });
+                    BossArenaCleanup.removeBossArenaEntitiesInWorld(world, trackedUuids, true);
 
                     int inventoryCount = 0;
                     for (Player player : world.getPlayers()) {

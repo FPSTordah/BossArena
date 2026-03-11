@@ -21,7 +21,7 @@ public class LootSpawnSystem extends TickingSystem<EntityStore> {
             var spawn = BossLootHandler.PENDING_SPAWNS.poll();
             if (spawn != null) {
                 LOGGER.info("Processing queued loot spawn for: " + spawn.bossName);
-                BossLootHandler.handleBossDeath(spawn.world, spawn.location, spawn.bossName);
+                BossLootHandler.handleBossDeath(spawn.world, spawn.location, spawn.bossName, spawn.eventId, store);
             }
         }
     }

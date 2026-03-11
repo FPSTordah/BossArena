@@ -24,11 +24,16 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
+/**
+ * Central shared state for boss fights: tracked bosses and adds, event data, chunk holds, and persistence.
+ * Spawn, death, notification, and entity-removed systems depend on this for tracking and cleanup.
+ */
 public class BossTrackingSystem {
     private static final Logger LOGGER = Logger.getLogger("BossArena");
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -48,6 +53,10 @@ public class BossTrackingSystem {
     private volatile PersistedState pendingRestoreState;
     private volatile MissingEntityHandler missingEntityHandler;
     private ScheduledExecutorService persistenceExecutor;
+
+    /** Pending pre-boss spawn: wait for all before_boss wave adds to die before spawning boss. */
+    private final Map<UUID, PendingPreBossState> pendingPreBossByEventId = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> pendingPreBossAddToEventId = new ConcurrentHashMap<>();
 
     private static long resolveChunkIndex(Vector3d location) {
         int blockX = (int) Math.floor(location.x);
@@ -999,11 +1008,106 @@ public class BossTrackingSystem {
         return addUuid != null && addToBoss.containsKey(addUuid);
     }
 
+    // ----- Pending pre-boss spawn (wait for before_boss wave adds to die) -----
+
+    /**
+     * Registers a pending pre-boss spawn. When all before_boss wave executions have run and all
+     * registered add UUIDs have been removed (death/despawn), the callback is run once and state is cleared.
+     */
+    public void registerPendingPreBossSpawn(UUID eventId, int totalWaveExecutions, Runnable onAllDeadAndComplete) {
+        if (eventId == null || onAllDeadAndComplete == null || totalWaveExecutions < 0) {
+            return;
+        }
+        pendingPreBossByEventId.put(eventId, new PendingPreBossState(totalWaveExecutions, onAllDeadAndComplete));
+    }
+
+    /** Registers an add UUID that must die before the boss spawns (for after_before_boss trigger). */
+    public void addPendingPreBossAdd(UUID eventId, UUID addUuid) {
+        if (eventId == null || addUuid == null) {
+            return;
+        }
+        PendingPreBossState state = pendingPreBossByEventId.get(eventId);
+        if (state == null) {
+            return;
+        }
+        state.aliveAdds.add(addUuid);
+        pendingPreBossAddToEventId.put(addUuid, eventId);
+    }
+
+    /** Called when a before_boss wave execution has run. When total is reached and no adds remain, callback runs. */
+    public void markBeforeBossWaveExecuted(UUID eventId) {
+        if (eventId == null) {
+            return;
+        }
+        PendingPreBossState state = pendingPreBossByEventId.get(eventId);
+        if (state == null) {
+            return;
+        }
+        int now = state.executedWaveExecutions.incrementAndGet();
+        tryFirePendingPreBossCallback(eventId, state);
+    }
+
+    public boolean isPendingPreBossAdd(UUID addUuid) {
+        return addUuid != null && pendingPreBossAddToEventId.containsKey(addUuid);
+    }
+
+    /**
+     * Called when an entity is removed (death or force) and may be a pending pre-boss add.
+     * If so, removes it from the set; when all adds are dead and all waves executed, runs the callback.
+     */
+    public void onPendingPreBossAddRemoved(UUID addUuid) {
+        if (addUuid == null) {
+            return;
+        }
+        UUID eventId = pendingPreBossAddToEventId.remove(addUuid);
+        if (eventId == null) {
+            return;
+        }
+        PendingPreBossState state = pendingPreBossByEventId.get(eventId);
+        if (state == null) {
+            return;
+        }
+        state.aliveAdds.remove(addUuid);
+        tryFirePendingPreBossCallback(eventId, state);
+    }
+
+    private void tryFirePendingPreBossCallback(UUID eventId, PendingPreBossState state) {
+        if (state.executedWaveExecutions.get() < state.totalWaveExecutions) {
+            return;
+        }
+        if (!state.aliveAdds.isEmpty()) {
+            return;
+        }
+        if (pendingPreBossByEventId.remove(eventId) != state) {
+            return;
+        }
+        try {
+            state.onAllDeadAndComplete.run();
+        } catch (Exception e) {
+            LOGGER.warning("Pending pre-boss spawn callback failed for event " + eventId + ": " + e.getMessage());
+        }
+    }
+
     public UUID getBossUuidForAdd(UUID addUuid) {
         if (addUuid == null) {
             return null;
         }
         return addToBoss.get(addUuid);
+    }
+
+    /**
+     * Returns the event ID for a tracked boss or add, or null if not tracked.
+     */
+    public UUID getEventIdForTrackedEntity(UUID entityUuid) {
+        if (entityUuid == null) {
+            return null;
+        }
+        UUID eventId = bossToEvent.get(entityUuid);
+        if (eventId != null) {
+            return eventId;
+        }
+        UUID bossUuid = addToBoss.get(entityUuid);
+        return bossUuid != null ? bossToEvent.get(bossUuid) : null;
     }
 
     public BossModifiers getEntityModifiers(UUID uuid) {
@@ -1048,12 +1152,20 @@ public class BossTrackingSystem {
 
     public List<ActiveEventStatus> snapshotActiveEvents() {
         List<ActiveEventStatus> out = new ArrayList<>();
-        for (EventData event : eventsById.values()) {
-            if (event == null) {
+        for (Map.Entry<UUID, EventData> entry : eventsById.entrySet()) {
+            UUID eventId = entry.getKey();
+            EventData event = entry.getValue();
+            if (eventId == null || event == null) {
                 continue;
             }
             int alive = event.aliveBosses.size();
             int adds = event.activeAdds.size();
+            if (event.awaitingPrimaryBossSpawn) {
+                PendingPreBossState pending = pendingPreBossByEventId.get(eventId);
+                if (pending != null) {
+                    adds = pending.aliveAdds.size();
+                }
+            }
             if (!isEventInProgress(event)) {
                 continue;
             }
@@ -1170,13 +1282,13 @@ public class BossTrackingSystem {
             bossToEvent.remove(bossUuid);
             markDirty();
             refreshEventChunkRetention();
-            return new PendingLootData(data.world, data.spawnLocation, data.bossName);
+            return new PendingLootData(data.world, data.spawnLocation, data.bossName, null);
         }
 
         event.aliveBosses.remove(bossUuid);
         PendingLootData pending = tryCompleteEvent(eventId);
         if (pending != null && pending.world == null && data.world != null) {
-            pending = new PendingLootData(data.world, pending.spawnLocation, pending.bossName);
+            pending = new PendingLootData(data.world, pending.spawnLocation, pending.bossName, pending.eventId);
         }
         markDirty();
         refreshEventChunkRetention();
@@ -1265,7 +1377,7 @@ public class BossTrackingSystem {
             clearBossAddMappings(bossUuid, event);
         }
 
-        return new PendingLootData(lootWorld, lootLocation, event.eventCenter, lootBossName, event.bossUuids);
+        return new PendingLootData(lootWorld, lootLocation, event.eventCenter, lootBossName, event.bossUuids, eventId);
     }
 
     private void clearBossAddMappings(UUID bossUuid, EventData event) {
@@ -1468,18 +1580,29 @@ public class BossTrackingSystem {
         public final Vector3d eventCenter;
         public final String bossName;
         public final java.util.Set<java.util.UUID> bossUuids;
+        /** Event ID when this loot is from a completed event; null for lone-boss loot. Used for damage chart. */
+        public final UUID eventId;
 
         public PendingLootData(World world, Vector3d spawnLocation, String bossName) {
-            this(world, spawnLocation, null, bossName, null);
+            this(world, spawnLocation, null, bossName, null, null);
+        }
+
+        public PendingLootData(World world, Vector3d spawnLocation, String bossName, UUID eventId) {
+            this(world, spawnLocation, null, bossName, null, eventId);
         }
 
         public PendingLootData(World world, Vector3d spawnLocation, Vector3d eventCenter, String bossName, java.util.Set<java.util.UUID> bossUuids) {
+            this(world, spawnLocation, eventCenter, bossName, bossUuids, null);
+        }
+
+        public PendingLootData(World world, Vector3d spawnLocation, Vector3d eventCenter, String bossName, java.util.Set<java.util.UUID> bossUuids, UUID eventId) {
             this.world = world;
             Vector3d safeLocation = spawnLocation != null ? spawnLocation : new Vector3d(0, 0, 0);
             this.spawnLocation = new Vector3d(safeLocation.x, safeLocation.y, safeLocation.z);
             this.eventCenter = eventCenter;
             this.bossName = bossName;
             this.bossUuids = bossUuids != null ? new java.util.HashSet<>(bossUuids) : new java.util.HashSet<>();
+            this.eventId = eventId;
         }
     }
 
@@ -1610,6 +1733,18 @@ public class BossTrackingSystem {
             this.countdownDurationMs = Math.max(0L, countdownDurationMs);
             this.countdownStartEpochMs = Math.max(0L, countdownStartEpochMs);
             this.awaitingPrimaryBossSpawn = awaitingPrimaryBossSpawn;
+        }
+    }
+
+    private static final class PendingPreBossState {
+        final int totalWaveExecutions;
+        final AtomicInteger executedWaveExecutions = new AtomicInteger(0);
+        final Set<UUID> aliveAdds = ConcurrentHashMap.newKeySet();
+        final Runnable onAllDeadAndComplete;
+
+        PendingPreBossState(int totalWaveExecutions, Runnable onAllDeadAndComplete) {
+            this.totalWaveExecutions = totalWaveExecutions;
+            this.onAllDeadAndComplete = onAllDeadAndComplete;
         }
     }
 

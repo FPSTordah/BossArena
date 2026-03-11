@@ -540,7 +540,7 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         if (config != null && config.currencyItemId != null && !config.currencyItemId.isBlank()) {
             return config.currencyItemId;
         }
-        BossArenaConfig global = plugin.getConfigHandle();
+        BossArenaConfig global = plugin.getConfig();
         if (global != null && global.currencyItemId != null && !global.currencyItemId.isBlank()) {
             return global.currencyItemId;
         }
