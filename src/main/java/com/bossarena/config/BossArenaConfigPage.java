@@ -8,7 +8,6 @@ package com.bossarena.config;
 import com.bossarena.BossArenaConfig;
 import com.bossarena.BossArenaPlugin;
 import com.bossarena.data.Arena;
-import com.bossarena.util.NotificationRadiusConstants;
 import com.bossarena.data.ArenaRegistry;
 import com.bossarena.data.BossDefinition;
 import com.bossarena.data.BossRegistry;
@@ -987,7 +986,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         out.bossName = source != null && source.bossName != null && !source.bossName.isBlank()
                 ? source.bossName
                 : fallbackBossName;
-        out.lootRadius = source != null ? source.lootRadius : 40.0d;
+        out.lootRadius = source != null ? source.lootRadius : 50.0d;
         out.items = new ArrayList<>();
         out.commands = new ArrayList<>();
 
@@ -1209,7 +1208,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             if (!configuredArenaId.isEmpty()) {
                 arenaLabel = arenaLabel + " | " + safeText(configuredArenaId);
             } else if (!resolvedArenaId.isEmpty()) {
-                arenaLabel = arenaLabel + " | " + safeText(resolvedArenaId) + " (nearest)";
+                arenaLabel = arenaLabel + " | " + safeText(resolvedArenaId);
             } else {
                 arenaLabel = arenaLabel + " | [unset]";
             }
@@ -1231,6 +1230,22 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .comparing((ShopLocationView row) -> row.distance == null)
                 .thenComparing(row -> row.distance == null ? Double.MAX_VALUE : row.distance)
                 .thenComparing(row -> row.arenaLabel.toLowerCase(Locale.ROOT)));
+
+        // Only the shop nearest to the player gets " (nearest)" in the label.
+        if (!out.isEmpty() && out.get(0).distance != null) {
+            ShopLocationView first = out.get(0);
+            out.set(0, new ShopLocationView(
+                    first.arenaLabel + " (nearest)",
+                    first.distanceLabel,
+                    first.distance,
+                    first.worldName,
+                    first.x,
+                    first.y,
+                    first.z,
+                    first.enabledBosses,
+                    first.totalBosses
+            ));
+        }
 
         if (currentWorld == null) {
             shopStatusText = "Could not resolve player world; showing all saved shop locations.";
@@ -1647,7 +1662,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             cmd.set("#ArenaX" + suffix + ".Value", formatCoord(arena.x));
             cmd.set("#ArenaY" + suffix + ".Value", formatCoord(arena.y));
             cmd.set("#ArenaZ" + suffix + ".Value", formatCoord(arena.z));
-            cmd.set("#ArenaNotificationRadius" + suffix + ".Value", formatCoord(arena.getNotificationRadius()));
+            cmd.set("#ArenaLootRadius" + suffix + ".Value", arena.lootRadius > 0.0d ? formatCoord(arena.lootRadius) : "");
 
             events.addEventBinding(CustomUIEventBindingType.Activating, "#ArenaDelete" + suffix, EventData.of("Action", "arena_delete_" + row));
             events.addEventBinding(
@@ -1659,7 +1674,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                             .append("@ArenaX", "#ArenaX" + suffix + ".Value")
                             .append("@ArenaY", "#ArenaY" + suffix + ".Value")
                             .append("@ArenaZ", "#ArenaZ" + suffix + ".Value")
-                            .append("@ArenaNotificationRadius" + suffix, "#ArenaNotificationRadius" + suffix + ".Value")
+                            .append("@ArenaLootRadius" + suffix, "#ArenaLootRadius" + suffix + ".Value")
             );
         }
     }
@@ -1750,16 +1765,11 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             return;
         }
 
-        String radiusRaw = optionalText(data.getArenaNotificationRadius(row));
-        double notificationRadius = arena.getNotificationRadius();
-        if (!radiusRaw.isEmpty()) {
-            try {
-                notificationRadius = parseRequiredDouble(radiusRaw, "Invalid notification radius.", NotificationRadiusConstants.MIN, NotificationRadiusConstants.MAX);
-            } catch (IllegalArgumentException e) {
-                arenaStatusText = e.getMessage() + " Use 10–500 blocks.";
-                rebuild();
-                return;
-            }
+        String lootRadiusRaw = optionalText(data.getArenaLootRadius(row));
+        double lootRadius = arena.lootRadius;
+        if (!lootRadiusRaw.isEmpty()) {
+            Double parsed = parseOptionalDouble(lootRadiusRaw);
+            lootRadius = (parsed != null && parsed >= 0.0d) ? parsed : 0.0d;
         }
 
         String oldArenaId = arena.arenaId;
@@ -1778,7 +1788,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         arena.x = x;
         arena.y = y;
         arena.z = z;
-        arena.notificationRadius = notificationRadius;
+        arena.lootRadius = lootRadius;
         ArenaRegistry.register(arena);
 
         plugin.saveArenas();
@@ -2030,7 +2040,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         cmd.set("#BossEditPpKnockbackTaken.Value", formatFloat(boss.perPlayerIncrease.knockbackTaken));
         cmd.set("#BossEditPpTurnRate.Value", formatFloat(boss.perPlayerIncrease.turnRate));
         cmd.set("#BossEditPpRegen.Value", formatFloat(boss.perPlayerIncrease.regen));
-        cmd.set("#BossEditLootRadius.Value", formatDouble(loot.lootRadius));
         if (boss.extraMobs != null) {
             boss.extraMobs.sanitize();
         }
@@ -2424,8 +2433,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append("@BossEditPpKnockbackGiven", "#BossEditPpKnockbackGiven.Value")
                 .append("@BossEditPpKnockbackTaken", "#BossEditPpKnockbackTaken.Value")
                 .append("@BossEditPpTurnRate", "#BossEditPpTurnRate.Value")
-                .append("@BossEditPpRegen", "#BossEditPpRegen.Value")
-                .append("@BossEditLootRadius", "#BossEditLootRadius.Value");
+                .append("@BossEditPpRegen", "#BossEditPpRegen.Value");
 
         for (int row = 1; row <= MAX_LOOT_ROWS; row++) {
             String suffix = Integer.toString(row);
@@ -2766,15 +2774,7 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
 
             LootTable outLoot = new LootTable();
             outLoot.bossName = outBoss.bossName;
-            outLoot.lootRadius = parseRequiredDouble(
-                    resolvedOrFallback(
-                            data.bossEditLootRadius,
-                            formatDouble(bossEditorState.loot != null ? bossEditorState.loot.lootRadius : 40.0d)
-                    ),
-                    "Loot Radius must be a number greater than or equal to 0.",
-                    0.0d,
-                    Double.MAX_VALUE
-            );
+            outLoot.lootRadius = 50.0d; // Only used for JSON; effective radius is arena Loot Radius or 50 when spawn "here"
             outLoot.items = new ArrayList<>();
 
             boolean unresolvedLootBindingDetected = false;
@@ -2993,10 +2993,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             boss.extraMobs.sanitize();
         }
 
-        Double lootRadius = parseOptionalDouble(data.bossEditLootRadius);
-        if (loot != null && lootRadius != null && lootRadius >= 0d) {
-            loot.lootRadius = lootRadius;
-        }
     }
 
     private void handleBossWavesSave(ConfigEventData data) {
@@ -3417,14 +3413,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append(new KeyedCodec<>("@ArenaX", Codec.STRING), (d, v) -> d.arenaX = v, d -> d.arenaX).add()
                 .append(new KeyedCodec<>("@ArenaY", Codec.STRING), (d, v) -> d.arenaY = v, d -> d.arenaY).add()
                 .append(new KeyedCodec<>("@ArenaZ", Codec.STRING), (d, v) -> d.arenaZ = v, d -> d.arenaZ).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius1", Codec.STRING), (d, v) -> d.arenaNotificationRadius1 = v, d -> d.arenaNotificationRadius1).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius2", Codec.STRING), (d, v) -> d.arenaNotificationRadius2 = v, d -> d.arenaNotificationRadius2).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius3", Codec.STRING), (d, v) -> d.arenaNotificationRadius3 = v, d -> d.arenaNotificationRadius3).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius4", Codec.STRING), (d, v) -> d.arenaNotificationRadius4 = v, d -> d.arenaNotificationRadius4).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius5", Codec.STRING), (d, v) -> d.arenaNotificationRadius5 = v, d -> d.arenaNotificationRadius5).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius6", Codec.STRING), (d, v) -> d.arenaNotificationRadius6 = v, d -> d.arenaNotificationRadius6).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius7", Codec.STRING), (d, v) -> d.arenaNotificationRadius7 = v, d -> d.arenaNotificationRadius7).add()
-                .append(new KeyedCodec<>("@ArenaNotificationRadius8", Codec.STRING), (d, v) -> d.arenaNotificationRadius8 = v, d -> d.arenaNotificationRadius8).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius1", Codec.STRING), (d, v) -> d.arenaLootRadius1 = v, d -> d.arenaLootRadius1).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius2", Codec.STRING), (d, v) -> d.arenaLootRadius2 = v, d -> d.arenaLootRadius2).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius3", Codec.STRING), (d, v) -> d.arenaLootRadius3 = v, d -> d.arenaLootRadius3).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius4", Codec.STRING), (d, v) -> d.arenaLootRadius4 = v, d -> d.arenaLootRadius4).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius5", Codec.STRING), (d, v) -> d.arenaLootRadius5 = v, d -> d.arenaLootRadius5).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius6", Codec.STRING), (d, v) -> d.arenaLootRadius6 = v, d -> d.arenaLootRadius6).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius7", Codec.STRING), (d, v) -> d.arenaLootRadius7 = v, d -> d.arenaLootRadius7).add()
+                .append(new KeyedCodec<>("@ArenaLootRadius8", Codec.STRING), (d, v) -> d.arenaLootRadius8 = v, d -> d.arenaLootRadius8).add()
                 .append(new KeyedCodec<>("@ShopEditArenaId", Codec.STRING), (d, v) -> d.shopEditArenaId = v, d -> d.shopEditArenaId).add()
 
                 .append(new KeyedCodec<>("@BossEditName", Codec.STRING), (d, v) -> d.bossEditName = v, d -> d.bossEditName).add()
@@ -3457,7 +3453,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
                 .append(new KeyedCodec<>("@BossEditExtraTimeLimit", Codec.STRING), (d, v) -> d.bossEditExtraTimeLimit = v, d -> d.bossEditExtraTimeLimit).add()
                 .append(new KeyedCodec<>("@BossEditExtraWaves", Codec.STRING), (d, v) -> d.bossEditExtraWaves = v, d -> d.bossEditExtraWaves).add()
                 .append(new KeyedCodec<>("@BossEditExtraMobsPerWave", Codec.STRING), (d, v) -> d.bossEditExtraMobsPerWave = v, d -> d.bossEditExtraMobsPerWave).add()
-                .append(new KeyedCodec<>("@BossEditLootRadius", Codec.STRING), (d, v) -> d.bossEditLootRadius = v, d -> d.bossEditLootRadius).add()
 
                 .append(new KeyedCodec<>("@BossSpawnTrigger", Codec.STRING), (d, v) -> d.bossSpawnTrigger = v, d -> d.bossSpawnTrigger).add()
                 .append(new KeyedCodec<>("@BossSpawnTriggerValue", Codec.STRING), (d, v) -> d.bossSpawnTriggerValue = v, d -> d.bossSpawnTriggerValue).add()
@@ -3571,14 +3566,14 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String arenaX;
         public String arenaY;
         public String arenaZ;
-        public String arenaNotificationRadius1;
-        public String arenaNotificationRadius2;
-        public String arenaNotificationRadius3;
-        public String arenaNotificationRadius4;
-        public String arenaNotificationRadius5;
-        public String arenaNotificationRadius6;
-        public String arenaNotificationRadius7;
-        public String arenaNotificationRadius8;
+        public String arenaLootRadius1;
+        public String arenaLootRadius2;
+        public String arenaLootRadius3;
+        public String arenaLootRadius4;
+        public String arenaLootRadius5;
+        public String arenaLootRadius6;
+        public String arenaLootRadius7;
+        public String arenaLootRadius8;
         public String shopEditArenaId;
         public String bossEditName;
         public String bossEditNpcId;
@@ -3610,7 +3605,6 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
         public String bossEditExtraTimeLimit;
         public String bossEditExtraWaves;
         public String bossEditExtraMobsPerWave;
-        public String bossEditLootRadius;
         public String bossSpawnTrigger;
         public String bossSpawnTriggerValue;
         public String bossWaveRandomLocations;
@@ -3874,16 +3868,16 @@ public final class BossArenaConfigPage extends InteractiveCustomUIPage<BossArena
             };
         }
 
-        public String getArenaNotificationRadius(int row) {
+        public String getArenaLootRadius(int row) {
             return switch (row) {
-                case 1 -> arenaNotificationRadius1;
-                case 2 -> arenaNotificationRadius2;
-                case 3 -> arenaNotificationRadius3;
-                case 4 -> arenaNotificationRadius4;
-                case 5 -> arenaNotificationRadius5;
-                case 6 -> arenaNotificationRadius6;
-                case 7 -> arenaNotificationRadius7;
-                case 8 -> arenaNotificationRadius8;
+                case 1 -> arenaLootRadius1;
+                case 2 -> arenaLootRadius2;
+                case 3 -> arenaLootRadius3;
+                case 4 -> arenaLootRadius4;
+                case 5 -> arenaLootRadius5;
+                case 6 -> arenaLootRadius6;
+                case 7 -> arenaLootRadius7;
+                case 8 -> arenaLootRadius8;
                 default -> "";
             };
         }

@@ -3,6 +3,8 @@ package com.bossarena.loot;
 import com.bossarena.BossArenaPlugin;
 import com.bossarena.damagechart.BossDamageChartTracker;
 import com.bossarena.damagechart.DamageChartOpener;
+import com.bossarena.data.Arena;
+import com.bossarena.data.ArenaRegistry;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.hypixel.hytale.assetstore.map.BlockTypeAssetMap;
@@ -130,7 +132,23 @@ public class BossLootHandler {
             return;
         }
 
-        LOGGER.info("Loot table found. Radius: " + table.lootRadius);
+        // Default 50 blocks when spawned "here" (no arena); arena Loot Radius overrides when present.
+        double effectiveRadius = 50.0d;
+        try {
+            String worldName = world.getName();
+            Arena nearestArena = ArenaRegistry.findNearest(worldName, chestLocation.x, chestLocation.y, chestLocation.z);
+            if (nearestArena != null) {
+                double arenaLootRadius = nearestArena.getLootRadius();
+                if (arenaLootRadius > 0.0d) {
+                    LOGGER.info("Using arena loot radius from arena '" + nearestArena.arenaId + "': " + arenaLootRadius);
+                    effectiveRadius = arenaLootRadius;
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "Failed to resolve nearest arena for loot radius", e);
+        }
+
+        LOGGER.info("Loot table found. Effective radius: " + effectiveRadius);
         boolean hasItems = table.items != null && !table.items.isEmpty();
         boolean hasCommands = table.commands != null && !table.commands.isEmpty();
 
@@ -157,11 +175,11 @@ public class BossLootHandler {
 
             LOGGER.info("Player " + playerUuid + " at " + playerPos + ", distance: " + distance);
 
-            if (distance <= table.lootRadius) {
+            if (distance <= effectiveRadius) {
                 eligiblePlayers.add(ref);
                 LOGGER.info("  -> Player IS eligible!");
             } else {
-                LOGGER.info("  -> Player too far (radius: " + table.lootRadius + ")");
+                LOGGER.info("  -> Player too far (radius: " + effectiveRadius + ")");
             }
         }
 

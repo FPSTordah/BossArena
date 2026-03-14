@@ -8,6 +8,7 @@ final class ShopCurrencySupport {
     static final String PROVIDER_AUTO = "auto";
     static final String PROVIDER_ITEM = "item";
     static final String PROVIDER_HYMARKET = "hymarket";
+    static final String PROVIDER_ECOTALE = "ecotale";
     static final String PROVIDER_ECONOMY_SYSTEM = "economysystem";
 
     private ShopCurrencySupport() {
@@ -21,11 +22,15 @@ final class ShopCurrencySupport {
         if ("hymarketplus".equals(provider) || "hy_market".equals(provider) || "marketplace".equals(provider)) {
             return PROVIDER_HYMARKET;
         }
+        if ("ecotale".equals(provider) || "eco".equals(provider)) {
+            return PROVIDER_ECOTALE;
+        }
         if ("economy".equals(provider) || "ecosystem".equals(provider)) {
             return PROVIDER_ECONOMY_SYSTEM;
         }
         if (PROVIDER_ITEM.equals(provider)
                 || PROVIDER_HYMARKET.equals(provider)
+                || PROVIDER_ECOTALE.equals(provider)
                 || PROVIDER_ECONOMY_SYSTEM.equals(provider)
                 || PROVIDER_AUTO.equals(provider)) {
             return provider;
@@ -37,6 +42,9 @@ final class ShopCurrencySupport {
         if (HyMarketBridge.isActive()) {
             return PROVIDER_HYMARKET;
         }
+        if (EcotaleBridge.isActive()) {
+            return PROVIDER_ECOTALE;
+        }
         if (EconomySystemBridge.isActive()) {
             return PROVIDER_ECONOMY_SYSTEM;
         }
@@ -47,12 +55,20 @@ final class ShopCurrencySupport {
         return HyMarketBridge.isActive();
     }
 
+    static boolean isEcotaleActive() {
+        return EcotaleBridge.isActive();
+    }
+
     static boolean isEconomySystemActive() {
         return EconomySystemBridge.isActive();
     }
 
     static boolean removeHyMarketCopper(UUID playerUuid, long amountCopper) {
         return HyMarketBridge.removeCopper(playerUuid, amountCopper);
+    }
+
+    static boolean removeEcotaleBalance(UUID playerUuid, double amount) {
+        return EcotaleBridge.withdraw(playerUuid, amount);
     }
 
     static boolean removeEconomySystemBalance(UUID playerUuid, double amount) {
@@ -89,6 +105,71 @@ final class ShopCurrencySupport {
 
     static String formatEconomySystemCost(double amount) {
         return EconomySystemBridge.formatAmount(amount);
+    }
+
+    static String formatEcotaleCost(double amount) {
+        return EcotaleBridge.formatAmount(amount);
+    }
+
+    private static final class EcotaleBridge {
+        private static boolean initialized = false;
+        private static boolean available = false;
+        private static Method isAvailableMethod;
+        private static Method withdrawMethod;
+        private static Method formatMethod;
+
+        private static final String WITHDRAW_REASON = "Boss Arena";
+
+        private static synchronized boolean isActive() {
+            if (!initialized) {
+                initialized = true;
+                try {
+                    Class<?> apiClass = Class.forName("com.ecotale.api.EcotaleAPI");
+                    isAvailableMethod = apiClass.getMethod("isAvailable");
+                    withdrawMethod = apiClass.getMethod("withdraw", UUID.class, double.class, String.class);
+                    formatMethod = apiClass.getMethod("format", double.class);
+                    available = true;
+                } catch (Throwable ignored) {
+                    available = false;
+                }
+            }
+            if (!available) {
+                return false;
+            }
+            try {
+                return Boolean.TRUE.equals(isAvailableMethod.invoke(null));
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        private static boolean withdraw(UUID playerUuid, double amount) {
+            if (!isActive()) {
+                return false;
+            }
+            try {
+                if (amount <= 0.0d) {
+                    return true;
+                }
+                return Boolean.TRUE.equals(withdrawMethod.invoke(null, playerUuid, amount, WITHDRAW_REASON));
+            } catch (Throwable ignored) {
+                return false;
+            }
+        }
+
+        private static String formatAmount(double amount) {
+            if (isActive()) {
+                try {
+                    Object value = formatMethod.invoke(null, amount);
+                    if (value instanceof String text && !text.isBlank()) {
+                        return text;
+                    }
+                } catch (Throwable ignored) {
+                    // Fallback below.
+                }
+            }
+            return String.format(Locale.ROOT, "%.2f", amount);
+        }
     }
 
     private static final class HyMarketBridge {

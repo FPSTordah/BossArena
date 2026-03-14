@@ -8,7 +8,7 @@ author: Project42
 
 BossArena is a Hytale server mod that adds configurable boss arenas, an NPC-based contract shop, timed boss events, and per-player loot chests.
 
-**Version:** 3.0.0
+**Version:** 3.0.1
 
 **Group:** `com.bossarena`
 
@@ -25,7 +25,7 @@ Follow these steps to get from a fresh install to your first working boss fight.
    - Run: `/ba arena create <arenaId>`
    - Open `/ba config` > **Arenas** > tab:
      - Adjust the `Arena`, `X`, `Y`, `Z` values if needed.
-     - Set a `Notify` radius (in blocks) for the boss event banner.
+     - Optionally set **Loot Radius** (arena size, in blocks) — used for loot eligibility and for the event banner visibility; leave blank to use the boss loot table default for loot and the default banner radius.
 
 2. **Create or edit a boss**
    - Open `/ba config` > **Bosses** > tab.
@@ -39,7 +39,7 @@ Follow these steps to get from a fresh install to your first working boss fight.
      - Open a boss in the editor and configure its loot rows directly in the UI.
      - Changes are written to `mods/BossArena/loot_tables.json` for you.
    - Option B: edit `mods/BossArena/loot_tables.json` by hand
-     - Add a `lootRadius` and `items[]` for your boss.
+     - Add `items[]` for your boss (and optionally `lootRadius` in JSON for legacy; effective radius is per-arena Loot Radius or **50 blocks** when spawned at a location with no arena, e.g. `/ba spawn <bossId> here`).
      - Each item has `itemId`, `dropChance`, `minAmount`, `maxAmount`.
 
 4. **(Optional) Set up a timed spawn**
@@ -52,7 +52,7 @@ Follow these steps to get from a fresh install to your first working boss fight.
 5. **Test the encounter**
    - Use `/ba spawn <bossId> <arenaId>` to manually spawn the boss.
    - Verify:
-     - Banner shows inside the notification radius you set.
+     - Banner shows inside the arena’s Loot Radius (or default banner radius when Loot Radius is unset).
      - Loot chests appear and give the correct items.
      - Timed rule (if configured) behaves as expected.
 
@@ -67,7 +67,8 @@ Follow these steps to get from a fresh install to your first working boss fight.
   - `arenaId`
   - `worldName`
   - `x`, `y`, `z` (boss spawn / event center)
-  - `notificationRadius` (blocks around the arena where players see the boss event banner)
+  - `lootRadius` (optional; **arena size** in blocks — used for loot eligibility and for event banner visibility; see below)
+  - `notificationRadius` (fallback for banner when `lootRadius` is unset; not shown in the GUI)
 - Arenas are stored in `mods/BossArena/arenas.json` and editable in-game via `/ba config` > **Arenas** tab.
 
 ### Bosses
@@ -134,7 +135,7 @@ Primary namespaces:
   Opens the BossArena configuration UI with three tabs:
   - **Bosses** — edit boss stats, waves, and loot.
   - **Shop** — configure shop locations and contracts.
-  - **Arenas** — edit arena ids, positions, and notification radius.
+  - **Arenas** — edit arena ids, positions, and **Loot Radius** (arena size; also used for event banner visibility).
 
 ### Shop
 
@@ -204,18 +205,25 @@ Each entry:
 
 ---
 
-## Notification Radius
+## Event banner radius
 
 BossArena uses an on-screen event banner to notify players about active boss encounters.
 
-- The banner is shown to players **within the arena’s notification radius**.
-- `notificationRadius` is stored per arena in `arenas.json` and editable in `/ba config`:
-  - `Notify` column in the **Arenas** tab.
-  - Value is in blocks from the arena’s center.
-  - Valid range is clamped between 10 and 500 blocks.
-- If an arena has no value, BossArena falls back to `config.json.notificationRadius`.
+- The banner is shown to players **within the arena’s banner radius**.
+- **Banner radius** is the same as **Loot Radius** (arena size) when set: set **Loot Radius** in `/ba config` > **Arenas** tab to control both loot eligibility and who sees the event banner.
+- When an arena has no Loot Radius set (or it is 0), BossArena uses the per-arena `notificationRadius` from `arenas.json` if present, otherwise `config.json.notificationRadius` (default 100 blocks). The separate Notify radius is no longer shown in the GUI.
 
 Players who leave the radius have the banner cleared; re-entering the radius restores it while the event is active.
+
+### Arena Loot Radius (Arena Size)
+
+- **Loot radius** is the **arena size** for loot: the distance in blocks from the arena center within which players are eligible for loot when the boss event ends.
+- When a boss event ends, BossArena checks players near the loot chest (arena center) to decide who is eligible for loot.
+- The **effective loot radius** is resolved as:
+  1. If the nearest arena in the same world has `lootRadius` > 0, that value is used (timed and shop spawns are always at an arena).
+  2. Otherwise, a default of **50 blocks** is used (e.g. when the boss was spawned with `/ba spawn <bossId> here` rather than at an arena).
+- There is no per-boss loot radius in the Boss editor; timed and bought bosses are always tied to an arena, so arena **Loot Radius** applies. Only manual “here” spawns use the 50-block default.
+- `lootRadius` is stored per arena in `arenas.json` and is editable in-game via `/ba config` > **Arenas** tab (Loot Radius column).
 
 ---
 
@@ -289,7 +297,7 @@ All runtime configuration lives under `mods/BossArena/`:
   - Per-boss loot tables and drop chances.
 
 - `arenas.json`
-  - Arena list: id, world, position, and per-arena `notificationRadius`.
+  - Arena list: id, world, position, per-arena `lootRadius` (arena size; used for loot eligibility and event banner), and optional `notificationRadius` (fallback for banner when `lootRadius` is unset).
 
 - `shop.json`
   - Currency provider, shop NPC id, shop locations, and boss contracts.
@@ -302,7 +310,7 @@ All runtime configuration lives under `mods/BossArena/`:
 ## Tips for Server Owners
 
 - Use `/ba config` for most day-to-day edits instead of hand-editing JSON.
-- Set a **reasonable notification radius** per arena so players near the fight see the event banner without spamming distant players.
+- Set a **reasonable Loot Radius** per arena so players near the fight see the event banner (and get loot) without spamming distant players.
 - For timed bosses:
   - Keep `preventDuplicateWhileAlive` enabled.
   - Use `despawnAfterMinutes` to ensure old timed bosses are eventually cleaned up.
@@ -343,14 +351,16 @@ If `RPGLeveling` (`Zuxaw:RPGLeveling`) is installed:
 BossArena can use external economies for shop contracts:
 
 - `HyMarketPlus` > `currencyProvider: "hymarket"`
+- `Ecotale` > `currencyProvider: "ecotale"`
 - `EconomySystem` > `currencyProvider: "economysystem"`
 - Fallback item currency when no supported economy is present.
 
 Behavior:
 
 - `shop.json.currencyProvider`:
-- `"auto"` (default): try HyMarketPlus > EconomySystem > item currency.
+- `"auto"` (default): try HyMarketPlus > Ecotale > EconomySystem > item currency.
   - `"hymarket"`: use HyMarketPlus only.
+  - `"ecotale"`: use Ecotale only.
   - `"economysystem"`: use EconomySystem only.
   - `"item"`: use item currency only.
 - Item currency uses:
@@ -422,7 +432,7 @@ Recommended workflow for changing BossArena configuration:
 
 - Prefer `/ba config` for:
   - Boss stats, waves, and loot.
-  - Arenas and notification radius.
+  - Arenas and loot radius (arena size; also used for event banner).
   - Shop locations and contracts.
 - When editing JSON files manually:
   - Back up `mods/BossArena/` first.

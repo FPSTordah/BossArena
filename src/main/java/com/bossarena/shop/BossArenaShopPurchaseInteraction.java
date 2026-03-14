@@ -123,6 +123,10 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
             return tryChargeEconomySystem(playerRef.getUuid(), amount);
         }
 
+        if (ShopCurrencySupport.PROVIDER_ECOTALE.equals(provider)) {
+            return tryChargeEcotale(playerRef.getUuid(), amount);
+        }
+
         if (ShopCurrencySupport.PROVIDER_HYMARKET.equals(provider)) {
             return tryChargeHyMarket(playerRef.getUuid(), amount);
         }
@@ -131,10 +135,13 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
             return tryChargeItemCurrency(player, currency.itemId, amount);
         }
 
-        // Auto mode: prefer HyMarket, then EconomySystem, then item currency.
+        // Auto mode: prefer HyMarket, then Ecotale, then EconomySystem, then item currency.
         String autoProvider = ShopCurrencySupport.resolveAutoProvider();
         if (ShopCurrencySupport.PROVIDER_ECONOMY_SYSTEM.equals(autoProvider)) {
             return tryChargeEconomySystem(playerRef.getUuid(), amount);
+        }
+        if (ShopCurrencySupport.PROVIDER_ECOTALE.equals(autoProvider)) {
+            return tryChargeEcotale(playerRef.getUuid(), amount);
         }
         if (ShopCurrencySupport.PROVIDER_HYMARKET.equals(autoProvider)) {
             return tryChargeHyMarket(playerRef.getUuid(), amount);
@@ -142,7 +149,7 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
         if (currency.itemId != null && !currency.itemId.isBlank()) {
             return tryChargeItemCurrency(player, currency.itemId, amount);
         }
-        return ChargeResult.fail("No currency provider is available. Configure item currency or enable EconomySystem/HyMarketPlus.");
+        return ChargeResult.fail("No currency provider is available. Configure item currency or enable Ecotale/EconomySystem/HyMarketPlus.");
     }
 
     private static CurrencySettings resolveCurrencySettings(BossArenaPlugin plugin) {
@@ -196,6 +203,17 @@ public final class BossArenaShopPurchaseInteraction extends ChoiceInteraction {
         if (!ShopCurrencySupport.removeEconomySystemBalance(playerUuid, amount)) {
             return ChargeResult.fail("Not enough EconomySystem currency. Need "
                     + ShopCurrencySupport.formatEconomySystemCost(amount) + ".");
+        }
+        return ChargeResult.ok();
+    }
+
+    private static ChargeResult tryChargeEcotale(UUID playerUuid, int amount) {
+        if (!ShopCurrencySupport.isEcotaleActive()) {
+            return ChargeResult.fail("Ecotale currency is not available. Configure item currency or enable Ecotale.");
+        }
+        if (!ShopCurrencySupport.removeEcotaleBalance(playerUuid, amount)) {
+            return ChargeResult.fail("Not enough Ecotale currency. Need "
+                    + ShopCurrencySupport.formatEcotaleCost(amount) + ".");
         }
         return ChargeResult.ok();
     }

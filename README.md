@@ -4,7 +4,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 
 ## Version
 
-- Current project version: `3.0.0`
+- Current project version: `3.0.1`
 
 ## Changelog
 
@@ -26,6 +26,7 @@ BossArena is a Hytale server mod for configurable boss encounters, NPC-based sho
 - `RPGLeveling` (plugin id `Zuxaw:RPGLeveling`) for level override support and HP-scale compatibility on tracked bosses.
 - Optional currency integrations:
 - `HyMarketPlus` (`currencyProvider: hymarket`, auto-detected in `auto` mode)
+- `Ecotale` (`currencyProvider: ecotale`, auto-detected in `auto` mode)
 - `EconomySystem` (`currencyProvider: economysystem`, auto-detected in `auto` mode)
 - If neither optional economy mod is present, BossArena falls back to item currency.
 
@@ -117,7 +118,7 @@ Reload targets:
 - Shop tab: shows saved shop locations for current world, nearest first.
 - Shop editor: set arena id override, toggle enabled bosses, and edit per-boss contract prices per location.
 - Shop editor boss list supports scrolling for large boss lists.
-- Arenas tab: inline id/position editing, add at player location, and delete.
+- Arenas tab: inline id/position editing, **Loot Radius** (arena size, in blocks; loot eligibility distance from arena center), add at player location, and delete.
 
 ## Runtime Data Files
 
@@ -160,6 +161,7 @@ Fields per arena:
 - `y`
 - `z`
 - `notificationRadius` (blocks; distance within which players see boss event title/subtitle for this arena; 10–500, default `100`)
+- `lootRadius` (optional blocks; **arena size** — when > 0, overrides the boss loot table radius for loot eligibility; distance from arena center within which players get loot; editable in Config GUI Arenas tab as "Loot Radius")
 
 ### `loot_tables.json`
 
@@ -193,7 +195,7 @@ Stored chest data includes:
 
 Top-level fields:
 
-- `currencyProvider` (`auto`, `item`, `hymarket`, `economysystem`)
+- `currencyProvider` (`auto`, `item`, `hymarket`, `ecotale`, `economysystem`)
 - `currencyItemId`
 - `shopNpcId`
 - `strictContractPricing` (`true|false`, disables tier auto-price fallback when `true`)
@@ -204,6 +206,7 @@ Top-level fields:
 
 - `auto`: `HyMarketPlus` -> `EconomySystem` -> item currency fallback
 - `hymarket`: HyMarket provider only
+- `ecotale`: Ecotale provider only
 - `economysystem`: EconomySystem provider only
 - `item`: item currency only
 
@@ -382,4 +385,4 @@ mvn -q -DskipTests package
 
 Output:
 
-- `target/BossArena-3.0.0.jar`
+- `target/BossArena-3.0.1.jar`

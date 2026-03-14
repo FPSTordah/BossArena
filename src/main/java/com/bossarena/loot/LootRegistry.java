@@ -131,14 +131,14 @@ public class LootRegistry {
         clear();
 
         // Example Boss loot table
-        LootTable exampleBossLoot = new LootTable("Example Boss", 40.0);
+        LootTable exampleBossLoot = new LootTable("Example Boss", 50.0);
         exampleBossLoot.addItem(new LootItem("Ingredient_Fibre", 1.0, 4, 10));
         exampleBossLoot.addItem(new LootItem("Ingredient_Stick", 0.85, 2, 6));
         exampleBossLoot.addItem(new LootItem("cmd:tell {player} You defeated the Example Boss!", 1.0, 1, 1));
         register(exampleBossLoot);
 
         // My_Boss loot table
-        LootTable myBossLoot = new LootTable("My_Boss", 40.0);
+        LootTable myBossLoot = new LootTable("My_Boss", 50.0);
         myBossLoot.addItem(new LootItem("Ingredient_Fibre", 1.0, 5, 12));
         myBossLoot.addItem(new LootItem("Ingredient_Hide_Light", 0.80, 1, 4));
         myBossLoot.addItem(new LootItem("Ore_Copper", 0.75, 1, 5));

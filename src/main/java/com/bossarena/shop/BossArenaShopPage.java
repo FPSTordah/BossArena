@@ -279,6 +279,9 @@ public final class BossArenaShopPage extends InteractiveCustomUIPage<BossArenaSh
         if (ShopCurrencySupport.PROVIDER_HYMARKET.equals(provider)) {
             return "Price: " + ShopCurrencySupport.formatHyMarketCost(cost);
         }
+        if (ShopCurrencySupport.PROVIDER_ECOTALE.equals(provider)) {
+            return "Price: " + ShopCurrencySupport.formatEcotaleCost(cost);
+        }
         if (ShopCurrencySupport.PROVIDER_ECONOMY_SYSTEM.equals(provider)) {
             return "Price: " + ShopCurrencySupport.formatEconomySystemCost(cost);
         }

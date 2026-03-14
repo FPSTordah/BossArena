@@ -89,7 +89,7 @@ public final class BossEventNotificationSystem extends TickingSystem<EntityStore
             if (event.arenaId != null && !event.arenaId.isBlank()) {
                 Arena arena = ArenaRegistry.get(event.arenaId);
                 if (arena != null) {
-                    notificationRadius = arena.getNotificationRadius();
+                    notificationRadius = arena.getBannerRadius();
                 }
             }
             if (!Double.isFinite(notificationRadius) || notificationRadius <= 0) {

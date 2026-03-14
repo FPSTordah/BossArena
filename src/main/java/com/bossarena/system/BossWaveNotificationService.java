@@ -227,6 +227,7 @@ public final class BossWaveNotificationService {
                                         String customMessage,
                                         boolean announceServerWide,
                                         boolean announceWorldWide) {
+        // No announcement when both server-wide and world-wide are disabled; spawn still occurs, only the global alert is skipped.
         if ((!announceServerWide && !announceWorldWide) || world == null) {
             return;
         }

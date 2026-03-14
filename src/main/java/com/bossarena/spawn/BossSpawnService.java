@@ -213,8 +213,8 @@ public final class BossSpawnService {
                                   String bossId,
                                   World world,
                                   Vector3d spawnPos,
-                                  String arenaId) {  // ADD THIS PARAMETER
-        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, null, null);
+                                  String arenaId) {
+        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, null, null, false);
     }
 
     public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
@@ -223,7 +223,7 @@ public final class BossSpawnService {
                                   Vector3d spawnPos,
                                   String arenaId,
                                   Long countdownOverrideMinutes) {
-        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, countdownOverrideMinutes, null);
+        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, countdownOverrideMinutes, null, false);
     }
 
     public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
@@ -233,16 +233,30 @@ public final class BossSpawnService {
                                   String arenaId,
                                   Long countdownOverrideMinutes,
                                   Consumer<UUID> onPrimaryBossSpawned) {
+        return spawnBossFromJson(sender, bossId, world, spawnPos, arenaId, countdownOverrideMinutes, onPrimaryBossSpawned, false);
+    }
+
+    public UUID spawnBossFromJson(@SuppressWarnings("unused") CommandSender sender,
+                                  String bossId,
+                                  World world,
+                                  Vector3d spawnPos,
+                                  String arenaId,
+                                  Long countdownOverrideMinutes,
+                                  Consumer<UUID> onPrimaryBossSpawned,
+                                  boolean ignoreProximity) {
         BossDefinition def = BossRegistry.get(bossId);
         if (def == null) {
             LOGGER.warning("Boss definition not found: " + bossId);
             return null;
         }
 
-        if (!isProximitySatisfiedForSpawn(world, arenaId, def)) {
-            LOGGER.info("Proximity spawn conditions not met for boss '" + def.bossName
-                    + "' at arena '" + arenaId + "'. Spawn deferred/blocked.");
-            return null;
+        // Only run proximity check when not bypassed (e.g. command spawn) and boss has proximity enabled.
+        if (!ignoreProximity && def.extraMobs != null && def.extraMobs.timedProximityEnabled) {
+            if (!isProximitySatisfiedForSpawn(world, arenaId, def)) {
+                LOGGER.info("Proximity spawn conditions not met for boss '" + def.bossName
+                        + "' at arena '" + arenaId + "'. Spawn deferred/blocked.");
+                return null;
+            }
         }
 
         LOGGER.info("Attempting to spawn boss '" + def.bossName + "' at position: " + spawnPos);

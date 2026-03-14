@@ -480,7 +480,10 @@ public final class BossArenaCommand extends AbstractCommand {
                         bossId,
                         world,
                         finalSpawnPos,
-                        arenaId
+                        arenaId,
+                        null,
+                        null,
+                        true
                 );
 
                 if (uuid == null) {

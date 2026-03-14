@@ -1,5 +1,7 @@
 package com.bossarena.data;
 
+import com.hypixel.hytale.math.vector.Vector3d;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -35,5 +37,39 @@ public class ArenaRegistry {
 
     public static int size() {
         return ARENAS.size();
+    }
+
+    /**
+     * Returns the nearest registered arena in the given world to the supplied position, or null
+     * when no arenas exist for that world.
+     */
+    public static Arena findNearest(String worldName, double x, double y, double z) {
+        if (worldName == null || worldName.isBlank() || ARENAS.isEmpty()) {
+            return null;
+        }
+
+        Arena best = null;
+        double bestDistSq = Double.MAX_VALUE;
+        Vector3d point = new Vector3d(x, y, z);
+
+        for (Arena arena : ARENAS.values()) {
+            if (arena == null || arena.worldName == null) {
+                continue;
+            }
+            if (!worldName.equalsIgnoreCase(arena.worldName)) {
+                continue;
+            }
+            Vector3d center = arena.getPosition();
+            double dx = center.x - point.x;
+            double dy = center.y - point.y;
+            double dz = center.z - point.z;
+            double distSq = (dx * dx) + (dy * dy) + (dz * dz);
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                best = arena;
+            }
+        }
+
+        return best;
     }
 }
